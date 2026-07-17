@@ -1,0 +1,7 @@
+python-telegram-bot==20.8
+requests
+python-dotenv
+gspread
+oauth2client
+flask
+gunicorn
