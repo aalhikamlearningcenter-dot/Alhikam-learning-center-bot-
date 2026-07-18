@@ -25,7 +25,9 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
 
     if text == "📚 Darussa":
-        await update.message.reply_text("📚elif text == "👤 Student Registration":
+    await update.message.reply_text("📚 Courses will be available soon.")
+
+elif text == "👤 Student Registration":
     await update.message.reply_text(
         "👤 STUDENT REGISTRATION\n\n"
         "Please send your Full Name."
