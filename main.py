@@ -25,7 +25,11 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
 
     if text == "📚 Darussa":
-        await update.message.reply_text("📚 Darussa za su zo nan ba da jimawa ba.")
+        await update.message.reply_text("📚elif text == "👤 Student Registration":
+    await update.message.reply_text(
+        "👤 STUDENT REGISTRATION\n\n"
+        "Please send your Full Name."
+    )
 
     elif text == "📝 CBT Practice":
         await update.message.reply_text("📝 CBT Practice yana kan ginawa.")
