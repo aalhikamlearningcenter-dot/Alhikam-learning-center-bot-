@@ -25,22 +25,19 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
 
     if text == "📚 Darussa":
-    await update.message.reply_text("📚 Courses will be available soon.")
-
-elif text == "👤 Student Registration":
-    await update.message.reply_text(
-        "👤 STUDENT REGISTRATION\n\n"
-        "Please send your Full Name."
-    )
+        await update.message.reply_text("📚 Courses will be available soon.")
 
     elif text == "📝 CBT Practice":
-        await update.message.reply_text("📝 CBT Practice yana kan ginawa.")
+        await update.message.reply_text("📝 CBT Practice is under development.")
 
     elif text == "💳 Biya Kudin Karatu":
-        await update.message.reply_text("💳 Za a haɗa Flutterwave payment nan.")
+        await update.message.reply_text("💳 Flutterwave payment will be added soon.")
 
     elif text == "👤 Rajista":
-        await update.message.reply_text("👤 Rajista zai fara nan ba da jimawa ba.")
+        await update.message.reply_text(
+            "👤 STUDENT REGISTRATION\n\n"
+            "Please send your Full Name."
+        )
 
     elif text == "📞 Tuntuɓe Mu":
         await update.message.reply_text("📞 Email: support@alhikam.com")
