@@ -44,7 +44,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif text == "📝 CBT Practice":
         await update.message.reply_text("📝 CBT Practice is under development.")
 
-    elif text == "💳 Biya Kudin Karatu":
+    elif text == "💳 Pay School Fees":
         await update.message.reply_text("💳 Flutterwave payment will be added soon.")
 
     elif text == "👤 Student Registration":
@@ -54,7 +54,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Please enter your Full Name."
     )
 
-    elif text == "📞 Tuntuɓe Mu":
+    elif text == "📞 Contact Us":
         await update.message.reply_text("📞 Email: support@alhikam.com")
 
 def main():
