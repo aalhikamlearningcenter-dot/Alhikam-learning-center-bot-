@@ -50,12 +50,12 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("💳 Flutterwave payment will be added soon.")
 
     elif text == "👤 Student Registration":
-    student_data[update.effective_chat.id] = {}
+        student_data[update.effective_chat.id] = {}
 
-    await update.message.reply_text(
-        "👤 STUDENT REGISTRATION\n\n"
-        "Please enter your Full Name."
-    )
+        await update.message.reply_text(
+            "👤 STUDENT REGISTRATION\n\n"
+            "Please enter your Full Name."
+        )
 
     elif text == "📞 Contact Us":
         await update.message.reply_text("📞 Email: support@alhikam.com")
