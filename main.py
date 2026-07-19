@@ -5,9 +5,10 @@ import os
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 menu = [
-    ["📚 Darussa", "📝 CBT Practice"],
-    ["💳 Biya Kudin Karatu", "👤 Rajista"],
-    ["📞 Tuntuɓe Mu"]
+    ["📚 Courses", "📝 CBT Practice"],
+    ["👤 Student Registration", "💳 Pay School Fees"],
+    ["📞 Contact Us", "ℹ️ About Us"]
+
 ]
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
