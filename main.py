@@ -15,11 +15,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = ReplyKeyboardMarkup(menu, resize_keyboard=True)
 
     await update.message.reply_text(
-        "🎓 *ALHIKAM Learning Center*\n\n"
-        "Barka da zuwa!\n\n"
-        "Zaɓi abin da kake so daga menu na ƙasa.",
-        parse_mode="Markdown",
-        reply_markup=keyboard
+    "🎓 *ALHIKAM Learning Center*\n\n"
+    "Welcome to ALHIKAM Learning Center!\n\n"
+    "Please choose an option from the menu below.",
+    parse_mode="Markdown",
+    reply_markup=keyboard
+
     )
 
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
