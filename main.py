@@ -49,7 +49,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif text == "💳 Pay School Fees":
         await update.message.reply_text("💳 Flutterwave payment will be added soon.")
 
-    elif text == "👤 Student Registration":
+    elif text =="👤 Student Registration":
     student_data[update.effective_chat.id] = {}
     await update.message.reply_text(
         "👤 STUDENT REGISTRATION\n\n"
