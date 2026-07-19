@@ -47,6 +47,7 @@ async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
+
     if context.user_data.get("step") == "full_name":
         context.user_data["full_name"] = text
         context.user_data["step"] = None
@@ -56,33 +57,29 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "📱 Phone Number registration will be added in the next step."
         )
         return
+
     if text == "📚 Courses":
         await update.message.reply_text(
             "📚 Courses will be available soon."
         )
-if text == "📚 Courses":
-    await update.message.reply_text(
-        "📚 Courses will be available soon."
-    )
 
-elif text == "📝 CBT Practice":
-    await update.message.reply_text(
-        "📝 CBT Practice is under development."
-    )
+    elif text == "📝 CBT Practice":
+        await update.message.reply_text(
+            "📝 CBT Practice is under development."
+        )
 
-elif text == "👤 Student Registration":
-    context.user_data["step"] = "full_name"
+    elif text == "👤 Student Registration":
+        context.user_data["step"] = "full_name"
 
-    await update.message.reply_text(
-        "👤 STUDENT REGISTRATION\n\n"
-        "Please enter your Full Name:"
-    )
+        await update.message.reply_text(
+            "👤 STUDENT REGISTRATION\n\n"
+            "Please enter your Full Name:"
+        )
 
-elif text == "💳 Pay School Fees":
-    await update.message.reply_text(
-        "💳 Flutterwave payment will be added soon."
-    )
-    
+    elif text == "💳 Pay School Fees":
+        await update.message.reply_text(
+            "💳 Flutterwave payment will be added soon."
+        )
 
     elif text == "📞 Contact Us":
         await update.message.reply_text(
