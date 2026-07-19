@@ -49,24 +49,24 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
 
     if context.user_data.get("step") == "full_name":
-    context.user_data["full_name"] = text
-    context.user_data["step"] = "phone"
+        context.user_data["full_name"] = text
+        context.user_data["step"] = "phone"
 
-    await update.message.reply_text(
-        "📱 Please enter your Phone Number:"
-    )
-    return
+        await update.message.reply_text(
+            "📱 Please enter your Phone Number:"
+        )
+        return
 
-if context.user_data.get("step") == "phone":
-    context.user_data["phone"] = text
-    context.user_data["step"] = None
+    if context.user_data.get("step") == "phone":
+        context.user_data["phone"] = text
+        context.user_data["step"] = None
 
-    await update.message.reply_text(
-        f"✅ Registration Step 2 Completed.\n\n"
-        f"👤 Name: {context.user_data['full_name']}\n"
-        f"📱 Phone: {text}"
-    )
-    return
+        await update.message.reply_text(
+            f"✅ Registration Step 2 Completed.\n\n"
+            f"👤 Name: {context.user_data['full_name']}\n"
+            f"📱 Phone: {text}"
+        )
+        return
 
     if text == "📚 Courses":
         await update.message.reply_text(
