@@ -32,6 +32,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=keyboard,
     )
 
+async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "👤 STUDENT REGISTRATION\n\n"
+        "Please enter your Full Name:"
+    )
+    return FULL_NAME
+
 
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
