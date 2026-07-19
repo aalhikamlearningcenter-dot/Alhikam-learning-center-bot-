@@ -60,13 +60,16 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "📚 Courses will be available soon."
         )
+if text == "📚 Courses":
+    await update.message.reply_text(
+        "📚 Courses will be available soon."
+    )
 
-    elif text == "📝 CBT Practice":
-        await update.message.reply_text(
-            "📝 CBT Practice is under development."
-        )
+elif text == "📝 CBT Practice":
+    await update.message.reply_text(
+        "📝 CBT Practice is under development."
+    )
 
-    
 elif text == "👤 Student Registration":
     context.user_data["step"] = "full_name"
 
@@ -74,10 +77,12 @@ elif text == "👤 Student Registration":
         "👤 STUDENT REGISTRATION\n\n"
         "Please enter your Full Name:"
     )
-    elif text == "💳 Pay School Fees":
-        await update.message.reply_text(
-            "💳 Flutterwave payment will be added soon."
-        )
+
+elif text == "💳 Pay School Fees":
+    await update.message.reply_text(
+        "💳 Flutterwave payment will be added soon."
+    )
+    
 
     elif text == "📞 Contact Us":
         await update.message.reply_text(
