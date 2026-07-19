@@ -1,3 +1,5 @@
+from telegram import Update, ReplyKeyboardMarkup
+
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -6,9 +8,12 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
+
 import os
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")# Registration States
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+# Registration States
 FULL_NAME, PHONE, EMAIL, COURSE = range(4)
 
 # Temporary storage
