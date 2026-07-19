@@ -9,7 +9,9 @@ from telegram.ext import (
 )
 import os
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")# Registration States
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+# Registration States
 FULL_NAME = 1
 PHONE = 2
 
