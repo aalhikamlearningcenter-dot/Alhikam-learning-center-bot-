@@ -29,10 +29,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Welcome to ALHIKAM Learning Center.\n"
         "Please choose an option below.",
         parse_mode="Markdown",
-         )
-
-async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):   reply_markup=keyboard,
-    )
+        reply_markup=keyboard,
+    )async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
 
     # ===== FULL NAME =====
@@ -53,24 +51,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):   re
         await update.message.reply_text(
             "📧 Please enter your Email Address:"
         )
-        return
-
-    # ===== EMAIL =====
-    if context.user_data.get("step") == "email":
-        context.user_data["email"] = text
-        context.user_data["step"] = "course"
-
-        await update.message.reply_text(
-            "📚 Please type your Course.\n\n"
-            "Example:\n"
-            "JAMB Science\n"
-            "JAMB Arts\n"
-            "WAEC\n"
-            "NECO"
-        )
-        return
-
-    # ===== COURSE =====
+        return    # ===== COURSE =====
     if context.user_data.get("step") == "course":
         context.user_data["course"] = text
         context.user_data["step"] = None
@@ -85,7 +66,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):   re
         try:
             requests.post(SHEET_URL, json=data)
         except Exception as e:
-            print(e)
+            print("Google Sheet Error:", e)
 
         await update.message.reply_text(
             "✅ REGISTRATION COMPLETED\n\n"
@@ -94,9 +75,18 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):   re
             f"📧 Email: {context.user_data['email']}\n"
             f"📚 Course: {context.user_data['course']}"
         )
-        return 
+        return
+
     # ===== MENU =====
-    if text == "📚 Courses":
+    if text == "👤 Student Registration":
+        context.user_data["step"] = "full_name"
+
+        await update.message.reply_text(
+            "👤 STUDENT REGISTRATION\n\n"
+            "Please enter your Full Name:"
+        )
+
+    elif text == "📚 Courses":
         await update.message.reply_text(
             "📚 Courses will be available soon."
         )
@@ -104,14 +94,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):   re
     elif text == "📝 CBT Practice":
         await update.message.reply_text(
             "📝 CBT Practice is under development."
-        )
-
-    elif text == "👤 Student Registration":
-        context.user_data["step"] = "full_name"
-
-        await update.message.reply_text(
-            "👤 STUDENT REGISTRATION\n\n"
-            "Please enter your Full Name:"
         )
 
     elif text == "💳 Pay School Fees":
@@ -135,18 +117,17 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):   re
             "Please choose an option from the menu."
         )
 
+    # ===== EMAIL =====
+    if context.user_data.get("step") == "email":
+        context.user_data["email"] = text
+        context.user_data["step"] = "course"
 
-def main():
-    app = Application.builder().token(BOT_TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, menu_handler)
-    )
-
-    print("Bot is running...")
-    app.run_polling()
-
-
-if __name__ == "__main__":
-    main()
+        await update.message.reply_text(
+            "📚 Please type your Course.\n\n"
+            "Example:\n"
+            "JAMB Science\n"
+            "JAMB Arts\n"
+            "WAEC\n"
+            "NECO"
+        )
+        return
