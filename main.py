@@ -11,7 +11,7 @@ from telegram.ext import (
 
 import os
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKEN = os.getenv("BOT_TOKEN")SHEET_URL = "https://script.google.com/macros/s/AKfycbySUvXgoiHeQM8umyI9dL2Te5z2Vut6Eebby7FnNZGa9pKgQx4TOXrHXzKipjDajJYv/exec"
 
 # Registration States
 FULL_NAME, PHONE, EMAIL, COURSE = range(4)
@@ -87,6 +87,17 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get("step") == "course":
         context.user_data["course"] = text
         context.user_data["step"] = None
+data = {
+    "full_name": context.user_data["full_name"],
+    "phone": context.user_data["phone"],
+    "email": context.user_data["email"],
+    "course": context.user_data["course"],
+}
+
+try:
+    requests.post(SHEET_URL, json=data)
+except Exception as e:
+    print(e)
 
         await update.message.reply_text(
             "✅ REGISTRATION COMPLETED\n\n"
