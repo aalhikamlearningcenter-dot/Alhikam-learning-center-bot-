@@ -87,29 +87,30 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # ===== COURSE =====
-    if context.user_data.get("step") == "course":
-        context.user_data["course"] = text
-        context.user_data["step"] = None
-data = {
-    "full_name": context.user_data["full_name"],
-    "phone": context.user_data["phone"],
-    "email": context.user_data["email"],
-    "course": context.user_data["course"],
-}
+if context.user_data.get("step") == "course":
+    context.user_data["course"] = text
+    context.user_data["step"] = None
 
-try:
-    requests.post(SHEET_URL, json=data)
-except Exception as e:
-    print(e)
+    data = {
+        "full_name": context.user_data["full_name"],
+        "phone": context.user_data["phone"],
+        "email": context.user_data["email"],
+        "course": context.user_data["course"],
+    }
 
-        await update.message.reply_text(
-            "✅ REGISTRATION COMPLETED\n\n"
-            f"👤 Name: {context.user_data['full_name']}\n"
-            f"📱 Phone: {context.user_data['phone']}\n"
-            f"📧 Email: {context.user_data['email']}\n"
-            f"📚 Course: {context.user_data['course']}"
-        )
-        return
+    try:
+        requests.post(SHEET_URL, json=data)
+    except Exception as e:
+        print(e)
+
+    await update.message.reply_text(
+        "✅ REGISTRATION COMPLETED\n\n"
+        f"👤 Name: {context.user_data['full_name']}\n"
+        f"📱 Phone: {context.user_data['phone']}\n"
+        f"📧 Email: {context.user_data['email']}\n"
+        f"📚 Course: {context.user_data['course']}"
+    )
+    return
 
     # ===== MENU =====
     if text == "📚 Courses":
