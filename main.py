@@ -48,6 +48,7 @@ async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
 
+    # ===== FULL NAME =====
     if context.user_data.get("step") == "full_name":
         context.user_data["full_name"] = text
         context.user_data["step"] = "phone"
@@ -57,27 +58,46 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    # ===== PHONE =====
     if context.user_data.get("step") == "phone":
-    context.user_data["phone"] = text
-    context.user_data["step"] = "email"
+        context.user_data["phone"] = text
+        context.user_data["step"] = "email"
 
-    await update.message.reply_text(
-        "📧 Please enter your Email Address:"
-    )
-    return
+        await update.message.reply_text(
+            "📧 Please enter your Email Address:"
+        )
+        return
 
-if context.user_data.get("step") == "email":
-    context.user_data["email"] = text
-    context.user_data["step"] = None
+    # ===== EMAIL =====
+    if context.user_data.get("step") == "email":
+        context.user_data["email"] = text
+        context.user_data["step"] = "course"
 
-    await update.message.reply_text(
-        f"✅ Registration Step 3 Completed.\n\n"
-        f"👤 Name: {context.user_data['full_name']}\n"
-        f"📱 Phone: {context.user_data['phone']}\n"
-        f"📧 Email: {text}"
-    )
-    return
+        await update.message.reply_text(
+            "📚 Please type your Course.\n\n"
+            "Example:\n"
+            "JAMB Science\n"
+            "JAMB Arts\n"
+            "WAEC\n"
+            "NECO"
+        )
+        return
 
+    # ===== COURSE =====
+    if context.user_data.get("step") == "course":
+        context.user_data["course"] = text
+        context.user_data["step"] = None
+
+        await update.message.reply_text(
+            "✅ REGISTRATION COMPLETED\n\n"
+            f"👤 Name: {context.user_data['full_name']}\n"
+            f"📱 Phone: {context.user_data['phone']}\n"
+            f"📧 Email: {context.user_data['email']}\n"
+            f"📚 Course: {context.user_data['course']}"
+        )
+        return
+
+    # ===== MENU =====
     if text == "📚 Courses":
         await update.message.reply_text(
             "📚 Courses will be available soon."
