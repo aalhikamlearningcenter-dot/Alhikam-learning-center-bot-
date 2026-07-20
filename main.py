@@ -130,4 +130,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "WAEC\n"
             "NECO"
         )
-        return
+        returndef main():
+    app = Application.builder().token(BOT_TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+
+    app.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND,
+            menu_handler
+        )
+    )
+
+    print("Bot is running...")
+    app.run_polling()
+
+
+if __name__ == "__main__":
+    main()
