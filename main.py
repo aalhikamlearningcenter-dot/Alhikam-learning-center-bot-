@@ -29,8 +29,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Welcome to ALHIKAM Learning Center.\n"
         "Please choose an option below.",
         parse_mode="Markdown",
-        reply_markup=keyboard,
-    )async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+         )
+
+async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):   reply_markup=keyboard,
+    )
     text = update.message.text
 
     # ===== FULL NAME =====
