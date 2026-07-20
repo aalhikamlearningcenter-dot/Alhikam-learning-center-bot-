@@ -12,7 +12,9 @@ from telegram.ext import (
 import os
 import requests
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")SHEET_URL = "https://script.google.com/macros/s/AKfycbySUvXgoiHeQM8umyI9dL2Te5z2Vut6Eebby7FnNZGa9pKgQx4TOXrHXzKipjDajJYv/exec"
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+SHEET_URL = "https://script.google.com/macros/s/AKfycbySUvXgoiHeQM8umyI9dL2Te5z2Vut6Eebby7FnNZGa9pKgQx4TOXrHXzKipjDajJYv/exec"
 
 # Registration States
 FULL_NAME, PHONE, EMAIL, COURSE = range(4)
