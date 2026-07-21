@@ -24,15 +24,12 @@ SHEET_URL = "https://script.google.com/macros/s/AKfycby5lIhCjoD0NaPZ-HHQ9hapAKls
 # RAILWAY WEBHOOK SETTINGS
 # ==============================
 
+
 PORT = int(os.getenv("PORT", "8080"))
 
-
 WEBHOOK_URL = "https://precious-trust-production-956b.up.railway.app"
-WEBHOOK_PATH = os.getenv(
-    "WEBHOOK_PATH",
-    "alhikam-webhook-2026"
-)
 
+WEBHOOK_PATH = "alhikam-webhook-2026"
 
 # ==============================
 # MENU
