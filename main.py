@@ -24,7 +24,7 @@ menu = [
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = ReplyKeyboardMarkup(menu, resize_keyboard=True)
 
-        await update.message.reply_text(
+    await update.message.reply_text(
         "🎓 *ALHIKAM Learning Center*\n\n"
         "Welcome to ALHIKAM Learning Center.\n"
         "Please choose an option below.",
