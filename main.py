@@ -18,8 +18,7 @@ menu = [
     ["📚 Courses", "📝 CBT Practice"],
     ["👤 Student Registration", "💳 Pay School Fees"],
     ["📞 Contact Us", "ℹ️ About Us"],
-]
-
+)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = ReplyKeyboardMarkup(menu, resize_keyboard=True)
