@@ -16,7 +16,7 @@ import requests
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-SHEET_URL=https://script.google.com/macros/s/AKfycby5lIhCjoD0NaPZ-HHQ9hapAKlstypQvxyWK22qHblJr4uGBrPn5FoGG1TP-EvIfteo9w/exec
+SHEET_URL = "https://script.google.com/macros/s/AKfycby5lIhCjoD0NaPZ-HHQ9hapAKlstypQvxyWK22qHblJr4uGBrPn5FoGG1TP-EvIfteo9w/exec"
 
 # ==============================
 # MENU
