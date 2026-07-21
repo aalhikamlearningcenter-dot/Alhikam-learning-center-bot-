@@ -12,7 +12,7 @@ import requests
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-SHEET_URL = "https://script.google.com/macros/s/AKfycbySUvXgoiHeQM8umyI9dL2Te5z2Vut6Eebby7FnNZGa9pKgQx4TOXrHXzKipjDajJYv/exec"
+SHEET_URL = "https://script.google.com/macros/s/AKfycby4eN4Y0MwYBAbDne-6s5z8DD02EwVBehpwhlEGhPdrWPu7-6n-Qnu2vmB8n8Ud1auDww/exec"
 
 menu = [
     ["📚 Courses", "📝 CBT Practice"],
