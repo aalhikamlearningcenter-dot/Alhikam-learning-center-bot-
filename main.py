@@ -10,6 +10,7 @@ from telegram.ext import (
 import os
 import requests
 
+
 # ==============================
 # BOT SETTINGS
 # ==============================
@@ -17,6 +18,21 @@ import requests
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 SHEET_URL = "https://script.google.com/macros/s/AKfycby5lIhCjoD0NaPZ-HHQ9hapAKlstypQvxyWK22qHblJr4uGBrPn5FoGG1TP-EvIfteo9w/exec"
+
+
+# ==============================
+# RAILWAY WEBHOOK SETTINGS
+# ==============================
+
+PORT = int(os.getenv("PORT", "8080"))
+
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+
+WEBHOOK_PATH = os.getenv(
+    "WEBHOOK_PATH",
+    "alhikam-webhook-2026"
+)
+
 
 # ==============================
 # MENU
@@ -33,7 +49,10 @@ menu = [
 # START COMMAND
 # ==============================
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
     keyboard = ReplyKeyboardMarkup(
         menu,
@@ -59,6 +78,7 @@ async def menu_handler(
 ):
 
     text = update.message.text
+
 
     # ==============================
     # STUDENT REGISTRATION
@@ -139,7 +159,6 @@ async def menu_handler(
         context.user_data["course"] = text
         context.user_data["step"] = None
 
-        # Registration data
         data = {
             "full_name": context.user_data["full_name"],
             "phone": context.user_data["phone"],
@@ -147,13 +166,21 @@ async def menu_handler(
             "course": context.user_data["course"],
         }
 
-        # Send data to Google Sheet
+        # ==============================
+        # SEND DATA TO GOOGLE SHEET
+        # ==============================
+
         try:
 
-            requests.post(
+            response = requests.post(
                 SHEET_URL,
                 json=data,
                 timeout=15
+            )
+
+            print(
+                "Google Sheet Response:",
+                response.text
             )
 
         except Exception as e:
@@ -164,7 +191,10 @@ async def menu_handler(
             )
 
 
-        # Registration completed
+        # ==============================
+        # REGISTRATION COMPLETED
+        # ==============================
+
         await update.message.reply_text(
             "✅ *REGISTRATION COMPLETED*\n\n"
             f"👤 Name: {context.user_data['full_name']}\n"
@@ -174,9 +204,12 @@ async def menu_handler(
             parse_mode="Markdown"
         )
 
-        return# ==============================
-# COURSES
-# ==============================
+        return
+
+
+    # ==============================
+    # COURSES
+    # ==============================
 
     if text == "📚 Courses":
 
@@ -194,9 +227,9 @@ async def menu_handler(
         return
 
 
-# ==============================
-# CBT PRACTICE
-# ==============================
+    # ==============================
+    # CBT PRACTICE
+    # ==============================
 
     if text == "📝 CBT Practice":
 
@@ -210,9 +243,9 @@ async def menu_handler(
         return
 
 
-# ==============================
-# PAY SCHOOL FEES
-# ==============================
+    # ==============================
+    # PAY SCHOOL FEES
+    # ==============================
 
     if text == "💳 Pay School Fees":
 
@@ -225,9 +258,9 @@ async def menu_handler(
         return
 
 
-# ==============================
-# CONTACT US
-# ==============================
+    # ==============================
+    # CONTACT US
+    # ==============================
 
     if text == "📞 Contact Us":
 
@@ -241,9 +274,9 @@ async def menu_handler(
         return
 
 
-# ==============================
-# ABOUT US
-# ==============================
+    # ==============================
+    # ABOUT US
+    # ==============================
 
     if text == "ℹ️ About Us":
 
@@ -258,19 +291,13 @@ async def menu_handler(
         return
 
 
-# ==============================
-# UNKNOWN MESSAGE
-# ==============================
+    # ==============================
+    # UNKNOWN MESSAGE
+    # ==============================
 
     await update.message.reply_text(
         "Please choose an option from the menu."
-    )# ==============================
-# RAILWAY WEBHOOK
-# ==============================
-
-PORT = int(os.getenv("PORT", "8080"))
-
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+    )
 
 
 # ==============================
@@ -279,14 +306,46 @@ WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
 def main():
 
-    app = Application.builder().token(BOT_TOKEN).build()
+    if not BOT_TOKEN:
 
-    # Start command
-    app.add_handler(
-        CommandHandler("start", start)
+        raise ValueError(
+            "BOT_TOKEN is missing. "
+            "Please add BOT_TOKEN in Railway Variables."
+        )
+
+
+    if not WEBHOOK_URL:
+
+        raise ValueError(
+            "WEBHOOK_URL is missing. "
+            "Please add WEBHOOK_URL in Railway Variables."
+        )
+
+
+    app = (
+        Application
+        .builder()
+        .token(BOT_TOKEN)
+        .build()
     )
 
-    # All text messages
+
+    # ==============================
+    # START HANDLER
+    # ==============================
+
+    app.add_handler(
+        CommandHandler(
+            "start",
+            start
+        )
+    )
+
+
+    # ==============================
+    # TEXT HANDLER
+    # ==============================
+
     app.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
@@ -294,14 +353,25 @@ def main():
         )
     )
 
+
     print("Bot is running...")
 
-    # Run bot with Railway Webhook
+
+    # ==============================
+    # WEBHOOK
+    # ==============================
+
     app.run_webhook(
+
         listen="0.0.0.0",
+
         port=PORT,
-        url_path=BOT_TOKEN,
-        webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}",
+
+        url_path=WEBHOOK_PATH,
+
+        webhook_url=(
+            f"{WEBHOOK_URL}/{WEBHOOK_PATH}"
+        ),
     )
 
 
@@ -310,4 +380,5 @@ def main():
 # ==============================
 
 if __name__ == "__main__":
+
     main()
