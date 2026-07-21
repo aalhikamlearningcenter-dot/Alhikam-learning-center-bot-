@@ -133,7 +133,8 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "WAEC\n"
             "NECO"
         )
-        returndef main():
+        return
+def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
