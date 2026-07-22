@@ -11,88 +11,116 @@ import os
 import requests
 
 
-# ==============================
-# BOT TOKEN
-# ==============================
+# ==================================================
+# SETTINGS
+# ==================================================
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-
-
-# ==============================
-# GOOGLE SHEET URL
-# ==============================
 
 SHEET_URL = "https://script.google.com/macros/s/AKfycby5lIhCjoD0NaPZ-HHQ9hapAKlstypQvxyWK22qHblJr4uGBrPn5FoGG1TP-EvIfteo9w/exec"
 
 
-# ==============================
-# MENU
-# ==============================
+# ==================================================
+# MAIN MENU
+# ==================================================
 
-menu = [
+MAIN_MENU = [
     ["📚 Courses", "📝 CBT Practice"],
     ["👤 Student Registration", "💳 Pay School Fees"],
     ["📞 Contact Us", "ℹ️ About Us"],
 ]
 
 
-# ==============================
-# START
-# ==============================
+# ==================================================
+# COURSE MENU
+# ==================================================
+
+COURSE_MENU = [
+    ["🎯 JAMB Science", "🎨 JAMB Arts"],
+    ["📘 WAEC", "📕 NECO"],
+    ["💻 CBT Training"],
+    ["🔙 Back to Main Menu"],
+]
+
+
+# ==================================================
+# START COMMAND
+# ==================================================
 
 async def start(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
 
+    # Clear previous registration step
+    context.user_data.clear()
+
     keyboard = ReplyKeyboardMarkup(
-        menu,
+        MAIN_MENU,
         resize_keyboard=True
     )
 
     await update.message.reply_text(
         "🎓 *ALHIKAM Learning Center*\n\n"
         "Welcome to ALHIKAM Learning Center.\n\n"
+        "We provide educational support for "
+        "JAMB, WAEC, NECO and CBT Training.\n\n"
         "Please choose an option below.",
         parse_mode="Markdown",
-        reply_markup=keyboard,
+        reply_markup=keyboard
     )
 
 
-# ==============================
-# MENU HANDLER
-# ==============================
+# ==================================================
+# CANCEL COMMAND
+# ==================================================
+
+async def cancel(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    context.user_data.clear()
+
+    keyboard = ReplyKeyboardMarkup(
+        MAIN_MENU,
+        resize_keyboard=True
+    )
+
+    await update.message.reply_text(
+        "❌ Registration cancelled.\n\n"
+        "Please choose an option from the main menu.",
+        reply_markup=keyboard
+    )
+
+
+# ==================================================
+# MAIN MESSAGE HANDLER
+# ==================================================
 
 async def menu_handler(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
 
+    if not update.message:
+        return
+
     text = update.message.text
 
 
-    # ==============================
-    # STUDENT REGISTRATION
-    # ==============================
+    # ==================================================
+    # REGISTRATION STEP CHECK
+    # ==================================================
 
-    if text == "👤 Student Registration":
-
-        context.user_data["step"] = "full_name"
-
-        await update.message.reply_text(
-            "👤 *STUDENT REGISTRATION*\n\n"
-            "Please enter your Full Name:",
-            parse_mode="Markdown"
-        )
-
-        return
+    step = context.user_data.get("step")
 
 
-    # ==============================
+    # ==================================================
     # FULL NAME
-    # ==============================
+    # ==================================================
 
-    if context.user_data.get("step") == "full_name":
+    if step == "full_name":
 
         context.user_data["full_name"] = text
         context.user_data["step"] = "phone"
@@ -104,11 +132,11 @@ async def menu_handler(
         return
 
 
-    # ==============================
+    # ==================================================
     # PHONE
-    # ==============================
+    # ==================================================
 
-    if context.user_data.get("step") == "phone":
+    if step == "phone":
 
         context.user_data["phone"] = text
         context.user_data["step"] = "email"
@@ -120,11 +148,11 @@ async def menu_handler(
         return
 
 
-    # ==============================
+    # ==================================================
     # EMAIL
-    # ==============================
+    # ==================================================
 
-    if context.user_data.get("step") == "email":
+    if step == "email":
 
         context.user_data["email"] = text
         context.user_data["step"] = "course"
@@ -141,23 +169,26 @@ async def menu_handler(
         return
 
 
-    # ==============================
-    # COURSE
-    # ==============================
+    # ==================================================
+    # COURSE DURING REGISTRATION
+    # ==================================================
 
-    if context.user_data.get("step") == "course":
+    if step == "course":
 
         context.user_data["course"] = text
-        context.user_data["step"] = None
 
         data = {
-            "full_name": context.user_data["full_name"],
-            "phone": context.user_data["phone"],
-            "email": context.user_data["email"],
-            "course": context.user_data["course"],
+            "full_name": context.user_data.get("full_name", ""),
+            "phone": context.user_data.get("phone", ""),
+            "email": context.user_data.get("email", ""),
+            "course": context.user_data.get("course", ""),
         }
 
-        # Send registration to Google Sheet
+
+        # ==================================================
+        # SEND DATA TO GOOGLE SHEET
+        # ==================================================
+
         try:
 
             response = requests.post(
@@ -179,47 +210,203 @@ async def menu_handler(
             )
 
 
+        # Save details before clearing
+        full_name = context.user_data.get(
+            "full_name",
+            ""
+        )
+
+        phone = context.user_data.get(
+            "phone",
+            ""
+        )
+
+        email = context.user_data.get(
+            "email",
+            ""
+        )
+
+        course = context.user_data.get(
+            "course",
+            ""
+        )
+
+
+        # Clear registration
+        context.user_data.clear()
+
+
+        keyboard = ReplyKeyboardMarkup(
+            MAIN_MENU,
+            resize_keyboard=True
+        )
+
+
         await update.message.reply_text(
             "✅ *REGISTRATION COMPLETED*\n\n"
-            f"👤 Name: {context.user_data['full_name']}\n"
-            f"📱 Phone: {context.user_data['phone']}\n"
-            f"📧 Email: {context.user_data['email']}\n"
-            f"📚 Course: {context.user_data['course']}",
+            f"👤 Name: {full_name}\n"
+            f"📱 Phone: {phone}\n"
+            f"📧 Email: {email}\n"
+            f"📚 Course: {course}\n\n"
+            "🎓 Thank you for registering with "
+            "ALHIKAM Learning Center.",
+            parse_mode="Markdown",
+            reply_markup=keyboard
+        )
+
+        return
+
+
+    # ==================================================
+    # STUDENT REGISTRATION
+    # ==================================================
+
+    if text == "👤 Student Registration":
+
+        context.user_data.clear()
+
+        context.user_data["step"] = "full_name"
+
+        await update.message.reply_text(
+            "👤 *STUDENT REGISTRATION*\n\n"
+            "Please enter your Full Name.\n\n"
+            "Type /cancel to cancel registration.",
             parse_mode="Markdown"
         )
 
         return
 
-# ==============================
-# COURSES
-# ==============================
+
+    # ==================================================
+    # COURSES
+    # ==================================================
 
     if text == "📚 Courses":
 
+        keyboard = ReplyKeyboardMarkup(
+            COURSE_MENU,
+            resize_keyboard=True
+        )
+
         await update.message.reply_text(
             "📚 *ALHIKAM COURSES*\n\n"
-            "1️⃣ JAMB Science\n"
-            "2️⃣ JAMB Arts\n"
-            "3️⃣ WAEC\n"
-            "4️⃣ NECO\n"
-            "5️⃣ CBT Training\n\n"
-            "More courses will be available soon.",
+            "Please select a course below "
+            "to learn more:",
+            parse_mode="Markdown",
+            reply_markup=keyboard
+        )
+
+        return
+
+
+    # ==================================================
+    # JAMB SCIENCE
+    # ==================================================
+
+    if text == "🎯 JAMB Science":
+
+        await update.message.reply_text(
+            "🎯 *JAMB SCIENCE*\n\n"
+            "ALHIKAM Learning Center provides "
+            "JAMB Science preparation and support.\n\n"
+            "📚 Subjects include:\n"
+            "• Mathematics\n"
+            "• English Language\n"
+            "• Physics\n"
+            "• Chemistry\n"
+            "• Biology\n\n"
+            "📝 CBT practice and study materials "
+            "will be available soon.",
             parse_mode="Markdown"
         )
 
         return
-    
 
 
-    # ==============================
-    # CBT PRACTICE
-    # ==============================
+    # ==================================================
+    # JAMB ARTS
+    # ==================================================
 
-    if text == "📝 CBT Practice":
+    if text == "🎨 JAMB Arts":
 
         await update.message.reply_text(
-            "📝 *CBT PRACTICE*\n\n"
-            "CBT Practice is currently under development.\n\n"
+            "🎨 *JAMB ARTS*\n\n"
+            "ALHIKAM Learning Center provides "
+            "JAMB Arts preparation and support.\n\n"
+            "📚 Subjects include:\n"
+            "• English Language\n"
+            "• Literature in English\n"
+            "• Government\n"
+            "• Economics\n"
+            "• CRS / IRS\n\n"
+            "📝 CBT practice and study materials "
+            "will be available soon.",
+            parse_mode="Markdown"
+        )
+
+        return
+
+
+    # ==================================================
+    # WAEC
+    # ==================================================
+
+    if text == "📘 WAEC":
+
+        await update.message.reply_text(
+            "📘 *WAEC PREPARATION*\n\n"
+            "Prepare for your WAEC examination "
+            "with ALHIKAM Learning Center.\n\n"
+            "📚 Study materials\n"
+            "📝 Practice questions\n"
+            "💻 CBT training\n"
+            "🎓 Examination guidance\n\n"
+            "More WAEC learning resources "
+            "will be available soon.",
+            parse_mode="Markdown"
+        )
+
+        return
+
+
+    # ==================================================
+    # NECO
+    # ==================================================
+
+    if text == "📕 NECO":
+
+        await update.message.reply_text(
+            "📕 *NECO PREPARATION*\n\n"
+            "ALHIKAM Learning Center provides "
+            "support for NECO examination preparation.\n\n"
+            "📚 Study materials\n"
+            "📝 Practice questions\n"
+            "💻 CBT training\n"
+            "🎓 Examination guidance\n\n"
+            "More NECO learning resources "
+            "will be available soon.",
+            parse_mode="Markdown"
+        )
+
+        return
+
+
+    # ==================================================
+    # CBT TRAINING
+    # ==================================================
+
+    if text == "💻 CBT Training":
+
+        await update.message.reply_text(
+            "💻 *CBT TRAINING*\n\n"
+            "Improve your examination skills "
+            "with Computer-Based Test training.\n\n"
+            "📝 Practice questions\n"
+            "⏱️ Timed examinations\n"
+            "📊 Results and performance\n"
+            "🎯 JAMB • WAEC • NECO preparation\n\n"
+            "🚧 CBT Training system is currently "
+            "under development.\n\n"
             "It will be available soon.",
             parse_mode="Markdown"
         )
@@ -227,40 +414,86 @@ async def menu_handler(
         return
 
 
-    # ==============================
+    # ==================================================
+    # BACK TO MAIN MENU
+    # ==================================================
+
+    if text == "🔙 Back to Main Menu":
+
+        keyboard = ReplyKeyboardMarkup(
+            MAIN_MENU,
+            resize_keyboard=True
+        )
+
+        await update.message.reply_text(
+            "🏠 *MAIN MENU*\n\n"
+            "Please choose an option below.",
+            parse_mode="Markdown",
+            reply_markup=keyboard
+        )
+
+        return
+
+
+    # ==================================================
+    # CBT PRACTICE
+    # ==================================================
+
+    if text == "📝 CBT Practice":
+
+        await update.message.reply_text(
+            "📝 *CBT PRACTICE*\n\n"
+            "CBT Practice is currently under development.\n\n"
+            "It will include:\n"
+            "• JAMB Practice\n"
+            "• WAEC Practice\n"
+            "• NECO Practice\n"
+            "• Timed Tests\n"
+            "• Results and Scores\n\n"
+            "🚧 This feature will be available soon.",
+            parse_mode="Markdown"
+        )
+
+        return
+
+
+    # ==================================================
     # PAY SCHOOL FEES
-    # ==============================
+    # ==================================================
 
     if text == "💳 Pay School Fees":
 
         await update.message.reply_text(
             "💳 *SCHOOL FEES PAYMENT*\n\n"
-            "Flutterwave payment system will be available soon.",
+            "Flutterwave payment system will be "
+            "available soon.\n\n"
+            "Thank you for your patience.",
             parse_mode="Markdown"
         )
 
         return
 
 
-    # ==============================
+    # ==================================================
     # CONTACT US
-    # ==============================
+    # ==================================================
 
     if text == "📞 Contact Us":
 
         await update.message.reply_text(
             "📞 *CONTACT US*\n\n"
-            "Email: support@alhikam.com\n\n"
-            "ALHIKAM Learning Center",
+            "📧 Email: support@alhikam.com\n\n"
+            "🎓 ALHIKAM Learning Center\n"
+            "JAMB • WAEC • NECO • CBT Training",
             parse_mode="Markdown"
         )
 
         return
 
 
-    # ==============================
+    # ==================================================
     # ABOUT US
-    # ==============================
+    # ==================================================
 
     if text == "ℹ️ About Us":
 
@@ -268,28 +501,35 @@ async def menu_handler(
             "🎓 *ALHIKAM Learning Center*\n\n"
             "JAMB • WAEC • NECO • CBT Training\n\n"
             "We provide quality educational support "
-            "and examination preparation for students.",
+            "and examination preparation for students.\n\n"
+            "📚 Courses\n"
+            "📝 CBT Practice\n"
+            "👤 Student Registration\n"
+            "💳 School Fees Payment\n\n"
+            "Our goal is to help students prepare "
+            "successfully for their examinations.",
             parse_mode="Markdown"
         )
 
         return
 
 
-    # ==============================
+    # ==================================================
     # UNKNOWN MESSAGE
-    # ==============================
+    # ==================================================
 
     await update.message.reply_text(
-        "Please choose an option from the menu."
+        "❓ Please choose an option from the menu."
     )
 
 
-# ==============================
+# ==================================================
 # MAIN
-# ==============================
+# ==================================================
 
 def main():
 
+    # Check BOT_TOKEN
     if not BOT_TOKEN:
 
         raise ValueError(
@@ -298,6 +538,7 @@ def main():
         )
 
 
+    # Create application
     app = (
         Application
         .builder()
@@ -306,7 +547,10 @@ def main():
     )
 
 
-    # Start command
+    # ==================================================
+    # COMMAND HANDLERS
+    # ==================================================
+
     app.add_handler(
         CommandHandler(
             "start",
@@ -315,7 +559,18 @@ def main():
     )
 
 
-    # Text messages
+    app.add_handler(
+        CommandHandler(
+            "cancel",
+            cancel
+        )
+    )
+
+
+    # ==================================================
+    # TEXT MESSAGE HANDLER
+    # ==================================================
+
     app.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
@@ -327,13 +582,18 @@ def main():
     print("Bot is running...")
 
 
-    # Polling
-    app.run_polling()
+    # ==================================================
+    # POLLING
+    # ==================================================
+
+    app.run_polling(
+        drop_pending_updates=True
+    )
 
 
-# ==============================
-# START
-# ==============================
+# ==================================================
+# START APPLICATION
+# ==================================================
 
 if __name__ == "__main__":
 
