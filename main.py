@@ -12,24 +12,18 @@ import requests
 
 
 # ==============================
-# BOT SETTINGS
+# BOT TOKEN
 # ==============================
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
+
+# ==============================
+# GOOGLE SHEET URL
+# ==============================
+
 SHEET_URL = "https://script.google.com/macros/s/AKfycby5lIhCjoD0NaPZ-HHQ9hapAKlstypQvxyWK22qHblJr4uGBrPn5FoGG1TP-EvIfteo9w/exec"
 
-
-# ==============================
-# RAILWAY WEBHOOK SETTINGS
-# ==============================
-
-
-PORT = int(os.getenv("PORT", "8080"))
-
-WEBHOOK_URL = "https://precious-trust-production-956b.up.railway.app"
-
-WEBHOOK_PATH = "alhikam-webhook-2026"
 
 # ==============================
 # MENU
@@ -43,7 +37,7 @@ menu = [
 
 
 # ==============================
-# START COMMAND
+# START
 # ==============================
 
 async def start(
@@ -163,10 +157,7 @@ async def menu_handler(
             "course": context.user_data["course"],
         }
 
-        # ==============================
-        # SEND DATA TO GOOGLE SHEET
-        # ==============================
-
+        # Send registration to Google Sheet
         try:
 
             response = requests.post(
@@ -187,10 +178,6 @@ async def menu_handler(
                 e
             )
 
-
-        # ==============================
-        # REGISTRATION COMPLETED
-        # ==============================
 
         await update.message.reply_text(
             "✅ *REGISTRATION COMPLETED*\n\n"
@@ -311,14 +298,6 @@ def main():
         )
 
 
-    if not WEBHOOK_URL:
-
-        raise ValueError(
-            "WEBHOOK_URL is missing. "
-            "Please add WEBHOOK_URL in Railway Variables."
-        )
-
-
     app = (
         Application
         .builder()
@@ -327,10 +306,7 @@ def main():
     )
 
 
-    # ==============================
-    # START HANDLER
-    # ==============================
-
+    # Start command
     app.add_handler(
         CommandHandler(
             "start",
@@ -339,10 +315,7 @@ def main():
     )
 
 
-    # ==============================
-    # TEXT HANDLER
-    # ==============================
-
+    # Text messages
     app.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
@@ -354,26 +327,12 @@ def main():
     print("Bot is running...")
 
 
-    # ==============================
-    # WEBHOOK
-    # ==============================
-
-    app.run_webhook(
-
-        listen="0.0.0.0",
-
-        port=PORT,
-
-        url_path=WEBHOOK_PATH,
-
-        webhook_url=(
-            f"{WEBHOOK_URL}/{WEBHOOK_PATH}"
-        ),
-    )
+    # Polling
+    app.run_polling()
 
 
 # ==============================
-# START APPLICATION
+# START
 # ==============================
 
 if __name__ == "__main__":
