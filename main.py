@@ -190,30 +190,25 @@ async def menu_handler(
 
         return
 
-
-   # ==============================
+# ==============================
 # COURSES
 # ==============================
 
-if text == "📚 Courses":
+    if text == "📚 Courses":
 
-    await update.message.reply_text(
-        "📚 *ALHIKAM COURSES*\n\n"
-        "🎯 *JAMB Science*\n"
-        "Science subjects preparation for JAMB candidates.\n\n"
-        "🎨 *JAMB Arts*\n"
-        "Arts subjects preparation for JAMB candidates.\n\n"
-        "📘 *WAEC*\n"
-        "WAEC examination preparation and study support.\n\n"
-        "📕 *NECO*\n"
-        "NECO examination preparation and study support.\n\n"
-        "💻 *CBT Training*\n"
-        "Computer-Based Test practice and examination training.\n\n"
-        "📌 More courses and learning materials will be available soon.",
-        parse_mode="Markdown"
-    )
+        await update.message.reply_text(
+            "📚 *ALHIKAM COURSES*\n\n"
+            "1️⃣ JAMB Science\n"
+            "2️⃣ JAMB Arts\n"
+            "3️⃣ WAEC\n"
+            "4️⃣ NECO\n"
+            "5️⃣ CBT Training\n\n"
+            "More courses will be available soon.",
+            parse_mode="Markdown"
+        )
 
-    return 
+        return
+    
 
 
     # ==============================
