@@ -457,133 +457,133 @@ async def menu_handler(
         return
 
 
-     # ==================================================
-# PAY SCHOOL FEES
-# ==================================================
+         # ==================================================
+    # PAY SCHOOL FEES
+    # ==================================================
 
-if text == "💳 Pay School Fees":
+    if text == "💳 Pay School Fees":
 
-    payment_menu = ReplyKeyboardMarkup(
-        [
-            ["💳 1 Month", "💳 2 Months"],
-            ["💳 3 Months", "💳 4 Months"],
-            ["💳 5 Months", "💳 6 Months"],
-            ["🔙 Back to Main Menu"],
-        ],
-        resize_keyboard=True
-    )
+        payment_menu = ReplyKeyboardMarkup(
+            [
+                ["💳 1 Month", "💳 2 Months"],
+                ["💳 3 Months", "💳 4 Months"],
+                ["💳 5 Months", "💳 6 Months"],
+                ["🔙 Back to Main Menu"],
+            ],
+            resize_keyboard=True
+        )
 
-    await update.message.reply_text(
-        "💳 *ALHIKAM SCHOOL FEES PAYMENT*\n\n"
-        "Please select the training duration you want to pay for:\n\n"
-        "💳 1 Month\n"
-        "💳 2 Months\n"
-        "💳 3 Months\n"
-        "💳 4 Months\n"
-        "💳 5 Months\n"
-        "💳 6 Months\n\n"
-        "Select your preferred option below.",
-        parse_mode="Markdown",
-        reply_markup=payment_menu
-    )
+        await update.message.reply_text(
+            "💳 *ALHIKAM SCHOOL FEES PAYMENT*\n\n"
+            "Please select the training duration you want to pay for:\n\n"
+            "💳 1 Month\n"
+            "💳 2 Months\n"
+            "💳 3 Months\n"
+            "💳 4 Months\n"
+            "💳 5 Months\n"
+            "💳 6 Months\n\n"
+            "Select your preferred option below.",
+            parse_mode="Markdown",
+            reply_markup=payment_menu
+        )
 
-    return
-
-
-# ==================================================
-# 1 MONTH PAYMENT
-# ==================================================
-
-if text == "💳 1 Month":
-
-    await update.message.reply_text(
-        "💳 *1 MONTH JAMB TRAINING*\n\n"
-        "Click the link below to complete your payment:\n\n"
-        "https://flutterwave.com/pay/xzxojtyp2igm",
-        parse_mode="Markdown"
-    )
-
-    return
+        return
 
 
-# ==================================================
-# 2 MONTHS PAYMENT
-# ==================================================
+    # ==================================================
+    # 1 MONTH PAYMENT
+    # ==================================================
 
-if text == "💳 2 Months":
+    if text == "💳 1 Month":
 
-    await update.message.reply_text(
-        "💳 *2 MONTHS JAMB TRAINING*\n\n"
-        "Click the link below to complete your payment:\n\n"
-        "https://flutterwave.com/pay/7dmjszf7keh7",
-        parse_mode="Markdown"
-    )
+        await update.message.reply_text(
+            "💳 *1 MONTH JAMB TRAINING*\n\n"
+            "Click the link below to complete your payment:\n\n"
+            "https://flutterwave.com/pay/xzxojtyp2igm",
+            parse_mode="Markdown"
+        )
 
-    return
-
-
-# ==================================================
-# 3 MONTHS PAYMENT
-# ==================================================
-
-if text == "💳 3 Months":
-
-    await update.message.reply_text(
-        "💳 *3 MONTHS JAMB TRAINING*\n\n"
-        "Click the link below to complete your payment:\n\n"
-        "https://flutterwave.com/pay/ghclijb4q33v",
-        parse_mode="Markdown"
-    )
-
-    return
+        return
 
 
-# ==================================================
-# 4 MONTHS PAYMENT
-# ==================================================
+    # ==================================================
+    # 2 MONTHS PAYMENT
+    # ==================================================
 
-if text == "💳 4 Months":
+    if text == "💳 2 Months":
 
-    await update.message.reply_text(
-        "💳 *4 MONTHS JAMB TRAINING*\n\n"
-        "Click the link below to complete your payment:\n\n"
-        "https://flutterwave.com/pay/hplaya85sxfh",
-        parse_mode="Markdown"
-    )
+        await update.message.reply_text(
+            "💳 *2 MONTHS JAMB TRAINING*\n\n"
+            "Click the link below to complete your payment:\n\n"
+            "https://flutterwave.com/pay/7dmjszf7keh7",
+            parse_mode="Markdown"
+        )
 
-    return
-
-
-# ==================================================
-# 5 MONTHS PAYMENT
-# ==================================================
-
-if text == "💳 5 Months":
-
-    await update.message.reply_text(
-        "💳 *5 MONTHS JAMB TRAINING*\n\n"
-        "Click the link below to complete your payment:\n\n"
-        "https://flutterwave.com/pay/gwkniyevqmdm",
-        parse_mode="Markdown"
-    )
-
-    return
+        return
 
 
-# ==================================================
-# 6 MONTHS PAYMENT
-# ==================================================
+    # ==================================================
+    # 3 MONTHS PAYMENT
+    # ==================================================
 
-if text == "💳 6 Months":
+    if text == "💳 3 Months":
 
-    await update.message.reply_text(
-        "💳 *6 MONTHS JAMB TRAINING*\n\n"
-        "Click the link below to complete your payment:\n\n"
-        "https://flutterwave.com/pay/ubrjptqujfem",
-        parse_mode="Markdown"
-    )
+        await update.message.reply_text(
+            "💳 *3 MONTHS JAMB TRAINING*\n\n"
+            "Click the link below to complete your payment:\n\n"
+            "https://flutterwave.com/pay/ghclijb4q33v",
+            parse_mode="Markdown"
+        )
 
-    return
+        return
+
+
+    # ==================================================
+    # 4 MONTHS PAYMENT
+    # ==================================================
+
+    if text == "💳 4 Months":
+
+        await update.message.reply_text(
+            "💳 *4 MONTHS JAMB TRAINING*\n\n"
+            "Click the link below to complete your payment:\n\n"
+            "https://flutterwave.com/pay/hplaya85sxfh",
+            parse_mode="Markdown"
+        )
+
+        return
+
+
+    # ==================================================
+    # 5 MONTHS PAYMENT
+    # ==================================================
+
+    if text == "💳 5 Months":
+
+        await update.message.reply_text(
+            "💳 *5 MONTHS JAMB TRAINING*\n\n"
+            "Click the link below to complete your payment:\n\n"
+            "https://flutterwave.com/pay/gwkniyevqmdm",
+            parse_mode="Markdown"
+        )
+
+        return
+
+
+    # ==================================================
+    # 6 MONTHS PAYMENT
+    # ==================================================
+
+    if text == "💳 6 Months":
+
+        await update.message.reply_text(
+            "💳 *6 MONTHS JAMB TRAINING*\n\n"
+            "Click the link below to complete your payment:\n\n"
+            "https://flutterwave.com/pay/ubrjptqujfem",
+            parse_mode="Markdown"
+        )
+
+        return
 
 
     # ==================================================
