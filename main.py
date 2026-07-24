@@ -1,4 +1,12 @@
-from telegram import Update, ReplyKeyboardMarkup
+import os
+import uuid
+import hmac
+import threading
+import requests
+
+from flask import Flask, request, jsonify
+
+from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -8,19 +16,14 @@ from telegram.ext import (
 )
 from telegram.error import TelegramError
 
-from flask import Flask, request, jsonify
-from threading import Thread
-
-import os
-import requests
-import hmac
-
 
 # ============================================================
 # SETTINGS
 # ============================================================
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+FLW_SECRET_KEY = os.getenv("FLW_SECRET_KEY")
 
 FLUTTERWAVE_SECRET_HASH = os.getenv(
     "FLUTTERWAVE_SECRET_HASH"
@@ -35,6 +38,58 @@ RAILWAY_URL = os.getenv(
     "RAILWAY_URL",
     "https://precious-trust-production-956b.up.railway.app"
 )
+
+PORT = int(
+    os.getenv(
+        "PORT",
+        "8080"
+    )
+)
+
+
+# ============================================================
+# MAIN TELEGRAM GROUP
+# ============================================================
+
+MAIN_GROUP_ID = -1004384506380
+
+
+# ============================================================
+# PAYMENT PLANS
+# ============================================================
+
+PAYMENT_PLANS = {
+
+    "1": {
+        "name": "1 Month",
+        "amount": 3600,
+    },
+
+    "2": {
+        "name": "2 Months",
+        "amount": 6800,
+    },
+
+    "3": {
+        "name": "3 Months",
+        "amount": 10000,
+    },
+
+    "4": {
+        "name": "4 Months",
+        "amount": 13200,
+    },
+
+    "5": {
+        "name": "5 Months",
+        "amount": 16500,
+    },
+
+    "6": {
+        "name": "6 Months",
+        "amount": 20000,
+    },
+}
 
 
 # ============================================================
@@ -62,34 +117,40 @@ def health():
     })
 
 
+# ============================================================
+# FLUTTERWAVE WEBHOOK
+# ============================================================
+
 @web_app.route(
     "/webhook/flutterwave",
     methods=["POST"]
 )
 def flutterwave_webhook():
 
-    # Get Flutterwave Secret Hash
-    flutterwave_hash = request.headers.get(
+    # --------------------------------------------------------
+    # VERIFY SECRET HASH
+    # --------------------------------------------------------
+
+    incoming_hash = request.headers.get(
         "verif-hash"
     )
 
-    # Check Secret Hash
     if not FLUTTERWAVE_SECRET_HASH:
 
         print(
-            "ERROR: FLUTTERWAVE_SECRET_HASH is missing"
+            "ERROR: FLUTTERWAVE_SECRET_HASH is missing."
         )
 
         return jsonify({
             "status": "error",
-            "message": "Secret hash not configured"
+            "message": "Webhook secret hash not configured"
         }), 500
 
 
-    if not flutterwave_hash:
+    if not incoming_hash:
 
         print(
-            "Webhook rejected: No verif-hash"
+            "Webhook rejected: Missing verif-hash."
         )
 
         return jsonify({
@@ -99,12 +160,12 @@ def flutterwave_webhook():
 
 
     if not hmac.compare_digest(
-        flutterwave_hash,
+        incoming_hash,
         FLUTTERWAVE_SECRET_HASH
     ):
 
         print(
-            "Webhook rejected: Invalid Secret Hash"
+            "Webhook rejected: Invalid secret hash."
         )
 
         return jsonify({
@@ -113,7 +174,10 @@ def flutterwave_webhook():
         }), 401
 
 
-    # Get webhook data
+    # --------------------------------------------------------
+    # GET JSON DATA
+    # --------------------------------------------------------
+
     data = request.get_json(
         silent=True
     )
@@ -122,7 +186,7 @@ def flutterwave_webhook():
     if not data:
 
         print(
-            "Webhook received without JSON data"
+            "Webhook received without JSON data."
         )
 
         return jsonify({
@@ -212,24 +276,84 @@ def flutterwave_webhook():
 
 
     # --------------------------------------------------------
-    # SUCCESSFUL PAYMENT
+    # ONLY SUCCESSFUL PAYMENTS
     # --------------------------------------------------------
 
-    if status == "successful":
+    if status != "successful":
 
         print(
-            "PAYMENT SUCCESSFUL"
+            "Payment is not successful."
         )
 
-        # Payment access automation
-        # will be connected to Telegram
-        # after user/payment mapping is finalized.
+        return jsonify({
+            "status": "ignored"
+        }), 200
 
-    else:
+
+    # --------------------------------------------------------
+    # GET TELEGRAM USER ID FROM TX REF
+    # --------------------------------------------------------
+
+    telegram_id = None
+
+
+    if tx_ref:
+
+        try:
+
+            parts = tx_ref.split("_")
+
+            # Expected:
+            # ALHIKAM_TELEGRAMID_UUID
+
+            if len(parts) >= 3:
+
+                telegram_id = int(
+                    parts[1]
+                )
+
+        except Exception as e:
+
+            print(
+                "Telegram ID extraction error:",
+                e
+            )
+
+
+    if not telegram_id:
 
         print(
-            "Payment is not successful"
+            "ERROR: Telegram ID not found in tx_ref."
         )
+
+        return jsonify({
+            "status": "error",
+            "message": "Telegram ID not found"
+        }), 400
+
+
+    print(
+        "Telegram User ID:",
+        telegram_id
+    )
+
+
+    # --------------------------------------------------------
+    # START ASYNC ACCESS PROCESS
+    # --------------------------------------------------------
+
+    threading.Thread(
+
+        target=process_successful_payment,
+
+        args=(
+            telegram_id,
+            payment_data
+        ),
+
+        daemon=True
+
+    ).start()
 
 
     return jsonify({
@@ -238,124 +362,210 @@ def flutterwave_webhook():
 
 
 # ============================================================
+# PROCESS SUCCESSFUL PAYMENT
+# ============================================================
+
+def process_successful_payment(
+    telegram_id,
+    payment_data
+):
+
+    try:
+
+        # Get payment plan
+        amount = payment_data.get(
+            "amount",
+            "N/A"
+        )
+
+        tx_ref = payment_data.get(
+            "tx_ref",
+            "N/A"
+        )
+
+
+        # Run async Telegram access
+        asyncio_run_payment_access(
+
+            telegram_id,
+
+            amount,
+
+            tx_ref
+        )
+
+
+    except Exception as e:
+
+        print(
+            "Payment processing error:",
+            e
+        )
+
+
+# ============================================================
+# ASYNC RUNNER FOR PAYMENT ACCESS
+# ============================================================
+
+def asyncio_run_payment_access(
+    telegram_id,
+    amount,
+    tx_ref
+):
+
+    import asyncio
+
+    asyncio.run(
+
+        send_payment_access(
+
+            telegram_id,
+
+            amount,
+
+            tx_ref
+        )
+    )
+
+
+# ============================================================
+# SEND PAYMENT ACCESS
+# ============================================================
+
+async def send_payment_access(
+    telegram_id,
+    amount,
+    tx_ref
+):
+
+    global telegram_bot_app
+
+
+    if telegram_bot_app is None:
+
+        print(
+            "Telegram application is not ready."
+        )
+
+        return
+
+
+    try:
+
+        # ----------------------------------------------------
+        # CREATE ONE-TIME INVITE LINK
+        # ----------------------------------------------------
+
+        invite_link = await telegram_bot_app.bot.create_chat_invite_link(
+
+            chat_id=MAIN_GROUP_ID,
+
+            member_limit=1,
+
+            name=f"ALHIKAM-{telegram_id}"
+
+        )
+
+
+        join_url = invite_link.invite_link
+
+
+        print(
+            "Invite link created:",
+            join_url
+        )
+
+
+        # ----------------------------------------------------
+        # SEND MESSAGE TO STUDENT
+        # ----------------------------------------------------
+
+        await telegram_bot_app.bot.send_message(
+
+            chat_id=telegram_id,
+
+            text=(
+
+                "🎉 *PAYMENT SUCCESSFUL!*\n\n"
+
+                "🎓 ALHIKAM Learning Center\n\n"
+
+                f"💰 Amount Paid: ₦{amount:,}\n\n"
+
+                "✅ Your payment has been confirmed.\n\n"
+
+                "📚 Your class access is now ready.\n\n"
+
+                "👇 Click the button below to join your class:\n\n"
+
+                "⚠️ This invitation link is for you only."
+
+            ),
+
+            parse_mode="Markdown",
+
+            reply_markup=InlineKeyboardMarkup([
+
+                [
+
+                    InlineKeyboardButton(
+
+                        "🎓 JOIN ALHIKAM CLASS",
+
+                        url=join_url
+
+                    )
+
+                ]
+
+            ])
+
+        )
+
+
+        print(
+            "Access sent successfully to:",
+            telegram_id
+        )
+
+
+    except TelegramError as e:
+
+        print(
+            "Telegram access error:",
+            e
+        )
+
+
+    except Exception as e:
+
+        print(
+            "General access error:",
+            e
+        )
+
+
+# ============================================================
 # RUN WEB SERVER
 # ============================================================
 
 def run_web_server():
 
-    port = int(
-        os.getenv(
-            "PORT",
-            8080
-        )
+    print(
+        "Starting Flask Web Server..."
     )
 
     web_app.run(
+
         host="0.0.0.0",
-        port=port
+
+        port=PORT
+
     )
 
 
 # ============================================================
-# CHANNEL IDS
-# ============================================================
-
-CHANNEL_IDS = {
-
-    "bot_access": -1003800935640,
-
-    "announcements": -1004315707986,
-
-    "payment_registration": -1003935952561,
-
-    "science_faculty": -1004479887604,
-
-    "arts_faculty": -1004314659728,
-
-    "commercial_faculty": -1003967146846,
-
-    "physics": -1004467391688,
-
-    "chemistry": -1003575115831,
-
-    "biology": -1004412247385,
-
-    "mathematics": -1004480230539,
-
-    "agricultural_science": -1004398599335,
-
-    "geography": -1003901130871,
-
-    "use_of_english": -1003759215809,
-
-    "literature": -1004317587777,
-
-    "principles_of_accounts": -1004459228986,
-
-    "commerce": -1003930273330,
-
-    "economics": -1003632758498,
-
-    "fine_arts": -1003801904375,
-
-    "history": -1004494276405,
-
-    "hausa": -1004436228793,
-
-    "crs": -1004469127265,
-
-    "islamic_studies": -1003823376901,
-
-    "government": -1003735736424,
-}
-
-
-# ============================================================
-# PAYMENT LINKS
-# ============================================================
-
-PAYMENT_LINKS = {
-
-    "1": {
-        "name": "1 Month",
-        "amount": 3600,
-        "link": "https://flutterwave.com/pay/xzxojtyp2igm",
-    },
-
-    "2": {
-        "name": "2 Months",
-        "amount": 6800,
-        "link": "https://flutterwave.com/pay/7dmjszf7keh7",
-    },
-
-    "3": {
-        "name": "3 Months",
-        "amount": 10000,
-        "link": "https://flutterwave.com/pay/ghclijb4q33v",
-    },
-
-    "4": {
-        "name": "4 Months",
-        "amount": 13200,
-        "link": "https://flutterwave.com/pay/hplaya85sxfh",
-    },
-
-    "5": {
-        "name": "5 Months",
-        "amount": 16500,
-        "link": "https://flutterwave.com/pay/gwkniyevqmdm",
-    },
-
-    "6": {
-        "name": "6 Months",
-        "amount": 20000,
-        "link": "https://flutterwave.com/pay/ubrjptqujfem",
-    },
-}
-
-
-# ============================================================
-# MAIN MENU
+# MENUS
 # ============================================================
 
 MAIN_MENU = [
@@ -373,39 +583,10 @@ MAIN_MENU = [
     [
         "📞 Contact Us",
         "ℹ️ About Us"
-    ],
+    ]
+
 ]
 
-
-# ============================================================
-# COURSE MENU
-# ============================================================
-
-COURSE_MENU = [
-
-    [
-        "🎯 JAMB Science",
-        "🎨 JAMB Arts"
-    ],
-
-    [
-        "📘 WAEC",
-        "📕 NECO"
-    ],
-
-    [
-        "💻 CBT Training"
-    ],
-
-    [
-        "🔙 Back to Main Menu"
-    ],
-]
-
-
-# ============================================================
-# PAYMENT MENU
-# ============================================================
 
 PAYMENT_MENU = [
 
@@ -426,7 +607,31 @@ PAYMENT_MENU = [
 
     [
         "🔙 Back to Main Menu"
+    ]
+
+]
+
+
+COURSE_MENU = [
+
+    [
+        "🎯 JAMB Science",
+        "🎨 JAMB Arts"
     ],
+
+    [
+        "📘 WAEC",
+        "📕 NECO"
+    ],
+
+    [
+        "💻 CBT Training"
+    ],
+
+    [
+        "🔙 Back to Main Menu"
+    ]
+
 ]
 
 
@@ -441,10 +646,15 @@ async def start(
 
     context.user_data.clear()
 
+
     keyboard = ReplyKeyboardMarkup(
+
         MAIN_MENU,
+
         resize_keyboard=True
+
     )
+
 
     await update.message.reply_text(
 
@@ -452,14 +662,22 @@ async def start(
 
         "Welcome to ALHIKAM Learning Center.\n\n"
 
-        "We provide educational support for "
-        "JAMB, WAEC, NECO and CBT Training.\n\n"
+        "We provide educational support for:\n"
+
+        "• JAMB\n"
+
+        "• WAEC\n"
+
+        "• NECO\n"
+
+        "• CBT Training\n\n"
 
         "Please choose an option below.",
 
         parse_mode="Markdown",
 
         reply_markup=keyboard
+
     )
 
 
@@ -474,19 +692,265 @@ async def cancel(
 
     context.user_data.clear()
 
+
     keyboard = ReplyKeyboardMarkup(
+
         MAIN_MENU,
+
         resize_keyboard=True
+
     )
+
 
     await update.message.reply_text(
 
         "❌ Registration cancelled.\n\n"
 
-        "Please choose an option from the main menu.",
+        "Please choose an option below.",
 
         reply_markup=keyboard
+
     )
+
+
+# ============================================================
+# CREATE FLUTTERWAVE CHECKOUT
+# ============================================================
+
+async def create_flutterwave_checkout(
+
+    update,
+
+    context,
+
+    plan_number
+
+):
+
+    user = update.effective_user
+
+
+    plan = PAYMENT_PLANS.get(
+
+        plan_number
+
+    )
+
+
+    if not plan:
+
+        await update.message.reply_text(
+
+            "❌ Invalid payment plan."
+
+        )
+
+        return
+
+
+    if not FLW_SECRET_KEY:
+
+        await update.message.reply_text(
+
+            "❌ Payment system is temporarily unavailable.\n\n"
+
+            "Please contact ALHIKAM Learning Center."
+
+        )
+
+        print(
+            "ERROR: FLW_SECRET_KEY missing."
+        )
+
+        return
+
+
+    telegram_id = user.id
+
+
+    unique_ref = (
+
+        f"ALHIKAM_"
+
+        f"{telegram_id}_"
+
+        f"{uuid.uuid4().hex}"
+
+    )
+
+
+    checkout_url = (
+
+        "https://api.flutterwave.com/v3/payments"
+
+    )
+
+
+    payload = {
+
+        "tx_ref":
+            unique_ref,
+
+        "amount":
+            plan["amount"],
+
+        "currency":
+            "NGN",
+
+        "redirect_url":
+            f"{RAILWAY_URL}/payment-success",
+
+        "customer": {
+
+            "email":
+                f"telegram{telegram_id}@alhikam.com",
+
+            "name":
+                user.full_name or "ALHIKAM Student",
+
+        },
+
+        "customizations": {
+
+            "title":
+                "ALHIKAM Learning Center",
+
+            "description":
+                f"{plan['name']} Training",
+
+            "logo":
+                ""
+
+        }
+
+    }
+
+
+    headers = {
+
+        "Authorization":
+            f"Bearer {FLW_SECRET_KEY}",
+
+        "Content-Type":
+            "application/json"
+
+    }
+
+
+    try:
+
+        response = requests.post(
+
+            checkout_url,
+
+            json=payload,
+
+            headers=headers,
+
+            timeout=30
+
+        )
+
+
+        result = response.json()
+
+
+        print(
+            "Flutterwave Checkout Response:",
+            result
+        )
+
+
+        if (
+
+            response.status_code == 200
+
+            and result.get("status") == "success"
+
+        ):
+
+            payment_link = (
+
+                result
+
+                .get("data", {})
+
+                .get("link")
+
+            )
+
+
+            if payment_link:
+
+                await update.message.reply_text(
+
+                    f"💳 *{plan['name'].upper()} PAYMENT*\n\n"
+
+                    f"💰 Amount: ₦{plan['amount']:,}\n\n"
+
+                    "Click the button below to pay securely:\n\n"
+
+                    "After successful payment, "
+
+                    "your Telegram class access will be "
+
+                    "sent automatically.",
+
+                    parse_mode="Markdown",
+
+                    reply_markup=InlineKeyboardMarkup([
+
+                        [
+
+                            InlineKeyboardButton(
+
+                                "💳 PAY NOW",
+
+                                url=payment_link
+
+                            )
+
+                        ]
+
+                    ])
+
+                )
+
+                return
+
+
+        print(
+            "Flutterwave payment link creation failed."
+        )
+
+
+        await update.message.reply_text(
+
+            "❌ We could not create your payment link.\n\n"
+
+            "Please try again."
+
+        )
+
+
+    except Exception as e:
+
+        print(
+
+            "Flutterwave API Error:",
+
+            e
+
+        )
+
+
+        await update.message.reply_text(
+
+            "❌ Payment system error.\n\n"
+
+            "Please try again later."
+
+        )
 
 
 # ============================================================
@@ -494,8 +958,11 @@ async def cancel(
 # ============================================================
 
 async def save_registration(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
+
+    update,
+
+    context
+
 ):
 
     data = {
@@ -528,7 +995,8 @@ async def save_registration(
             context.user_data.get(
                 "course",
                 ""
-            ),
+            )
+
     }
 
 
@@ -541,6 +1009,7 @@ async def save_registration(
             json=data,
 
             timeout=15
+
         )
 
 
@@ -549,6 +1018,7 @@ async def save_registration(
             "Google Sheet Response:",
 
             response.text
+
         )
 
 
@@ -559,54 +1029,12 @@ async def save_registration(
             "Google Sheet Error:",
 
             e
+
         )
 
 
 # ============================================================
-# GIVE CHANNEL ACCESS
-# ============================================================
-
-async def give_channel_access(
-
-    bot,
-
-    user_id,
-
-    channel_id
-
-):
-
-    try:
-
-        invite_link = (
-
-            await bot.create_chat_invite_link(
-
-                chat_id=channel_id,
-
-                member_limit=1
-            )
-        )
-
-
-        return invite_link.invite_link
-
-
-    except TelegramError as e:
-
-        print(
-
-            "Telegram Channel Error:",
-
-            e
-        )
-
-
-        return None
-
-
-# ============================================================
-# STUDENT REGISTRATION
+# MAIN MESSAGE HANDLER
 # ============================================================
 
 async def menu_handler(
@@ -625,14 +1053,16 @@ async def menu_handler(
     text = update.message.text
 
 
+    # --------------------------------------------------------
+    # REGISTRATION STEPS
+    # --------------------------------------------------------
+
     step = context.user_data.get(
+
         "step"
+
     )
 
-
-    # --------------------------------------------------------
-    # FULL NAME
-    # --------------------------------------------------------
 
     if step == "full_name":
 
@@ -649,15 +1079,12 @@ async def menu_handler(
         await update.message.reply_text(
 
             "📱 Please enter your Phone Number:"
+
         )
 
 
         return
 
-
-    # --------------------------------------------------------
-    # PHONE
-    # --------------------------------------------------------
 
     if step == "phone":
 
@@ -674,15 +1101,12 @@ async def menu_handler(
         await update.message.reply_text(
 
             "📧 Please enter your Email Address:"
+
         )
 
 
         return
 
-
-    # --------------------------------------------------------
-    # EMAIL
-    # --------------------------------------------------------
 
     if step == "email":
 
@@ -709,15 +1133,12 @@ async def menu_handler(
             "WAEC\n"
 
             "NECO"
+
         )
 
 
         return
 
-
-    # --------------------------------------------------------
-    # COURSE
-    # --------------------------------------------------------
 
     if step == "course":
 
@@ -731,6 +1152,7 @@ async def menu_handler(
             update,
 
             context
+
         )
 
 
@@ -739,63 +1161,25 @@ async def menu_handler(
             "full_name",
 
             ""
-        )
 
-
-        phone = context.user_data.get(
-
-            "phone",
-
-            ""
-        )
-
-
-        email = context.user_data.get(
-
-            "email",
-
-            ""
-        )
-
-
-        course = context.user_data.get(
-
-            "course",
-
-            ""
         )
 
 
         context.user_data.clear()
 
 
-        keyboard = ReplyKeyboardMarkup(
-
-            MAIN_MENU,
-
-            resize_keyboard=True
-        )
-
-
         await update.message.reply_text(
 
             "✅ *REGISTRATION COMPLETED*\n\n"
 
-            f"👤 Name: {full_name}\n"
-
-            f"📱 Phone: {phone}\n"
-
-            f"📧 Email: {email}\n"
-
-            f"📚 Course: {course}\n\n"
+            f"👤 Name: {full_name}\n\n"
 
             "🎓 Thank you for registering with "
 
             "ALHIKAM Learning Center.",
 
-            parse_mode="Markdown",
+            parse_mode="Markdown"
 
-            reply_markup=keyboard
         )
 
 
@@ -822,9 +1206,10 @@ async def menu_handler(
 
             "Please enter your Full Name.\n\n"
 
-            "Type /cancel to cancel registration.",
+            "Type /cancel to cancel.",
 
             parse_mode="Markdown"
+
         )
 
 
@@ -837,23 +1222,22 @@ async def menu_handler(
 
     if text == "📚 Courses":
 
-        keyboard = ReplyKeyboardMarkup(
-
-            COURSE_MENU,
-
-            resize_keyboard=True
-        )
-
-
         await update.message.reply_text(
 
             "📚 *ALHIKAM COURSES*\n\n"
 
-            "Please select a course below:",
+            "Please select a course:",
 
             parse_mode="Markdown",
 
-            reply_markup=keyboard
+            reply_markup=ReplyKeyboardMarkup(
+
+                COURSE_MENU,
+
+                resize_keyboard=True
+
+            )
+
         )
 
 
@@ -870,8 +1254,6 @@ async def menu_handler(
 
             "🎯 *JAMB SCIENCE*\n\n"
 
-            "📚 Subjects include:\n"
-
             "• Mathematics\n"
 
             "• English Language\n"
@@ -882,12 +1264,10 @@ async def menu_handler(
 
             "• Biology\n"
 
-            "• Agricultural Science\n\n"
-
-            "📝 CBT practice and study materials "
-            "are available through ALHIKAM Learning Center.",
+            "• Agricultural Science",
 
             parse_mode="Markdown"
+
         )
 
 
@@ -903,8 +1283,6 @@ async def menu_handler(
         await update.message.reply_text(
 
             "🎨 *JAMB ARTS*\n\n"
-
-            "📚 Subjects include:\n"
 
             "• Use of English\n"
 
@@ -922,12 +1300,10 @@ async def menu_handler(
 
             "• CRS\n"
 
-            "• Fine Arts\n\n"
-
-            "📝 CBT practice and study materials "
-            "are available through ALHIKAM Learning Center.",
+            "• Fine Arts",
 
             parse_mode="Markdown"
+
         )
 
 
@@ -950,11 +1326,10 @@ async def menu_handler(
 
             "💻 CBT training\n"
 
-            "🎓 Examination guidance\n\n"
-
-            "More WAEC learning resources will be available soon.",
+            "🎓 Examination guidance",
 
             parse_mode="Markdown"
+
         )
 
 
@@ -977,11 +1352,10 @@ async def menu_handler(
 
             "💻 CBT training\n"
 
-            "🎓 Examination guidance\n\n"
-
-            "More NECO learning resources will be available soon.",
+            "🎓 Examination guidance",
 
             parse_mode="Markdown"
+
         )
 
 
@@ -989,7 +1363,7 @@ async def menu_handler(
 
 
     # --------------------------------------------------------
-    # CBT TRAINING
+    # CBT
     # --------------------------------------------------------
 
     if text == "💻 CBT Training":
@@ -998,17 +1372,16 @@ async def menu_handler(
 
             "💻 *CBT TRAINING*\n\n"
 
-            "📝 Practice questions\n"
+            "📝 Practice Questions\n"
 
-            "⏱️ Timed examinations\n"
+            "⏱️ Timed Tests\n"
 
-            "📊 Results and performance\n"
+            "📊 Results and Scores\n\n"
 
-            "🎯 JAMB • WAEC • NECO preparation\n\n"
-
-            "🚧 CBT Training system is currently under development.",
+            "🚧 CBT system is under development.",
 
             parse_mode="Markdown"
+
         )
 
 
@@ -1021,23 +1394,20 @@ async def menu_handler(
 
     if text == "🔙 Back to Main Menu":
 
-        keyboard = ReplyKeyboardMarkup(
-
-            MAIN_MENU,
-
-            resize_keyboard=True
-        )
-
-
         await update.message.reply_text(
 
-            "🏠 *MAIN MENU*\n\n"
-
-            "Please choose an option below.",
+            "🏠 *MAIN MENU*",
 
             parse_mode="Markdown",
 
-            reply_markup=keyboard
+            reply_markup=ReplyKeyboardMarkup(
+
+                MAIN_MENU,
+
+                resize_keyboard=True
+
+            )
+
         )
 
 
@@ -1054,21 +1424,12 @@ async def menu_handler(
 
             "📝 *CBT PRACTICE*\n\n"
 
-            "CBT Practice will include:\n\n"
-
-            "• JAMB Practice\n"
-
-            "• WAEC Practice\n"
-
-            "• NECO Practice\n"
-
-            "• Timed Tests\n"
-
-            "• Results and Scores\n\n"
+            "JAMB • WAEC • NECO\n\n"
 
             "🚧 This feature is under development.",
 
             parse_mode="Markdown"
+
         )
 
 
@@ -1076,42 +1437,27 @@ async def menu_handler(
 
 
     # --------------------------------------------------------
-    # PAY SCHOOL FEES
+    # PAYMENT MENU
     # --------------------------------------------------------
 
     if text == "💳 Pay School Fees":
-
-        keyboard = ReplyKeyboardMarkup(
-
-            PAYMENT_MENU,
-
-            resize_keyboard=True
-        )
-
 
         await update.message.reply_text(
 
             "💳 *ALHIKAM SCHOOL FEES PAYMENT*\n\n"
 
-            "Please select your training duration:\n\n"
-
-            "💳 1 Month — ₦3,600\n"
-
-            "💳 2 Months — ₦6,800\n"
-
-            "💳 3 Months — ₦10,000\n"
-
-            "💳 4 Months — ₦13,200\n"
-
-            "💳 5 Months — ₦16,500\n"
-
-            "💳 6 Months — ₦20,000\n\n"
-
-            "Select your preferred option below.",
+            "Select your preferred duration:",
 
             parse_mode="Markdown",
 
-            reply_markup=keyboard
+            reply_markup=ReplyKeyboardMarkup(
+
+                PAYMENT_MENU,
+
+                resize_keyboard=True
+
+            )
+
         )
 
 
@@ -1122,45 +1468,31 @@ async def menu_handler(
     # PAYMENT OPTIONS
     # --------------------------------------------------------
 
-    if text.startswith("💳 "):
+    if text.startswith("💳 ") and "Month" in text:
 
-        month = text.replace(
+        month_number = (
 
-            "💳 ",
+            text
 
-            ""
+            .replace("💳 ", "")
+
+            .split()[0]
+
         )
 
 
-        month_number = month.split()[0]
+        await create_flutterwave_checkout(
 
+            update,
 
-        payment = PAYMENT_LINKS.get(
+            context,
 
             month_number
+
         )
 
 
-        if payment:
-
-            await update.message.reply_text(
-
-                f"💳 *{payment['name'].upper()}*\n\n"
-
-                f"💰 Price: ₦{payment['amount']:,}\n\n"
-
-                "Click the payment link below:\n\n"
-
-                f"{payment['link']}\n\n"
-
-                "⚠️ After successful payment, "
-                "your payment will be processed.",
-
-                parse_mode="Markdown"
-            )
-
-
-            return
+        return
 
 
     # --------------------------------------------------------
@@ -1173,13 +1505,12 @@ async def menu_handler(
 
             "📞 *CONTACT US*\n\n"
 
-            "📧 Email: support@alhikam.com\n\n"
-
-            "🎓 ALHIKAM Learning Center\n"
+            "🎓 ALHIKAM Learning Center\n\n"
 
             "JAMB • WAEC • NECO • CBT Training",
 
             parse_mode="Markdown"
+
         )
 
 
@@ -1198,21 +1529,12 @@ async def menu_handler(
 
             "JAMB • WAEC • NECO • CBT Training\n\n"
 
-            "We provide quality educational support "
-            "and examination preparation for students.\n\n"
+            "We provide educational support "
 
-            "📚 Courses\n"
-
-            "📝 CBT Practice\n"
-
-            "👤 Student Registration\n"
-
-            "💳 School Fees Payment\n\n"
-
-            "Our goal is to help students prepare "
-            "successfully for their examinations.",
+            "and examination preparation for students.",
 
             parse_mode="Markdown"
+
         )
 
 
@@ -1226,7 +1548,15 @@ async def menu_handler(
     await update.message.reply_text(
 
         "❓ Please choose an option from the menu."
+
     )
+
+
+# ============================================================
+# GLOBAL TELEGRAM APPLICATION
+# ============================================================
+
+telegram_bot_app = None
 
 
 # ============================================================
@@ -1235,12 +1565,28 @@ async def menu_handler(
 
 def main():
 
+    global telegram_bot_app
+
+
+    # --------------------------------------------------------
+    # CHECK VARIABLES
+    # --------------------------------------------------------
+
     if not BOT_TOKEN:
 
         raise ValueError(
 
-            "BOT_TOKEN is missing. "
-            "Please add BOT_TOKEN in Railway Variables."
+            "BOT_TOKEN is missing."
+
+        )
+
+
+    if not FLW_SECRET_KEY:
+
+        raise ValueError(
+
+            "FLW_SECRET_KEY is missing."
+
         )
 
 
@@ -1249,21 +1595,31 @@ def main():
         print(
 
             "WARNING: FLUTTERWAVE_SECRET_HASH is missing."
+
         )
 
 
-    # Start Flask server
-    Thread(
+    # --------------------------------------------------------
+    # START WEB SERVER
+    # --------------------------------------------------------
+
+    web_thread = threading.Thread(
 
         target=run_web_server,
 
         daemon=True
 
-    ).start()
+    )
 
 
-    # Telegram Application
-    app = (
+    web_thread.start()
+
+
+    # --------------------------------------------------------
+    # CREATE TELEGRAM APPLICATION
+    # --------------------------------------------------------
+
+    telegram_bot_app = (
 
         Application
 
@@ -1272,47 +1628,65 @@ def main():
         .token(BOT_TOKEN)
 
         .build()
+
     )
 
 
-    # Commands
-    app.add_handler(
+    # --------------------------------------------------------
+    # COMMANDS
+    # --------------------------------------------------------
+
+    telegram_bot_app.add_handler(
 
         CommandHandler(
 
             "start",
 
             start
+
         )
+
     )
 
 
-    app.add_handler(
+    telegram_bot_app.add_handler(
 
         CommandHandler(
 
             "cancel",
 
             cancel
+
         )
+
     )
 
 
-    # Text messages
-    app.add_handler(
+    # --------------------------------------------------------
+    # TEXT HANDLER
+    # --------------------------------------------------------
+
+    telegram_bot_app.add_handler(
 
         MessageHandler(
 
             filters.TEXT & ~filters.COMMAND,
 
             menu_handler
+
         )
+
     )
 
+
+    # --------------------------------------------------------
+    # LOGS
+    # --------------------------------------------------------
 
     print(
 
         "================================"
+
     )
 
 
@@ -1320,37 +1694,62 @@ def main():
 
         "ALHIKAM Learning Center Bot "
         "is running..."
+
+    )
+
+
+    print(
+
+        "Dynamic Flutterwave Checkout: ENABLED"
+
     )
 
 
     print(
 
         "Flutterwave Webhook:"
+
     )
 
 
     print(
 
         RAILWAY_URL +
+
         "/webhook/flutterwave"
+
+    )
+
+
+    print(
+
+        "Main Group ID:",
+
+        MAIN_GROUP_ID
+
     )
 
 
     print(
 
         "================================"
+
     )
 
 
-    # Run Telegram Bot
-    app.run_polling(
+    # --------------------------------------------------------
+    # START BOT
+    # --------------------------------------------------------
+
+    telegram_bot_app.run_polling(
 
         drop_pending_updates=True
+
     )
 
 
 # ============================================================
-# START
+# START APPLICATION
 # ============================================================
 
 if __name__ == "__main__":
