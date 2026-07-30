@@ -5,6 +5,7 @@
 # -> Google Sheets -> Unique Telegram Invite -> Bot sends invite directly
 
 import os
+import time
 import uuid
 import hmac
 import hashlib
@@ -12,6 +13,12 @@ import json
 import asyncio
 import threading
 import requests
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
 
 from flask import Flask, request, jsonify, render_template_string, redirect
 from telegram import (
