@@ -907,8 +907,9 @@ def send_registration_access(
     telegram_id,
     full_name,
     amount,
-    invite_link,
+    course,
 ):
+
     try:
         asyncio.run(
             send_access_message(
