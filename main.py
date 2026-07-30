@@ -851,7 +851,58 @@ def create_unique_invite_link(payment_token):
 # ============================================================
 # SEND TELEGRAM ACCESS
 # ============================================================
+async def create_course_invites(course):
+    global telegram_bot_app
 
+    links = []
+
+    # Main Group
+    main = await telegram_bot_app.bot.create_chat_invite_link(
+        chat_id=MAIN_GROUP_ID,
+        member_limit=1,
+    )
+    links.append(("🎓 Main Class", main.invite_link))
+
+    # Announcement
+    ann = await telegram_bot_app.bot.create_chat_invite_link(
+        chat_id=ANNOUNCEMENT_CHANNEL_ID,
+        member_limit=1,
+    )
+    links.append(("📢 Announcement Channel", ann.invite_link))
+
+    # Payment Support
+    support = await telegram_bot_app.bot.create_chat_invite_link(
+        chat_id=PAYMENT_REGISTRATION_ID,
+        member_limit=1,
+    )
+    links.append(("🆘 Payment Support", support.invite_link))
+
+    # Faculty
+    faculty = FACULTY_ACCESS.get(course)
+
+    if faculty:
+        faculty_link = await telegram_bot_app.bot.create_chat_invite_link(
+            chat_id=faculty["faculty"],
+            member_limit=1,
+        )
+
+        links.append(("🏫 Faculty Group", faculty_link.invite_link))
+
+        for subject_name, subject_id in faculty["subjects"].items():
+
+            subject_link = await telegram_bot_app.bot.create_chat_invite_link(
+                chat_id=subject_id,
+                member_limit=1,
+            )
+
+            links.append(
+                (
+                    f"📚 {subject_name}",
+                    subject_link.invite_link,
+                )
+            )
+
+    return links
 def send_registration_access(
     telegram_id,
     full_name,
