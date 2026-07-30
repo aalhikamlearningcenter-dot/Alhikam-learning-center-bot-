@@ -874,13 +874,67 @@ def send_registration_access(
             e,
         )
 
-
 async def send_access_message(
     telegram_id,
     full_name,
     amount,
     invite_link,
 ):
+    global telegram_bot_app
+
+    if telegram_bot_app is None:
+        return
+
+    try:
+        payment_group = await telegram_bot_app.bot.create_chat_invite_link(
+            chat_id=PAYMENT_REGISTRATION_ID,
+            member_limit=1,
+            name=f"Support-{telegram_id}",
+        )
+
+        announcement = await telegram_bot_app.bot.create_chat_invite_link(
+            chat_id=ANNOUNCEMENT_CHANNEL_ID,
+            member_limit=1,
+            name=f"Announcement-{telegram_id}",
+        )
+
+        await telegram_bot_app.bot.send_message(
+            chat_id=telegram_id,
+            parse_mode="Markdown",
+            text=(
+                f"🎉 *Welcome {full_name}!*\n\n"
+                "✅ Payment Confirmed\n"
+                "✅ Registration Completed\n\n"
+                f"💰 Amount Paid: ₦{amount:,}\n\n"
+                "Click the buttons below one by one."
+            ),
+            reply_markup=InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton(
+                        "🎓 Main Class",
+                        url=invite_link,
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "📢 Announcement Channel",
+                        url=announcement.invite_link,
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "🆘 Payment Support",
+                        url=payment_group.invite_link,
+                    )
+                ],
+            ]),
+        )
+
+        print("Telegram access sent successfully.")
+
+    except Exception as e:
+        print("Telegram Error:", e)
+
     global telegram_bot_app
 
     if telegram_bot_app is None:
