@@ -306,7 +306,7 @@ def create_payment():
         )
 
         result = response.json()
-        print("Flutterwave Checkout Response:", result)
+        logging.info(f"Flutterwave Checkout Response: {result}")
 
         if response.status_code == 200 and result.get("status") == "success":
             payment_link = result.get("data", {}).get("link")
