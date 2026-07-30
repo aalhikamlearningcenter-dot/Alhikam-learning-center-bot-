@@ -747,17 +747,17 @@ def registration_form(payment_token):
         telegram_auth["telegram_id"]
     )
 
-    threading.Thread(
-        target=send_registration_access,
-        args=(
-            telegram_id,
-            full_name,
-            payment["amount"],
-            invite_link,
-        ),
-        daemon=True,
-    ).start()
-
+    
+threading.Thread(
+    target=send_registration_access,
+    args=(
+        telegram_id,
+        full_name,
+        payment["amount"],
+        course,
+    ),
+    daemon=True,
+).start()
     return f"""
     <html>
     <head>
