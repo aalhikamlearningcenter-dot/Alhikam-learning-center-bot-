@@ -1025,8 +1025,56 @@ async def send_access_message(
     except TelegramError as e:
         print(
             "Telegram Error:",
-            e,
+  async def send_access_message(
+    telegram_id,
+    full_name,
+    amount,
+    course,
+):
+    global telegram_bot_app
+
+    if telegram_bot_app is None:
+        return
+
+    try:
+        links = await create_course_invites(course)
+
+        keyboard = []
+
+        for title, url in links:
+            keyboard.append([
+                InlineKeyboardButton(
+                    title,
+                    url=url,
+                )
+            ])
+
+        await telegram_bot_app.bot.send_message(
+            chat_id=telegram_id,
+            parse_mode="Markdown",
+            text=(
+                f"🎉 *Welcome {full_name}!*\n\n"
+                "✅ Payment Confirmed\n"
+                "✅ Registration Completed\n\n"
+                f"💰 Amount Paid: ₦{amount:,}\n\n"
+                f"📚 Course: {course}\n\n"
+                "Below are your private class invite links.\n"
+                "Click each button and join all the groups and channel."
+            ),
+            reply_markup=InlineKeyboardMarkup(keyboard),
         )
+
+        print(
+            f"All invite links sent to {telegram_id}"
+        )
+
+    except Exception as e:
+        print(
+            "Telegram send error:",
+            e,
+        )          
+
+      
 
 
 # ============================================================
