@@ -50,11 +50,94 @@ RAILWAY_URL = os.getenv(
 
 PORT = int(os.getenv("PORT", "8080"))
 
+# ============================================================
+# TELEGRAM GROUPS & CHANNELS
+# ============================================================
+
+# Main gateway group (student must join this first)
 MAIN_GROUP_ID = -1004384506380
+
+# Announcement channel
+ANNOUNCEMENT_CHANNEL_ID = -1004315707986
+
+# Faculty groups
+SCIENCE_FACULTY_ID = -1004479887604
+ARTS_FACULTY_ID = -1004314659728
+COMMERCIAL_FACULTY_ID = -1003967146846
+
+# Science subjects
+SCIENCE_SUBJECTS = {
+    "Physics": -1004467391688,
+    "Chemistry": -1003575115831,
+    "Biology": -1004412247385,
+    "Mathematics": -1004480230539,
+    "Agricultural Science": -1004398599335,
+    "Geography": -1003901130871,
+}
+
+# Arts subjects
+ARTS_SUBJECTS = {
+    "History": -1004494276405,
+    "Hausa": -1004436228793,
+    "CRS": -1004469127265,
+    "Islamic Studies": -1003823376901,
+    "Government": -1003735736424,
+    "Literature in English": -1004317587777,
+    "Use of English": -1003759215809,
+    "Fine Arts": -1003801904375,
+}
+
+# Commercial subjects
+COMMERCIAL_SUBJECTS = {
+    "Principles of Accounts": -1004459228986,
+    "Commerce": -1003930273330,
+    "Economics": -1003632758498,
+    "Use of English": -1003759215809,
+}
+
+# Payment & registration support
+PAYMENT_REGISTRATION_ID = -1003935952561
+
+# Public payment page
 PUBLIC_PAYMENT_PAGE = f"{RAILWAY_URL}/pay"
 
 # Telegram Login Widget bot username
 TELEGRAM_BOT_USERNAME = "Alhikamcenterbot"
+
+# ============================================================
+# FACULTY ACCESS MAPPING
+# ============================================================
+
+FACULTY_ACCESS = {
+    "JAMB Science": {
+        "faculty": SCIENCE_FACULTY_ID,
+        "subjects": SCIENCE_SUBJECTS,
+    },
+
+    "JAMB Arts": {
+        "faculty": ARTS_FACULTY_ID,
+        "subjects": ARTS_SUBJECTS,
+    },
+
+    "WAEC": {
+        "faculty": SCIENCE_FACULTY_ID,
+        "subjects": SCIENCE_SUBJECTS,
+    },
+
+    "NECO": {
+        "faculty": SCIENCE_FACULTY_ID,
+        "subjects": SCIENCE_SUBJECTS,
+    },
+
+    "CBT Training": {
+        "faculty": SCIENCE_FACULTY_ID,
+        "subjects": {
+            "Mathematics": -1004480230539,
+            "Use of English": -1003759215809,
+        },
+    },
+}
+
 
 
 # ============================================================
