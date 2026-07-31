@@ -317,7 +317,7 @@ def create_payment():
         return "Unable to create payment link. Please try again.", 500
 
     except Exception as e:
-        logging.error(f"Flutterwave API Error: {e}")
+        logging.exception("Flutterwave API Error")
         return "Payment system error. Please try again later.", 500
 
 
