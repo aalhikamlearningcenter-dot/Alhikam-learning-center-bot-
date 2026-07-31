@@ -732,9 +732,8 @@ def registration_form(payment_token):
             500,
         )
 
-    invite_link = create_unique_invite_link(
-        payment_token
-    )
+    # Create all required invite links
+invite_links = asyncio.run(create_course_invites(course))
 
     if not invite_link:
         return """
