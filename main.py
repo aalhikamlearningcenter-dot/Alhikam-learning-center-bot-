@@ -753,15 +753,15 @@ invite_links = asyncio.run(create_course_invites(course))
         telegram_auth["telegram_id"]
     )
     threading.Thread(
-        target=send_registration_access,
-        args=(
-            telegram_id,
-            full_name,
-            payment["amount"],
-            course,
-        ),
-        daemon=True,
-    ).start()
+    target=send_registration_access,
+    args=(
+        telegram_id,
+        full_name,
+        payment["amount"],
+        course,
+    ),
+    daemon=True,
+).start()
 
     return f"""
     <html>
