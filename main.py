@@ -1127,10 +1127,8 @@ def verify_flutterwave_transaction(transaction_id):
         return None
 
     except Exception as e:
-        print(
-            "Verification Error:",
-            e,
-        )
+        logging.error(f"Verification Error: {e}")
+        
         return None
 
 
@@ -1267,10 +1265,7 @@ def flutterwave_webhook():
         payment_token
     )
 
-    print(
-        "PAYMENT SUCCESSFUL:",
-        payment,
-    )
+   logging.info(f"PAYMENT SUCCESSFUL: {payment}") 
 
     return jsonify({
         "status": "success",
