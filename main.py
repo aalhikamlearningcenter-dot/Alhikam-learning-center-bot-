@@ -747,7 +747,7 @@ invite_links = asyncio.run(create_course_invites(course))
 
     payment["registration_completed"] = True
     payment["registration"] = registration_data
-    payment["invite_link"] = invite_link
+    payment["invite_link"] = invite_links
 
     telegram_id = int(
         telegram_auth["telegram_id"]
