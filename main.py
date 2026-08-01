@@ -823,19 +823,7 @@ def register_student(payment_token):
         ).strip()
     )
 
-    telegram_username = (
-        request.form.get(
-            "telegram_username",
-            ""
-        ).strip()
-    )
-
-    telegram_id = (
-        request.form.get(
-            "telegram_id",
-            ""
-        ).strip()
-    )
+    
 
     if not full_name or not phone or not email or not course:
 
@@ -849,11 +837,7 @@ def register_student(payment_token):
 
     registration_data = {
 
-        "telegram_id":
-            telegram_id,
-
-        "telegram_username":
-            telegram_username,
+        
 
         "full_name":
             full_name,
