@@ -723,24 +723,7 @@ CBT Training
 
 <label>
 Telegram Username
-(optional)
-</label>
 
-<input
-type="text"
-name="telegram_username"
-placeholder="@username"
->
-
-<label>
-Telegram User ID
-(optional)
-</label>
-
-<input
-type="text"
-name="telegram_id"
-placeholder="Example: 123456789"
 >
 
 <button type="submit">
