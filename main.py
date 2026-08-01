@@ -37,7 +37,8 @@ from telegram.error import TelegramError
 # ============================================================
 # SETTINGS
 # ============================================================
-
+BOT_USERNAME = "Alhikamcenterbot"
+APP_URL = "https://precious-trust-production-956b.up.railway.app"
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 FLW_SECRET_KEY = os.getenv("FLW_SECRET_KEY")
 FLUTTERWAVE_SECRET_HASH = os.getenv("FLUTTERWAVE_SECRET_HASH")
