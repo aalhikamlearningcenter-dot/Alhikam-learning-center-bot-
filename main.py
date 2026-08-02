@@ -100,6 +100,13 @@ def register():
 # ============================================================
 # HEALTH CHECK
 # ============================================================
+@web_app.route("/health")
+def health():
+
+    return jsonify({
+        "status": "healthy",
+        "app": "ALHIKAM V2"
+    })
 
 @web_app.route("/payment-callback")
 def payment_callback():
