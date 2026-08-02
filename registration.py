@@ -69,6 +69,10 @@ cursor:pointer;
 <label>Email Address</label>
 <input type="email" name="email" required>
 
+<label>Telegram User ID</label>
+<input type="number" name="telegram_id" required>
+
+
 <label>Faculty</label>
 
 <select name="faculty" required>
