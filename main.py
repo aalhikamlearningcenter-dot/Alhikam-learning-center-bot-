@@ -10,6 +10,10 @@ from payment import PAYMENT_HTML
 import os
 import uuid
 import requests
+payment_bp = Blueprint(
+    "payment",
+    __name__
+)
 from flask import (
     Flask,
     request,
