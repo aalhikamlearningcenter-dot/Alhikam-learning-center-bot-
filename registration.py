@@ -143,10 +143,28 @@ def registration_page():
     except Exception as e:
         print("Database Error:", e)
 
-    try:
+        try:
         save_to_google_sheet(student_data)
     except Exception as e:
         print("Google Sheets Error:", e)
+
+    try:
+        asyncio.run(
+            send_welcome_message(
+                int(telegram_id),
+                full_name
+            )
+        )
+    except Exception as e:
+        print("Telegram Error:", e)
+
+    return f"""
+    <h2>Registration Successful</h2>
+
+    <p>Welcome {full_name}</p>
+
+    <p>Faculty: {faculty}</p>
+    """
 
     return f"""
     <h2>Registration Successful</h2>
