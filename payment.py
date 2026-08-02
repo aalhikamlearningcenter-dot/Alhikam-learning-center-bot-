@@ -1,15 +1,4 @@
 import os
-import uuid
-import requests
-from flask import render_template_string
-
-PAYMENT_HTML = """
-# ============================================================
-# FLUTTERWAVE CONFIGURATION
-# ============================================================
-
-FLW_PUBLIC_KEY = os.getenv("FLW_PUBLIC_KEY")
-FLW_SECRET_KEY = os.getenv("FLW_SECRET_KEY")
 
 PAYMENT_PLANS = {
     "1": {"name": "1 Month", "amount": 3600},
@@ -20,17 +9,22 @@ PAYMENT_PLANS = {
     "6": {"name": "6 Months", "amount": 20000},
 }
 
+FLW_PUBLIC_KEY = os.getenv("FLW_PUBLIC_KEY")
+FLW_SECRET_KEY = os.getenv("FLW_SECRET_KEY")
+
 pending_payments = {}
+
+PAYMENT_HTML = """
 <!DOCTYPE html>
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ALHIKAM Payment</title>
+<title>ALHIKAM Learning Center</title>
 
 <style>
 
 body{
-font-family:Arial;
+font-family:Arial,sans-serif;
 background:#f4f7f6;
 padding:20px;
 }
@@ -44,7 +38,12 @@ border-radius:15px;
 box-shadow:0 4px 12px rgba(0,0,0,.1);
 }
 
-select,button{
+h2{
+text-align:center;
+color:#087f5b;
+}
+
+select{
 width:100%;
 padding:15px;
 margin-top:15px;
@@ -52,11 +51,16 @@ border-radius:10px;
 }
 
 button{
+width:100%;
+padding:15px;
+margin-top:20px;
 background:#087f5b;
 color:white;
 border:none;
+border-radius:10px;
 font-size:18px;
 font-weight:bold;
+cursor:pointer;
 }
 
 </style>
@@ -69,17 +73,23 @@ font-weight:bold;
 
 <h2>🎓 ALHIKAM Learning Center</h2>
 
-<form method="POST">
+<form action="/create-payment" method="POST">
 
 <select name="plan" required>
 
-<option value="">Select Payment Plan</option>
+<option value="">Select Subscription</option>
 
-<option value="1">₦2,000 - Monthly</option>
+<option value="1">1 Month — ₦3,600</option>
 
-<option value="2">₦5,000 - Termly</option>
+<option value="2">2 Months — ₦6,800</option>
 
-<option value="3">₦10,000 - Annual</option>
+<option value="3">3 Months — ₦10,000</option>
+
+<option value="4">4 Months — ₦13,200</option>
+
+<option value="5">5 Months — ₦16,500</option>
+
+<option value="6">6 Months — ₦20,000</option>
 
 </select>
 
