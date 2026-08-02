@@ -1,6 +1,23 @@
 from flask import render_template_string
 
 PAYMENT_HTML = """
+# ============================================================
+# FLUTTERWAVE CONFIGURATION
+# ============================================================
+
+FLW_PUBLIC_KEY = os.getenv("FLW_PUBLIC_KEY")
+FLW_SECRET_KEY = os.getenv("FLW_SECRET_KEY")
+
+PAYMENT_PLANS = {
+    "1": {"name": "1 Month", "amount": 3600},
+    "2": {"name": "2 Months", "amount": 6800},
+    "3": {"name": "3 Months", "amount": 10000},
+    "4": {"name": "4 Months", "amount": 13200},
+    "5": {"name": "5 Months", "amount": 16500},
+    "6": {"name": "6 Months", "amount": 20000},
+}
+
+pending_payments = {}
 <!DOCTYPE html>
 <html>
 <head>
