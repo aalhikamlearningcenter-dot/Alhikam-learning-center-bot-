@@ -1,4 +1,6 @@
 from flask import request, render_template_string
+import asyncio
+from telegram_service import send_welcome_message
 from sheets import save_to_google_sheet
 from database import add_student
 
