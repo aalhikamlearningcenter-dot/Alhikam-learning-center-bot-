@@ -147,15 +147,7 @@ def registration_page():
     except Exception as e:
         print("Google Sheets Error:", e)
 
-    try:
-        asyncio.run(
-            send_welcome_message(
-                int(telegram_id),
-                full_name
-            )
-        )
-    except Exception as e:
-        print("Telegram Error:", e)
+   
 
     return f"""
     <h2>Registration Successful</h2>
