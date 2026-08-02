@@ -134,6 +134,20 @@ def health():
     return jsonify({
         "status": "healthy"
     })
+@web_app.route("/telegram-auth")
+def telegram_auth():
+    telegram_id = request.args.get("id")
+    first_name = request.args.get("first_name", "")
+    username = request.args.get("username", "")
+
+    if not telegram_id:
+        return "Telegram login failed.", 400
+
+    session["telegram_id"] = telegram_id
+    session["telegram_username"] = username
+    session["telegram_name"] = first_name
+
+    return redirect("/registration-success")
 
 
 # ============================================================
