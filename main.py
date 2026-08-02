@@ -87,6 +87,13 @@ def create_payment():
 
     return redirect(payment["payment_link"])
 
+# ============================================================
+# REGISTRATION
+# ============================================================
+
+@web_app.route("/register", methods=["GET", "POST"])
+def register():
+    return registration_page()
 
 # ============================================================
 # HEALTH CHECK
