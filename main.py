@@ -55,6 +55,9 @@ logger = logging.getLogger("ALHIKAM")
 # ============================================================
 
 @web_app.route("/")
+@web_app.route("/payment", methods=["GET"])
+def payment_page():
+    return render_template_string(PAYMENT_HTML)
 def home():
 
     return """
