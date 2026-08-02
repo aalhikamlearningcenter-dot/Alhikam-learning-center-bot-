@@ -6,7 +6,7 @@
 import os
 import threading
 import logging
-
+from payment import PAYMENT_HTML
 from flask import (
     Flask,
     request,
