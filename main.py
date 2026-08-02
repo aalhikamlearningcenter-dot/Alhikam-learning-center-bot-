@@ -1002,6 +1002,112 @@ return redirect(f"/telegram-login?payment_token={payment_token}")
 
     """
 
+# ============================================================
+# TELEGRAM LOGIN PAGE
+# ============================================================
+
+TELEGRAM_LOGIN_HTML = """
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>Connect Telegram</title>
+
+<style>
+
+body{
+
+font-family:Arial;
+
+background:#f4f7f6;
+
+padding:20px;
+
+}
+
+.container{
+
+max-width:500px;
+
+margin:40px auto;
+
+background:white;
+
+padding:25px;
+
+border-radius:15px;
+
+text-align:center;
+
+box-shadow:0 4px 18px rgba(0,0,0,.1);
+
+}
+
+h2{
+
+color:#087f5b;
+
+}
+
+button{
+
+width:100%;
+
+padding:15px;
+
+background:#0088cc;
+
+color:white;
+
+border:none;
+
+border-radius:10px;
+
+font-size:17px;
+
+font-weight:bold;
+
+cursor:pointer;
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="container">
+
+<h2>
+🔐 Connect Your Telegram Account
+</h2>
+
+<p>
+
+Your payment and registration were successful.
+
+Click the button below to continue with Telegram.
+
+</p>
+
+<script async
+src="https://telegram.org/js/telegram-widget.js?22"
+data-telegram-login="Alhikamcenterbot"
+data-size="large"
+data-userpic="false"
+data-request-access="write"
+data-auth-url="https://precious-trust-production-956b.up.railway.app/telegram-auth">
+</script>
+
+</div>
+
+</body>
+
+</html>
+"""
+
 
 # ============================================================
 # GOOGLE SHEETS
