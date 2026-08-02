@@ -114,6 +114,23 @@ def registration_page():
         "course": faculty
     }
 
+database_data = {
+    "payment_token": "",
+    "tx_ref": "",
+    "full_name": full_name,
+    "phone": phone,
+    "email": email,
+    "course": faculty,
+    "telegram_id": "",
+    "telegram_username": "",
+    "telegram_name": "",
+    "payment_plan": "",
+    "amount_paid": 0,
+    "payment_status": "Pending",
+    "registration_completed": 1,
+}
+
+add_student(database_data)
     save_to_google_sheet(student_data)
 
     return f"""
