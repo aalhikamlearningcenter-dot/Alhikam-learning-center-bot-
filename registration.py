@@ -1,5 +1,6 @@
 from flask import request, render_template_string
 from sheets import save_to_google_sheet
+from database import add_student
 
 REGISTRATION_HTML = """
 <!DOCTYPE html>
