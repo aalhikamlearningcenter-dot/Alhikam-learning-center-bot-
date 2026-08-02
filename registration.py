@@ -71,8 +71,7 @@ cursor:pointer;
 <label>Email Address</label>
 <input type="email" name="email" required>
 
-<label>Telegram User ID</label>
-<input type="number" name="telegram_id" required>
+
 
 
 <label>Faculty</label>
@@ -129,7 +128,7 @@ def registration_page():
         "phone": phone,
         "email": email,
         "course": faculty,
-        "telegram_id": telegram_id,
+        "telegram_id": "",
         "telegram_username": "",
         "telegram_name": "",
         "payment_plan": "",
