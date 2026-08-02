@@ -110,3 +110,51 @@ Continue To Payment
 
 </html>
 """
+def create_flutterwave_payment(plan_id, app_url):
+
+    if plan_id not in PAYMENT_PLANS:
+        return None
+
+    plan = PAYMENT_PLANS[plan_id]
+
+    tx_ref = f"ALHIKAM_{uuid.uuid4().hex}"
+
+    payload = {
+        "tx_ref": tx_ref,
+        "amount": plan["amount"],
+        "currency": "NGN",
+        "redirect_url": f"{app_url}/payment-callback",
+        "customer": {
+            "email": f"{tx_ref}@alhikam.com",
+            "name": "ALHIKAM Student",
+        },
+        "customizations": {
+            "title": "ALHIKAM Learning Center",
+            "description": plan["name"],
+        },
+    }
+
+    headers = {
+        "Authorization": f"Bearer {FLW_SECRET_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    response = requests.post(
+        "https://api.flutterwave.com/v3/payments",
+        json=payload,
+        headers=headers,
+        timeout=30,
+    )
+
+    if response.status_code != 200:
+        return None
+
+    data = response.json()
+
+    if data.get("status") != "success":
+        return None
+
+    return {
+        "tx_ref": tx_ref,
+        "payment_link": data["data"]["link"],
+    }
