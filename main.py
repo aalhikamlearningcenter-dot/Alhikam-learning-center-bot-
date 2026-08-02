@@ -13,6 +13,7 @@ from payment import (
 import os
 import uuid
 import requests
+from registration import registration_page
 from flask import (
     Flask,
     request,
