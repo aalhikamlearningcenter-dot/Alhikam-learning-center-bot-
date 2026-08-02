@@ -69,63 +69,7 @@ def home():
 @web_app.route("/payment", methods=["GET"])
 def payment_page():
     return render_template_string(PAYMENT_HTML)
-@payment_bp.route("/create-payment", methods=["POST"])
-def create_payment():
 
-    plan_id = request.form.get("plan")
-
-    if plan_id not in PAYMENT_PLANS:
-        return "Invalid payment plan", 400
-
-    plan = PAYMENT_PLANS[plan_id]
-
-    payment_token = uuid.uuid4().hex
-
-    tx_ref = f"ALHIKAM_{payment_token}"
-
-    pending_payments[payment_token] = {
-        "payment_token": payment_token,
-        "tx_ref": tx_ref,
-        "plan": plan,
-        "status": "pending",
-    }
-
-    payload = {
-        "tx_ref": tx_ref,
-        "amount": plan["amount"],
-        "currency": "NGN",
-        "redirect_url": os.getenv("APP_URL") + "/payment-callback",
-        "customer": {
-            "email": f"{payment_token}@alhikam.com",
-            "name": "ALHIKAM Student",
-        },
-        "customizations": {
-            "title": "ALHIKAM Learning Center",
-            "description": plan["name"],
-        },
-    }
-
-    headers = {
-        "Authorization": f"Bearer {FLW_SECRET_KEY}",
-        "Content-Type": "application/json",
-    }
-
-    response = requests.post(
-        "https://api.flutterwave.com/v3/payments",
-        json=payload,
-        headers=headers,
-        timeout=30,
-    )
-
-    result = response.json()
-
-    if (
-        response.status_code == 200
-        and result.get("status") == "success"
-    ):
-        return redirect(result["data"]["link"])
-
-    return "Unable to create payment link", 500
 # ============================================================
 # FLUTTERWAVE CONFIGURATION
 # ============================================================
