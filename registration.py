@@ -103,12 +103,13 @@ Complete Registration
 
 </html>
 """
+
 def registration_page():
 
     if request.method == "GET":
         return render_template_string(REGISTRATION_HTML)
 
-        full_name = request.form.get("full_name")
+    full_name = request.form.get("full_name")
     phone = request.form.get("phone")
     email = request.form.get("email")
     telegram_id = request.form.get("telegram_id")
@@ -120,7 +121,6 @@ def registration_page():
         "email": email,
         "course": faculty
     }
-
 
     database_data = {
         "payment_token": "",
@@ -143,7 +143,7 @@ def registration_page():
     except Exception as e:
         print("Database Error:", e)
 
-        try:
+    try:
         save_to_google_sheet(student_data)
     except Exception as e:
         print("Google Sheets Error:", e)
@@ -165,13 +165,4 @@ def registration_page():
 
     <p>Faculty: {faculty}</p>
     """
-
-    return f"""
-    <h2>Registration Successful</h2>
-
-    <p>Welcome {full_name}</p>
-
-    <p>Faculty: {faculty}</p>
-    """
-
     
