@@ -134,7 +134,10 @@ try:
     add_student(database_data)
 except Exception as e:
     print("Database Error:", e)
+    try:
     save_to_google_sheet(student_data)
+except Exception as e:
+    print("Google Sheets Error:", e)
 
     return f"""
     <h2>Registration Successful</h2>
