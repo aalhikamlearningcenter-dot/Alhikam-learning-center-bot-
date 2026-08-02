@@ -907,6 +907,9 @@ def register_student(payment_token):
         payment_token
 
     )
+payment["invite_link"] = invite_link
+
+return redirect(f"/telegram-login?payment_token={payment_token}")
 
     if not invite_link:
 
@@ -927,34 +930,7 @@ def register_student(payment_token):
 
         """
 
-    # Send Telegram message if Telegram ID was provided
-
-    if telegram_id.isdigit():
-
-        threading.Thread(
-
-            target=
-                send_registration_access,
-
-            args=(
-
-                int(telegram_id),
-
-                full_name,
-
-                payment["amount"],
-
-                invite_link,
-
-            ),
-
-            daemon=True,
-
-        ).start()
-
-    return f"""
-
-    <html>
+    
 
     <head>
 
