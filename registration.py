@@ -114,30 +114,38 @@ def registration_page():
         "course": faculty
     }
 
-database_data = {
-    "payment_token": "",
-    "tx_ref": "",
-    "full_name": full_name,
-    "phone": phone,
-    "email": email,
-    "course": faculty,
-    "telegram_id": "",
-    "telegram_username": "",
-    "telegram_name": "",
-    "payment_plan": "",
-    "amount_paid": 0,
-    "payment_status": "Pending",
-    "registration_completed": 1,
-}
+    student_data = {
+        "full_name": full_name,
+        "phone": phone,
+        "email": email,
+        "course": faculty
+    }
 
-try:
-    add_student(database_data)
-except Exception as e:
-    print("Database Error:", e)
+    database_data = {
+        "payment_token": "",
+        "tx_ref": "",
+        "full_name": full_name,
+        "phone": phone,
+        "email": email,
+        "course": faculty,
+        "telegram_id": "",
+        "telegram_username": "",
+        "telegram_name": "",
+        "payment_plan": "",
+        "amount_paid": 0,
+        "payment_status": "Pending",
+        "registration_completed": 1,
+    }
+
     try:
-    save_to_google_sheet(student_data)
-except Exception as e:
-    print("Google Sheets Error:", e)
+        add_student(database_data)
+    except Exception as e:
+        print("Database Error:", e)
+
+    try:
+        save_to_google_sheet(student_data)
+    except Exception as e:
+        print("Google Sheets Error:", e)
 
     return f"""
     <h2>Registration Successful</h2>
@@ -146,3 +154,5 @@ except Exception as e:
 
     <p>Faculty: {faculty}</p>
     """
+
+    
