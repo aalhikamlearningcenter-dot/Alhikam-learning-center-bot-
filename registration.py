@@ -130,7 +130,10 @@ database_data = {
     "registration_completed": 1,
 }
 
-add_student(database_data)
+try:
+    add_student(database_data)
+except Exception as e:
+    print("Database Error:", e)
     save_to_google_sheet(student_data)
 
     return f"""
