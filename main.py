@@ -15,6 +15,7 @@ import os
 import uuid
 import requests
 from registration import registration_page
+from telegram_service import send_message
 from flask import (
     Flask,
     request,
