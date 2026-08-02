@@ -11,3 +11,19 @@ async def send_message(chat_id, text):
         chat_id=chat_id,
         text=text
     )
+
+async def send_welcome_message(chat_id, full_name):
+
+    text = f"""
+🎉 Welcome to ALHIKAM Learning Center
+
+Hello {full_name},
+
+✅ Your registration has been received successfully.
+
+Please wait while we verify your payment and assign you to your faculty and subject channels.
+
+Thank you for choosing ALHIKAM.
+"""
+
+    await send_message(chat_id, text)
