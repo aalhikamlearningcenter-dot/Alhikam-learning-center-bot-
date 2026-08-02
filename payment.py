@@ -164,3 +164,25 @@ def create_flutterwave_payment(plan_id, app_url):
         "tx_ref": tx_ref,
         "payment_link": data["data"]["link"],
     }
+
+def verify_flutterwave_payment(transaction_id):
+
+    headers = {
+        "Authorization": f"Bearer {FLW_SECRET_KEY}",
+    }
+
+    response = requests.get(
+        f"https://api.flutterwave.com/v3/transactions/{transaction_id}/verify",
+        headers=headers,
+        timeout=30,
+    )
+
+    if response.status_code != 200:
+        return None
+
+    result = response.json()
+
+    if result.get("status") != "success":
+        return None
+
+    return result["data"]
