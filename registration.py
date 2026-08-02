@@ -105,14 +105,15 @@ def registration_page():
     phone = request.form.get("phone")
     email = request.form.get("email")
     faculty = request.form.get("faculty")
-student_data = {
-    "full_name": full_name,
-    "phone": phone,
-    "email": email,
-    "course": faculty
-}
 
-save_to_google_sheet(student_data)
+    student_data = {
+        "full_name": full_name,
+        "phone": phone,
+        "email": email,
+        "course": faculty
+    }
+
+    save_to_google_sheet(student_data)
 
     return f"""
     <h2>Registration Successful</h2>
