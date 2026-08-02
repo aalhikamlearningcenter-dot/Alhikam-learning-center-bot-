@@ -117,6 +117,7 @@ telegram_bot_app = None
 # ============================================================
 
 web_app = Flask(__name__)
+initialize_database()
 from flask import session, redirect, request
 
 
