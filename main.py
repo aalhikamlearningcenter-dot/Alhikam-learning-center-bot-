@@ -1,4 +1,4 @@
-from config import *
+
 import os
 import uuid
 import hmac
@@ -9,7 +9,7 @@ import hashlib
 import hmac
 from urllib.parse import urlencode
 from database import initialize_database
-
+from config import *
 from flask import (
     Flask,
     request,
