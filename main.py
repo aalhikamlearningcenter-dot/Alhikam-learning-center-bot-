@@ -60,8 +60,7 @@ def payment_page():
     return render_template_string(PAYMENT_HTML)
 def home():
 
-    return """
-    <h2>🎓 ALHIKAM Learning Center</h2>
+    return redirect("/payment")
 
     <p>
     ALHIKAM V2 is running successfully.
