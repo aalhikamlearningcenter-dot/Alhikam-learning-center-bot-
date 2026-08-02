@@ -101,13 +101,23 @@ def register():
 # HEALTH CHECK
 # ============================================================
 
-@web_app.route("/health")
-def health():
+@web_app.route("/payment-callback")
+def payment_callback():
 
-    return jsonify({
-        "status": "healthy",
-        "app": "ALHIKAM V2"
-    })
+    transaction_id = request.args.get("transaction_id")
+
+    if not transaction_id:
+        return "Missing transaction_id", 400
+
+    payment = verify_flutterwave_payment(transaction_id)
+
+    if payment is None:
+        return "Payment verification failed.", 400
+
+    if payment.get("status") != "successful":
+        return "Payment not successful.", 400
+
+    return redirect("/register")
 
 # ============================================================
 # START SERVER
