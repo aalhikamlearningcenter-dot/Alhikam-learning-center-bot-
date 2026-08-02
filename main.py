@@ -55,17 +55,17 @@ logger = logging.getLogger("ALHIKAM")
 # ============================================================
 
 @web_app.route("/")
+def home():
+    return redirect("/payment")
+
+
+# ============================================================
+# PAYMENT PAGE
+# ============================================================
+
 @web_app.route("/payment", methods=["GET"])
 def payment_page():
     return render_template_string(PAYMENT_HTML)
-def home():
-
-    return redirect("/payment")
-
-    <p>
-    ALHIKAM V2 is running successfully.
-    </p>
-    """
 
 # ============================================================
 # HEALTH CHECK
