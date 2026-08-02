@@ -1,3 +1,6 @@
+import os
+import uuid
+import requests
 from flask import render_template_string
 
 PAYMENT_HTML = """
