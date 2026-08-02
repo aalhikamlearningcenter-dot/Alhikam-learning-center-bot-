@@ -69,9 +69,23 @@ def home():
 # PAYMENT PAGE
 # ============================================================
 
-@web_app.route("/payment", methods=["GET"])
+@web_app.route("/payment", methods=["GET", "POST"])
 def payment_page():
-    return render_template_string(PAYMENT_HTML)
+
+    if request.method == "GET":
+        return render_template_string(PAYMENT_HTML)
+
+    plan_id = request.form.get("plan")
+
+    payment = create_flutterwave_payment(
+        plan_id,
+        os.getenv("RAILWAY_URL")
+    )
+
+    if payment is None:
+        return "Unable to create payment.", 500
+
+    return redirect(payment["payment_link"])
 
 
 # ============================================================
