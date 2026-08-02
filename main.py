@@ -7,6 +7,7 @@ import requests
 import hashlib
 import hmac
 from urllib.parse import urlencode
+from database import initialize_database
 
 from flask import (
     Flask,
