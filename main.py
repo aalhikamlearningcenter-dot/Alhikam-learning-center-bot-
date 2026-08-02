@@ -9,6 +9,7 @@ import logging
 from payment import (
     PAYMENT_HTML,
     create_flutterwave_payment,
+    verify_flutterwave_payment,
 )
 import os
 import uuid
