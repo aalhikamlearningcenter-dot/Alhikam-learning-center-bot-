@@ -127,7 +127,7 @@ def registration_page():
         "phone": phone,
         "email": email,
         "course": faculty,
-        "telegram_id": "",
+        "telegram_id": telegram_id,
         "telegram_username": "",
         "telegram_name": "",
         "payment_plan": "",
