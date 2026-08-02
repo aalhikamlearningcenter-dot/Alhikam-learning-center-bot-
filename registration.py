@@ -107,9 +107,10 @@ def registration_page():
         return render_template_string(REGISTRATION_HTML)
 
     full_name = request.form.get("full_name")
-    phone = request.form.get("phone")
-    email = request.form.get("email")
-    faculty = request.form.get("faculty")
+phone = request.form.get("phone")
+email = request.form.get("email")
+telegram_id = request.form.get("telegram_id")
+faculty = request.form.get("faculty")
 
     student_data = {
         "full_name": full_name,
