@@ -156,23 +156,20 @@ def registration_page():
         print("Google Sheets Error:", e)
 
 
-try:
-    asyncio.run(
-        send_student_links(
-            telegram_id,
-            faculty
+    try:
+        asyncio.run(
+            send_student_links(
+                telegram_id,
+                faculty
+            )
         )
-    )
-except Exception as e:
-    print("Telegram Send Error:", e)
+    except Exception as e:
+        print("Telegram Send Error:", e)
 
-    
+    return """
+    <h2>✅ Registration Successful</h2>
 
-        
-return """
-<h2>✅ Registration Successful</h2>
+    <p>Your registration has been completed.</p>
 
-<p>Your registration has been completed.</p>
-
-<p>Please return to Telegram to receive your invitation links.</p>
-"""
+    <p>Please return to Telegram to receive your invitation links.</p>
+    """
