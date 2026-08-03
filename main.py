@@ -135,6 +135,8 @@ def payment_callback():
 # ============================================================
 # START SERVER
 # ============================================================
+def start_telegram_bot():
+    subprocess.Popen(["python", "bot.py"])
 
 if __name__ == "__main__":
 
