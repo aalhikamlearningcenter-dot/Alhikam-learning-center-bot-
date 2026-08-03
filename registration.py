@@ -162,20 +162,14 @@ def registration_page():
     
 
         return f"""
-<!DOCTYPE html>
-<html>
-
-<head>
-<title>Registration Successful</title>
-</head>
-
-<body style="font-family:Arial;text-align:center;padding:40px;">
-
 <h2>✅ Registration Successful</h2>
 
-<p>Welcome <b>{full_name}</b></p>
+<p>Thank you {full_name}.</p>
 
-<p>Faculty: <b>{faculty}</b></p>
+<p>Your registration has been received.</p>
+
+<p>Please return to Telegram.</p>
+"""
 
 <br>
 
