@@ -110,23 +110,25 @@ Complete Registration
 
 def registration_page():
 
-  if request.method == "GET":
+    if request.method == "GET":
 
-    telegram_id = request.args.get("telegram_id", "")
-    telegram_name = request.args.get("telegram_name", "")
-    telegram_username = request.args.get("telegram_username", "")
+        telegram_id = request.args.get("telegram_id", "")
+        telegram_name = request.args.get("telegram_name", "")
+        telegram_username = request.args.get("telegram_username", "")
 
-    return render_template_string(
-        REGISTRATION_HTML,
-        telegram_id=telegram_id,
-        telegram_name=telegram_name,
-        telegram_username=telegram_username,
-    )
+        return render_template_string(
+            REGISTRATION_HTML,
+            telegram_id=telegram_id,
+            telegram_name=telegram_name,
+            telegram_username=telegram_username,
+        )
 
     full_name = request.form.get("full_name")
     phone = request.form.get("phone")
     email = request.form.get("email")
     telegram_id = request.form.get("telegram_id")
+    telegram_name = request.form.get("telegram_name")
+    telegram_username = request.form.get("telegram_username")
     faculty = request.form.get("faculty")
 
     student_data = {
@@ -137,22 +139,21 @@ def registration_page():
     }
 
     database_data = {
-        
-database_data = {
-    "payment_token": "",
-    "tx_ref": "",
-    "full_name": full_name,
-    "phone": phone,
-    "email": email,
-    "course": faculty,
-    "telegram_id": telegram_id,
-    "telegram_username": request.form.get("telegram_username"),
-    "telegram_name": request.form.get("telegram_name"),
-    "payment_plan": "",
-    "amount_paid": 0,
-    "payment_status": "Pending",
-    "registration_completed": 1,
-}
+        "payment_token": "",
+        "tx_ref": "",
+        "full_name": full_name,
+        "phone": phone,
+        "email": email,
+        "course": faculty,
+        "telegram_id": telegram_id,
+        "telegram_username": telegram_username,
+        "telegram_name": telegram_name,
+        "payment_plan": "",
+        "amount_paid": 0,
+        "payment_status": "Pending",
+        "registration_completed": 1,
+    }
+
     try:
         add_student(database_data)
     except Exception as e:
@@ -162,8 +163,6 @@ database_data = {
         save_to_google_sheet(student_data)
     except Exception as e:
         print("Google Sheets Error:", e)
-
-   
 
     return f"""
     <h2>Registration Successful</h2>
