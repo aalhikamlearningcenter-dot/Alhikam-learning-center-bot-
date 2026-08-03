@@ -43,13 +43,7 @@ async def create_unique_invite_link():
         member_limit=1,
     )
 
-    return invite.invite_link   expire_time = datetime.utcnow() + timedelta(minutes=10)
-
-    invite = await bot.create_chat_invite_link(
-        chat_id=MAIN_GROUP_ID,
-        expire_date=expire_time,
-        member_limit=1
-    )
+    
 
     return invite.invite_link
 
