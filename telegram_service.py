@@ -11,8 +11,12 @@ async def send_message(chat_id, text):
         chat_id=chat_id,
         text=text
     )
-from config import MAIN_GROUP_ID
-
+from config import (
+    MAIN_GROUP_ID,
+    SCIENCE_FACULTY_ID,
+    ARTS_FACULTY_ID,
+    COMMERCIAL_FACULTY_ID,
+)
 async def create_unique_invite_link():
 
     expire_time = datetime.utcnow() + timedelta(minutes=10)
