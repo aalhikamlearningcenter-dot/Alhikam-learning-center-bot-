@@ -140,11 +140,13 @@ def start_telegram_bot():
 
 if __name__ == "__main__":
 
+    threading.Thread(
+        target=start_telegram_bot,
+        daemon=True
+    ).start()
+
     PORT = int(
-        os.getenv(
-            "PORT",
-            8080
-        )
+        os.getenv("PORT", 8080)
     )
 
     web_app.run(
