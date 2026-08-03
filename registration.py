@@ -168,13 +168,11 @@ except Exception as e:
 
     
 
-        return f"""
+        
+return """
 <h2>✅ Registration Successful</h2>
 
-<p>Thank you {full_name}.</p>
+<p>Your registration has been completed.</p>
 
-<p>Your registration has been received.</p>
-
-<p>Please return to Telegram.</p>
+<p>Please return to Telegram to receive your invitation links.</p>
 """
-
