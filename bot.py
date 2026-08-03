@@ -1,0 +1,48 @@
+import os
+
+from telegram import Update
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    ContextTypes,
+)
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+APP_URL = os.getenv("RAILWAY_URL")
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    user = update.effective_user
+
+    register_link = f"{APP_URL}/register?telegram_id={user.id}"
+
+    text = f"""
+🎓 Welcome to ALHIKAM Learning Center
+
+Hello {user.first_name}.
+
+✅ Your Telegram account has been identified successfully.
+
+Click the button below to continue your registration.
+
+{register_link}
+"""
+
+    await update.message.reply_text(text)
+
+
+application = (
+    Application.builder()
+    .token(BOT_TOKEN)
+    .build()
+)
+
+application.add_handler(
+    CommandHandler("start", start)
+)
+
+
+if __name__ == "__main__":
+    application.run_polling()
