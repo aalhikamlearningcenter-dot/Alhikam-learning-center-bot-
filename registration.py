@@ -156,6 +156,16 @@ def registration_page():
         print("Google Sheets Error:", e)
 
 
+try:
+    asyncio.run(
+        send_student_links(
+            telegram_id,
+            faculty
+        )
+    )
+except Exception as e:
+    print("Telegram Send Error:", e)
+
     
 
         return f"""
