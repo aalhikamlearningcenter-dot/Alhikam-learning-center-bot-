@@ -17,6 +17,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = update.effective_user
 
+student = get_student_by_telegram_id(user.id)
+
+if student and student["registration_completed"] == 1:
+
+    await send_student_links(
+        user.id,
+        student["course"]
+    )
+
+    return
+
     register_link = (
         f"{APP_URL}/register"
         f"?telegram_id={user.id}"
