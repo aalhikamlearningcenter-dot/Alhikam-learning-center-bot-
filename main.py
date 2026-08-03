@@ -128,7 +128,7 @@ def payment_callback():
     if payment.get("status") != "successful":
         return "Payment not successful.", 400
 
-    return redirect("/register")
+    return redirect(f"https://t.me/{BOT_USERNAME}?start=login")
 
 # ============================================================
 # START SERVER
