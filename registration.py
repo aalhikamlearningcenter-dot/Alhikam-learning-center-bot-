@@ -137,21 +137,22 @@ def registration_page():
     }
 
     database_data = {
-        "payment_token": "",
-        "tx_ref": "",
-        "full_name": full_name,
-        "phone": phone,
-        "email": email,
-        "course": faculty,
-        "telegram_id": "",
-        "telegram_username": "",
-        "telegram_name": "",
-        "payment_plan": "",
-        "amount_paid": 0,
-        "payment_status": "Pending",
-        "registration_completed": 1,
-    }
-
+        
+database_data = {
+    "payment_token": "",
+    "tx_ref": "",
+    "full_name": full_name,
+    "phone": phone,
+    "email": email,
+    "course": faculty,
+    "telegram_id": telegram_id,
+    "telegram_username": request.form.get("telegram_username"),
+    "telegram_name": request.form.get("telegram_name"),
+    "payment_plan": "",
+    "amount_paid": 0,
+    "payment_status": "Pending",
+    "registration_completed": 1,
+}
     try:
         add_student(database_data)
     except Exception as e:
