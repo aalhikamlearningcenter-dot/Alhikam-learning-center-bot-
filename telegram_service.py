@@ -11,6 +11,8 @@ async def send_message(chat_id, text):
         chat_id=chat_id,
         text=text
     )
+async def create_unique_invite_link(chat_id):
+    ...
 
 async def send_welcome_message(chat_id, full_name):
 
