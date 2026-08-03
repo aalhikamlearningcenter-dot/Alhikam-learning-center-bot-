@@ -91,9 +91,7 @@ def create_payment():
     if payment is None:
         return "Unable to create payment.", 500
 
-    session["tx_ref"] = payment["tx_ref"]
-
-return redirect(payment["payment_link"])
+    return redirect(payment["payment_link"])
 
 # ============================================================
 # REGISTRATION
