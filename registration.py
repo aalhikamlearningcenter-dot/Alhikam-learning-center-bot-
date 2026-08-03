@@ -106,7 +106,17 @@ Complete Registration
 def registration_page():
 
     if request.method == "GET":
-        return render_template_string(REGISTRATION_HTML)
+
+    telegram_id = request.args.get("telegram_id", "")
+    telegram_name = request.args.get("telegram_name", "")
+    telegram_username = request.args.get("telegram_username", "")
+
+    return render_template_string(
+        REGISTRATION_HTML,
+        telegram_id=telegram_id,
+        telegram_name=telegram_name,
+        telegram_username=telegram_username,
+    )
 
     full_name = request.form.get("full_name")
     phone = request.form.get("phone")
