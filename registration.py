@@ -173,3 +173,25 @@ def registration_page():
 
     <p>Please return to Telegram to receive your invitation links.</p>
     """
+
+return f"""
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="refresh" content="3;url=https://t.me/{BOT_USERNAME}">
+<title>Registration Successful</title>
+</head>
+
+<body style="font-family:Arial;text-align:center;padding:40px;">
+
+<h2>✅ Registration Successful</h2>
+
+<p>Thank you <b>{full_name}</b></p>
+
+<p>Your registration has been completed successfully.</p>
+
+<p>Redirecting you to Telegram...</p>
+
+</body>
+</html>
+"""
