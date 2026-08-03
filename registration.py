@@ -167,7 +167,7 @@ def registration_page():
     except Exception as e:
         print("Google Sheets Error:", e)
 
-     try:
+         try:
         invite_link = asyncio.run(
             create_unique_invite_link()
         )
