@@ -14,6 +14,8 @@ from payment import (
 import os
 import uuid
 import requests
+import threading
+import subprocess
 from registration import registration_page
 from telegram_service import (
     send_message,
