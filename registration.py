@@ -166,10 +166,39 @@ def registration_page():
     except Exception as e:
         print("Telegram Send Error:", e)
 
-    return """
-    <h2>✅ Registration Successful</h2>
+    return f"""
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="refresh" content="2;url=https://t.me/{BOT_USERNAME}">
+<title>Registration Successful</title>
+</head>
 
-    <p>Your registration has been completed.</p>
+<body style="font-family:Arial;text-align:center;padding:40px;">
 
-    <p>Please return to Telegram to receive your invitation links.</p>
-    """
+<h2>✅ Registration Successful</h2>
+
+<p>Thank you <b>{full_name}</b></p>
+
+<p>Your registration has been completed successfully.</p>
+
+<p>Opening Telegram automatically...</p>
+
+<p>If Telegram does not open automatically, click below:</p>
+
+<a href="https://t.me/{BOT_USERNAME}"
+style="
+display:inline-block;
+padding:14px 25px;
+background:#0088cc;
+color:white;
+text-decoration:none;
+border-radius:8px;
+font-size:18px;
+">
+Open Telegram
+</a>
+
+</body>
+</html>
+"""
