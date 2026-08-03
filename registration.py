@@ -175,11 +175,26 @@ except Exception as e:
     print("Invite Link Error:", e)
     invite_link = None
 
+    
+    if invite_link:
     return f"""
-    <h2>Registration Successful</h2>
+    <h2>✅ Registration Successful</h2>
 
     <p>Welcome {full_name}</p>
 
     <p>Faculty: {faculty}</p>
+
+    <p>
+        <a href="{invite_link}">
+            👉 Join ALHIKAM Main Group
+        </a>
+    </p>
     """
-    
+
+return f"""
+<h2>Registration Successful</h2>
+
+<p>Welcome {full_name}</p>
+
+<p>Faculty: {faculty}</p>
+"""
