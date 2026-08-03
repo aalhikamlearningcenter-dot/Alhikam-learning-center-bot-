@@ -16,7 +16,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = update.effective_user
 
-    register_link = f"{APP_URL}/register?telegram_id={user.id}"
+    register_link = (
+    f"{APP_URL}/register"
+    f"?telegram_id={user.id}"
+    f"&telegram_name={user.first_name}"
+    f"&telegram_username={user.username or ''}"
+)
 
     text = f"""
 🎓 Welcome to ALHIKAM Learning Center
