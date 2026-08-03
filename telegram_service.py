@@ -61,28 +61,6 @@ async def create_faculty_invite_link(faculty):
 
 async def send_welcome_message(chat_id, full_name):
 
-async def send_student_links(chat_id, faculty):
-
-    main_link = await create_unique_invite_link()
-
-    faculty_link = await create_faculty_invite_link(faculty)
-
-    text = f"""
-🎉 Registration Completed Successfully
-
-Welcome to ALHIKAM Learning Center.
-
-Please join your official groups below.
-
-👥 Main Group
-{main_link}
-
-🎓 Faculty Group
-{faculty_link}
-"""
-
-    await send_message(chat_id, text)
-
     text = f"""
 🎉 Welcome to ALHIKAM Learning Center
 
@@ -90,9 +68,29 @@ Hello {full_name},
 
 ✅ Your registration has been received successfully.
 
-Please wait while we verify your payment and assign you to your faculty and subject channels.
+Please wait while we verify your payment.
 
 Thank you for choosing ALHIKAM.
+"""
+
+    await send_message(chat_id, text)
+
+
+async def send_student_links(chat_id, faculty):
+
+    main_link = await create_unique_invite_link()
+    faculty_link = await create_faculty_invite_link(faculty)
+
+    text = f"""
+✅ Registration Completed Successfully
+
+Click the links below:
+
+🏠 Main Group
+{main_link}
+
+🎓 {faculty} Faculty
+{faculty_link}
 """
 
     await send_message(chat_id, text)
