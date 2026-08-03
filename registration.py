@@ -171,39 +171,3 @@ def registration_page():
 <p>Please return to Telegram.</p>
 """
 
-<br>
-
-<a href="{invite_link}"
-style="
-background:#087f5b;
-color:white;
-padding:15px 25px;
-text-decoration:none;
-border-radius:8px;
-font-size:18px;
-">
-
-👉 Join ALHIKAM Main Group
-
-</a>
-
-<br><br>
-
-<a href="{faculty_link}"
-style="
-background:#1565c0;
-color:white;
-padding:15px 25px;
-text-decoration:none;
-border-radius:8px;
-font-size:18px;
-">
-
-👉 Join Your Faculty
-
-</a>
-
-</body>
-
-</html>
-"""
