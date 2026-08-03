@@ -128,32 +128,45 @@ def add_student(data):
     conn.close()
 
 
-def get_student(payment_token):
+def update_student(payment_token, data):
 
     conn = get_connection()
-
     cursor = conn.cursor()
 
     cursor.execute(
-
-        "SELECT * FROM students WHERE payment_token=?",
-
-        (payment_token,)
-
+        """
+        UPDATE students
+        SET
+            full_name=?,
+            phone=?,
+            email=?,
+            course=?,
+            telegram_id=?,
+            telegram_username=?,
+            telegram_name=?,
+            registration_completed=?
+        WHERE payment_token=?
+        """,
+        (
+            data["full_name"],
+            data["phone"],
+            data["email"],
+            data["course"],
+            data.get("telegram_id"),
+            data.get("telegram_username"),
+            data.get("telegram_name"),
+            1,
+            payment_token,
+        ),
     )
 
-    student = cursor.fetchone()
-
+    conn.commit()
     conn.close()
 
-    return student
-
-def update_student(payment_token, data):
 
 def get_student_by_telegram_id(telegram_id):
 
     conn = get_connection()
-
     cursor = conn.cursor()
 
     cursor.execute(
