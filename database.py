@@ -150,6 +150,23 @@ def get_student(payment_token):
 
 def update_student(payment_token, data):
 
+def get_student_by_telegram_id(telegram_id):
+
+    conn = get_connection()
+
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT * FROM students WHERE telegram_id=? ORDER BY id DESC LIMIT 1",
+        (str(telegram_id),)
+    )
+
+    student = cursor.fetchone()
+
+    conn.close()
+
+    return student
+
     conn = get_connection()
     cursor = conn.cursor()
 
