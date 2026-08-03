@@ -17,11 +17,35 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
 
     register_link = (
-    f"{APP_URL}/register"
-    f"?telegram_id={user.id}"
-    f"&telegram_name={user.first_name}"
-    f"&telegram_username={user.username or ''}"
-)
+        f"{APP_URL}/register"
+        f"?telegram_id={user.id}"
+        f"&telegram_name={user.first_name}"
+        f"&telegram_username={user.username or ''}"
+    )
+
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "📝 Continue Registration",
+                url=register_link
+            )
+        ]
+    ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        f"""🎓 Welcome to ALHIKAM Learning Center
+
+Hello {user.first_name},
+
+✅ Your payment has been verified.
+
+Tap the button below to continue your registration.
+""",
+        reply_markup=reply_markup
+    )
+
 
     text = f"""
 🎓 Welcome to ALHIKAM Learning Center
