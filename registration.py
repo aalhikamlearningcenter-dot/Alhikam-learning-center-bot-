@@ -1,9 +1,7 @@
 from flask import request, render_template_string
 import asyncio
-from telegram_service import (
-    send_welcome_message,
-    create_unique_invite_link,
-)
+
+from telegram_service import create_unique_invite_link
 from sheets import save_to_google_sheet
 from database import add_student
 
@@ -11,8 +9,10 @@ REGISTRATION_HTML = """
 <!DOCTYPE html>
 <html>
 <head>
+
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Student Registration</title>
+
+<title>ALHIKAM Registration</title>
 
 <style>
 
@@ -75,31 +75,22 @@ cursor:pointer;
 <input type="email" name="email" required>
 
 <input type="hidden" name="telegram_id" value="{{ telegram_id }}">
-
 <input type="hidden" name="telegram_name" value="{{ telegram_name }}">
-
 <input type="hidden" name="telegram_username" value="{{ telegram_username }}">
-
-
 
 <label>Faculty</label>
 
 <select name="faculty" required>
 
 <option value="">Select Faculty</option>
-
 <option value="Science">Science</option>
-
 <option value="Arts">Arts</option>
-
 <option value="Commercial">Commercial</option>
 
 </select>
 
 <button type="submit">
-
 Complete Registration
-
 </button>
 
 </form>
@@ -107,38 +98,35 @@ Complete Registration
 </div>
 
 </body>
-
 </html>
 """
+
 
 def registration_page():
 
     if request.method == "GET":
 
-        telegram_id = request.args.get("telegram_id", "")
-        telegram_name = request.args.get("telegram_name", "")
-        telegram_username = request.args.get("telegram_username", "")
-
         return render_template_string(
             REGISTRATION_HTML,
-            telegram_id=telegram_id,
-            telegram_name=telegram_name,
-            telegram_username=telegram_username,
+            telegram_id=request.args.get("telegram_id", ""),
+            telegram_name=request.args.get("telegram_name", ""),
+            telegram_username=request.args.get("telegram_username", ""),
         )
 
     full_name = request.form.get("full_name")
     phone = request.form.get("phone")
     email = request.form.get("email")
+    faculty = request.form.get("faculty")
+
     telegram_id = request.form.get("telegram_id")
     telegram_name = request.form.get("telegram_name")
     telegram_username = request.form.get("telegram_username")
-    faculty = request.form.get("faculty")
 
     student_data = {
         "full_name": full_name,
         "phone": phone,
         "email": email,
-        "course": faculty
+        "course": faculty,
     }
 
     database_data = {
@@ -167,31 +155,71 @@ def registration_page():
     except Exception as e:
         print("Google Sheets Error:", e)
 
-            try:
+    invite_link = None
+
+    try:
         invite_link = asyncio.run(create_unique_invite_link())
     except Exception as e:
         print("Invite Link Error:", e)
-        invite_link = None
 
     if invite_link:
+
         return f"""
-        <h2>✅ Registration Successful</h2>
+<!DOCTYPE html>
+<html>
 
-        <p>Welcome {full_name}</p>
+<head>
+<title>Registration Successful</title>
+</head>
 
-        <p>Faculty: {faculty}</p>
+<body style="font-family:Arial;text-align:center;padding:40px;">
 
-        <p>
-            <a href="{invite_link}">
-                👉 Join ALHIKAM Main Group
-            </a>
-        </p>
-        """
+<h2>✅ Registration Successful</h2>
+
+<p>Welcome <b>{full_name}</b></p>
+
+<p>Faculty: <b>{faculty}</b></p>
+
+<br>
+
+<a href="{invite_link}"
+style="
+background:#087f5b;
+color:white;
+padding:15px 25px;
+text-decoration:none;
+border-radius:8px;
+font-size:18px;
+">
+
+👉 Join ALHIKAM Main Group
+
+</a>
+
+</body>
+
+</html>
+"""
 
     return f"""
-    <h2>Registration Successful</h2>
+<!DOCTYPE html>
+<html>
 
-    <p>Welcome {full_name}</p>
+<head>
+<title>Registration Successful</title>
+</head>
 
-    <p>Faculty: {faculty}</p>
-    """
+<body style="font-family:Arial;text-align:center;padding:40px;">
+
+<h2>✅ Registration Successful</h2>
+
+<p>Welcome <b>{full_name}</b></p>
+
+<p>Faculty: <b>{faculty}</b></p>
+
+<p>Registration completed successfully.</p>
+
+</body>
+
+</html>
+"""
