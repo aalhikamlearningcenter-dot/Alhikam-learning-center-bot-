@@ -1,7 +1,10 @@
 from flask import request, render_template_string
 import asyncio
 
-from telegram_service import create_unique_invite_link
+from telegram_service import (
+    create_unique_invite_link,
+    create_faculty_invite_link,
+)
 from sheets import save_to_google_sheet
 from database import add_student
 
