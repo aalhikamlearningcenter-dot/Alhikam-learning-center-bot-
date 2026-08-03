@@ -1,5 +1,6 @@
 import os
-
+from database import get_student_by_telegram_id
+from telegram_service import send_student_links
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
