@@ -178,10 +178,7 @@ def registration_page():
         print("Faculty Link Error:", e)
  
 
-    faculty_link = None
-
-try:
-    
+        faculty_link = None
 
     if invite_link:
 
@@ -232,29 +229,6 @@ font-size:18px;
 👉 Join Your Faculty
 
 </a>
-
-</body>
-
-</html>
-"""
-
-    return f"""
-<!DOCTYPE html>
-<html>
-
-<head>
-<title>Registration Successful</title>
-</head>
-
-<body style="font-family:Arial;text-align:center;padding:40px;">
-
-<h2>✅ Registration Successful</h2>
-
-<p>Welcome <b>{full_name}</b></p>
-
-<p>Faculty: <b>{faculty}</b></p>
-
-<p>Registration completed successfully.</p>
 
 </body>
 
