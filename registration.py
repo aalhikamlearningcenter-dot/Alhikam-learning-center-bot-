@@ -71,6 +71,11 @@ cursor:pointer;
 <label>Email Address</label>
 <input type="email" name="email" required>
 
+<input type="hidden" name="telegram_id" value="{{ telegram_id }}">
+
+<input type="hidden" name="telegram_name" value="{{ telegram_name }}">
+
+<input type="hidden" name="telegram_username" value="{{ telegram_username }}">
 
 
 
