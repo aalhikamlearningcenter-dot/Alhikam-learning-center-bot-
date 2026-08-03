@@ -19,7 +19,31 @@ from config import (
 )
 async def create_unique_invite_link():
 
+ async def create_faculty_invite_link(faculty):
+
+    if faculty == "Science":
+        chat_id = SCIENCE_FACULTY_ID
+
+    elif faculty == "Arts":
+        chat_id = ARTS_FACULTY_ID
+
+    elif faculty == "Commercial":
+        chat_id = COMMERCIAL_FACULTY_ID
+
+    else:
+        return None
+
+    from datetime import datetime, timedelta
+
     expire_time = datetime.utcnow() + timedelta(minutes=10)
+
+    invite = await bot.create_chat_invite_link(
+        chat_id=chat_id,
+        expire_date=expire_time,
+        member_limit=1,
+    )
+
+    return invite.invite_link   expire_time = datetime.utcnow() + timedelta(minutes=10)
 
     invite = await bot.create_chat_invite_link(
         chat_id=MAIN_GROUP_ID,
