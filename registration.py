@@ -110,7 +110,7 @@ Complete Registration
 
 def registration_page():
 
-    if request.method == "GET":
+  if request.method == "GET":
 
     telegram_id = request.args.get("telegram_id", "")
     telegram_name = request.args.get("telegram_name", "")
