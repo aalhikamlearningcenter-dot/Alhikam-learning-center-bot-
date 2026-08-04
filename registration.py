@@ -1,12 +1,7 @@
 from flask import request, render_template_string
 import asyncio
 
-from telegram_service import (
-    send_student_links,
-    create_unique_invite_link,
-    create_faculty_invite_link,
-)
-
+from telegram_service import send_student_links
 from sheets import save_to_google_sheet
 from database import add_student
 from config import BOT_USERNAME
@@ -111,7 +106,6 @@ Complete Registration
 def registration_page():
 
     if request.method == "GET":
-
         return render_template_string(
             REGISTRATION_HTML,
             telegram_id=request.args.get("telegram_id", ""),
@@ -161,7 +155,6 @@ def registration_page():
     except Exception as e:
         print("Google Sheets Error:", e)
 
-
     try:
         asyncio.run(
             send_student_links(
@@ -172,19 +165,24 @@ def registration_page():
     except Exception as e:
         print("Telegram Send Error:", e)
 
-    from config import BOT_USERNAME
-
     return f"""
 <!DOCTYPE html>
 <html>
 <head>
+
 <meta http-equiv="refresh" content="2;url=https://t.me/{BOT_USERNAME}">
+
 <title>Registration Successful</title>
+
 </head>
 
 <body style="font-family:Arial;text-align:center;padding:40px;">
 
 <h2>✅ Registration Completed Successfully</h2>
+
+<p>Thank you <b>{full_name}</b>.</p>
+
+<p>Your invitation links have been sent to your Telegram account.</p>
 
 <p>Opening Telegram automatically...</p>
 
