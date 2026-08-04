@@ -10,9 +10,7 @@ REGISTRATION_HTML = """
 <!DOCTYPE html>
 <html>
 <head>
-
 <meta name="viewport" content="width=device-width, initial-scale=1">
-
 <title>ALHIKAM Registration</title>
 
 <style>
@@ -82,12 +80,10 @@ cursor:pointer;
 <label>Faculty</label>
 
 <select name="faculty" required>
-
 <option value="">Select Faculty</option>
 <option value="Science">Science</option>
 <option value="Arts">Arts</option>
 <option value="Commercial">Commercial</option>
-
 </select>
 
 <button type="submit">
@@ -106,6 +102,7 @@ Complete Registration
 def registration_page():
 
     if request.method == "GET":
+
         return render_template_string(
             REGISTRATION_HTML,
             telegram_id=request.args.get("telegram_id", ""),
@@ -141,7 +138,7 @@ def registration_page():
         "telegram_name": telegram_name,
         "payment_plan": "",
         "amount_paid": 0,
-        "payment_status": "Pending",
+        "payment_status": "Successful",
         "registration_completed": 1,
     }
 
@@ -163,14 +160,14 @@ def registration_page():
             )
         )
     except Exception as e:
-        print("Telegram Send Error:", e)
+        print("Telegram Error:", e)
 
     return f"""
 <!DOCTYPE html>
 <html>
 <head>
 
-<meta http-equiv="refresh" content="2;url=https://t.me/{BOT_USERNAME}">
+<meta http-equiv="refresh" content="3;url=https://t.me/{BOT_USERNAME}">
 
 <title>Registration Successful</title>
 
@@ -178,20 +175,17 @@ def registration_page():
 
 <body style="font-family:Arial;text-align:center;padding:40px;">
 
-<h2>✅ Registration Completed Successfully</h2>
+<h2>✅ Registration Successful</h2>
 
-<p>Thank you <b>{full_name}</b>.</p>
+<p>Thank you <b>{full_name}</b></p>
 
-<p>Your invitation links have been sent to your Telegram account.</p>
+<p>Your registration has been completed successfully.</p>
 
-<p>Opening Telegram automatically...</p>
+<p>Your Telegram invitation links have been sent.</p>
 
-<p>
-<a href="https://t.me/{BOT_USERNAME}">
-Open Telegram
-</a>
-</p>
+<p>Redirecting to Telegram...</p>
 
 </body>
+
 </html>
 """
