@@ -132,6 +132,16 @@ def health():
 # START SERVER
 # ============================================================
 
+import threading
+import subprocess
+
+
+def start_telegram_bot():
+    print("STARTING TELEGRAM BOT...")
+    subprocess.Popen(["python", "bot.py"])
+
+
+
 if __name__ == "__main__":
 
     PORT = int(os.getenv("PORT", 8080))
