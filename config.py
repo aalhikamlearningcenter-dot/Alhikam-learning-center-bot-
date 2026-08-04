@@ -1,28 +1,70 @@
-# ==========================================
-# APP
-# ==========================================
+# ==========================================================
+# ALHIKAM LEARNING CENTER V2
+# config.py
+# ==========================================================
+
+import os
+
+# ==========================================================
+# APP INFORMATION
+# ==========================================================
 
 APP_NAME = "ALHIKAM Learning Center"
 
-APP_URL = "https://precious-trust-production-956b.up.railway.app"
+APP_URL = os.getenv(
+    "APP_URL",
+    "https://precious-trust-production-956b.up.railway.app"
+)
 
 BOT_USERNAME = "Alhikamcenterbot"
 
+# ==========================================================
+# TELEGRAM BOT
+# ==========================================================
 
-# ==========================================
-# MAIN
-# ==========================================
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+# ==========================================================
+# FLUTTERWAVE
+# ==========================================================
+
+FLW_PUBLIC_KEY = os.getenv("FLW_PUBLIC_KEY")
+FLW_SECRET_KEY = os.getenv("FLW_SECRET_KEY")
+FLW_ENCRYPTION_KEY = os.getenv("FLW_ENCRYPTION_KEY")
+
+# ==========================================================
+# GOOGLE SHEETS
+# ==========================================================
+
+GOOGLE_SCRIPT_URL = os.getenv("GOOGLE_SCRIPT_URL")
+
+# ==========================================================
+# DATABASE
+# ==========================================================
+
+DATABASE_NAME = "alhikam.db"
+
+# ==========================================================
+# MAIN GROUP & ANNOUNCEMENT
+# ==========================================================
 
 MAIN_GROUP_ID = -1004384506380
 
 ANNOUNCEMENT_CHANNEL_ID = -1004315707986
 
-
-# ==========================================
-# SCIENCE
-# ==========================================
+# ==========================================================
+# FACULTIES
+# ==========================================================
 
 SCIENCE_FACULTY_ID = -1004479887604
+
+ARTS_FACULTY_ID = -1004314659728
+
+COMMERCIAL_FACULTY_ID = -1003967146846
+
+# ==========================================================
+# SCIENCE SUBJECTS
+# ==========================================================
 
 PHYSICS_ID = -1004467391688
 
@@ -36,29 +78,45 @@ AGRICULTURAL_SCIENCE_ID = -1004398599335
 
 GEOGRAPHY_ID = -1003901130871
 
+# ==========================================================
+# ARTS SUBJECTS
+# (Za mu saka IDs idan ka ƙirƙire su)
+# ==========================================================
 
-# ==========================================
-# ARTS
-# ==========================================
+LITERATURE_ID = None
+GOVERNMENT_ID = None
+ISLAMIC_STUDIES_ID = None
+HISTORY_ID = None
+CIVIC_EDUCATION_ID = None
 
-ARTS_FACULTY_ID = -1004314659728
+# ==========================================================
+# COMMERCIAL SUBJECTS
+# (Za mu saka IDs idan ka ƙirƙire su)
+# ==========================================================
 
-ENGLISH_ID = 0
-LITERATURE_ID = 0
-GOVERNMENT_ID = 0
-ISLAMIC_STUDIES_ID = 0
-HISTORY_ID = 0
-CIVIC_EDUCATION_ID = 0
+ACCOUNTING_ID = None
+COMMERCE_ID = None
+ECONOMICS_ID = None
+OFFICE_PRACTICE_ID = None
+MARKETING_ID = None
 
+# ==========================================================
+# INVITE LINK SETTINGS
+# ==========================================================
 
-# ==========================================
-# COMMERCIAL
-# ==========================================
+INVITE_LINK_EXPIRE_MINUTES = 10
 
-COMMERCIAL_FACULTY_ID = -1003967146846
+INVITE_LINK_MEMBER_LIMIT = 1
 
-ACCOUNTING_ID = 0
-ECONOMICS_ID = 0
-COMMERCE_ID = 0
-MARKETING_ID = 0
-BUSINESS_STUDIES_ID = 0
+# ==========================================================
+# SUBSCRIPTION PLANS
+# ==========================================================
+
+PAYMENT_PLANS = {
+    "1": ("1 Month", 3600),
+    "2": ("2 Months", 6800),
+    "3": ("3 Months", 10000),
+    "4": ("4 Months", 13200),
+    "5": ("5 Months", 16500),
+    "6": ("6 Months", 20000),
+}
