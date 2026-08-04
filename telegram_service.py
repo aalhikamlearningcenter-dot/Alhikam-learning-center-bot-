@@ -2,12 +2,7 @@ from telegram import Bot
 import os
 from datetime import datetime, timedelta
 
-from config import (
-    MAIN_GROUP_ID,
-    SCIENCE_FACULTY_ID,
-    ARTS_FACULTY_ID,
-    COMMERCIAL_FACULTY_ID,
-)
+from config import *
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
@@ -16,37 +11,13 @@ bot = Bot(token=BOT_TOKEN)
 
 async def send_message(chat_id, text):
     await bot.send_message(
-        chat_id=chat_id,
-        text=text
+        chat_id=int(chat_id),
+        text=text,
+        disable_web_page_preview=True,
     )
 
 
-async def create_unique_invite_link():
-
-    expire_time = datetime.utcnow() + timedelta(minutes=10)
-
-    invite = await bot.create_chat_invite_link(
-        chat_id=MAIN_GROUP_ID,
-        expire_date=expire_time,
-        member_limit=1,
-    )
-
-    return invite.invite_link
-
-
-async def create_faculty_invite_link(faculty):
-
-    if faculty == "Science":
-        chat_id = SCIENCE_FACULTY_ID
-
-    elif faculty == "Arts":
-        chat_id = ARTS_FACULTY_ID
-
-    elif faculty == "Commercial":
-        chat_id = COMMERCIAL_FACULTY_ID
-
-    else:
-        return None
+async def create_invite(chat_id):
 
     expire_time = datetime.utcnow() + timedelta(minutes=10)
 
@@ -66,11 +37,7 @@ async def send_welcome_message(chat_id, full_name):
 
 Hello {full_name},
 
-✅ Your registration has been received successfully.
-
-Please wait while we verify your payment.
-
-Thank you for choosing ALHIKAM.
+Your registration has been received successfully.
 """
 
     await send_message(chat_id, text)
@@ -78,18 +45,58 @@ Thank you for choosing ALHIKAM.
 
 async def send_student_links(chat_id, faculty):
 
-    main_link = await create_unique_invite_link()
-    faculty_link = await create_faculty_invite_link(faculty)
+    text = "✅ Registration Completed Successfully\n\n"
 
-    text = f"""
-✅ Registration Completed Successfully
+    # Main Group
+    main = await create_invite(MAIN_GROUP_ID)
+    text += f"🏠 Main Group\n{main}\n\n"
 
-Click the links below:
+    # Faculty
+    if faculty == "Science":
 
-🏠 Main Group
-{main_link}
+        faculty_link = await create_invite(SCIENCE_FACULTY_ID)
+        physics = await create_invite(PHYSICS_ID)
+        chemistry = await create_invite(CHEMISTRY_ID)
+        biology = await create_invite(BIOLOGY_ID)
+        mathematics = await create_invite(MATHEMATICS_ID)
+        agriculture = await create_invite(AGRICULTURAL_SCIENCE_ID)
+        geography = await create_invite(GEOGRAPHY_ID)
 
-🎓 {faculty} Faculty
+        text += f"""🎓 Science Faculty
+{faculty_link}
+
+📘 Physics
+{physics}
+
+🧪 Chemistry
+{chemistry}
+
+🧬 Biology
+{biology}
+
+📐 Mathematics
+{mathematics}
+
+🌾 Agricultural Science
+{agriculture}
+
+🌍 Geography
+{geography}
+"""
+
+    elif faculty == "Arts":
+
+        faculty_link = await create_invite(ARTS_FACULTY_ID)
+
+        text += f"""🎓 Arts Faculty
+{faculty_link}
+"""
+
+    elif faculty == "Commercial":
+
+        faculty_link = await create_invite(COMMERCIAL_FACULTY_ID)
+
+        text += f"""🎓 Commercial Faculty
 {faculty_link}
 """
 
