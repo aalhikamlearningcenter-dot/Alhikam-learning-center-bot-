@@ -4,12 +4,17 @@ DATABASE_NAME = "alhikam.db"
 
 
 def get_connection():
-    conn = sqlite3.connect(DATABASE_NAME)
+    conn = sqlite3.connect(
+        DATABASE_NAME,
+        timeout=30,
+        check_same_thread=False
+    )
     conn.row_factory = sqlite3.Row
     return conn
 
 
 def initialize_database():
+
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -56,37 +61,23 @@ def initialize_database():
 def add_student(data):
 
     conn = get_connection()
-
     cursor = conn.cursor()
 
     cursor.execute("""
-
     INSERT INTO students(
 
         payment_token,
-
         tx_ref,
-
         full_name,
-
         phone,
-
         email,
-
         course,
-
         telegram_id,
-
         telegram_username,
-
         telegram_name,
-
         payment_plan,
-
         amount_paid,
-
         payment_status,
-
         registration_completed
 
     )
@@ -96,35 +87,22 @@ def add_student(data):
     """, (
 
         data["payment_token"],
-
         data["tx_ref"],
-
         data["full_name"],
-
         data["phone"],
-
         data["email"],
-
         data["course"],
-
         data.get("telegram_id"),
-
         data.get("telegram_username"),
-
         data.get("telegram_name"),
-
         data["payment_plan"],
-
         data["amount_paid"],
-
         data["payment_status"],
-
         data["registration_completed"]
 
     ))
 
     conn.commit()
-
     conn.close()
 
 
@@ -164,13 +142,36 @@ def update_student(payment_token, data):
     conn.close()
 
 
+def get_student(payment_token):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT * FROM students WHERE payment_token=?",
+        (payment_token,)
+    )
+
+    student = cursor.fetchone()
+
+    conn.close()
+
+    return student
+
+
 def get_student_by_telegram_id(telegram_id):
 
     conn = get_connection()
     cursor = conn.cursor()
 
     cursor.execute(
-        "SELECT * FROM students WHERE telegram_id=? ORDER BY id DESC LIMIT 1",
+        """
+        SELECT *
+        FROM students
+        WHERE telegram_id=?
+        ORDER BY id DESC
+        LIMIT 1
+        """,
         (str(telegram_id),)
     )
 
@@ -178,4 +179,4 @@ def get_student_by_telegram_id(telegram_id):
 
     conn.close()
 
-    
+    return student
