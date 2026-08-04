@@ -7,6 +7,7 @@ from telegram_service import (
 )
 from sheets import save_to_google_sheet
 from database import add_student
+from config import BOT_USERNAME
 
 REGISTRATION_HTML = """
 <!DOCTYPE html>
