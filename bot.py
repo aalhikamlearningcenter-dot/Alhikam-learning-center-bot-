@@ -1,6 +1,5 @@
 import os
-from database import get_student_by_telegram_id
-from telegram_service import send_student_links
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -8,8 +7,10 @@ from telegram.ext import (
     ContextTypes,
 )
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+from database import get_student_by_telegram_id
+from telegram_service import send_student_links
 
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 APP_URL = os.getenv("RAILWAY_URL")
 
 
@@ -19,6 +20,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     student = get_student_by_telegram_id(user.id)
 
+    # Idan ya riga ya yi registration
     if student and student["registration_completed"] == 1:
 
         await send_student_links(
@@ -28,6 +30,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         return
 
+    # Idan bai yi registration ba
     register_link = (
         f"{APP_URL}/register"
         f"?telegram_id={user.id}"
@@ -47,7 +50,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(
-        f"""🎓 Welcome to ALHIKAM Learning Center
+        f"""
+🎓 Welcome to ALHIKAM Learning Center
 
 Hello {user.first_name},
 
@@ -55,23 +59,8 @@ Hello {user.first_name},
 
 Tap the button below to continue your registration.
 """,
-        reply_markup=reply_markup
+        reply_markup=reply_markup,
     )
-
-
-    text = f"""
-🎓 Welcome to ALHIKAM Learning Center
-
-Hello {user.first_name}.
-
-✅ Your Telegram account has been identified successfully.
-
-Click the button below to continue your registration.
-
-{register_link}
-"""
-
-    await update.message.reply_text(text)
 
 
 application = (
@@ -86,4 +75,5 @@ application.add_handler(
 
 
 if __name__ == "__main__":
-    application.run_polling()
+    print("ALHIKAM BOT STARTED...")
+    application.run_polling(drop_pending_updates=True)
