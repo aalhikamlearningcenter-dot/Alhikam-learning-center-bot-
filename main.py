@@ -135,19 +135,9 @@ def payment_callback():
 # ============================================================
 # START SERVER
 # ============================================================
-def start_telegram_bot():
-    subprocess.Popen(["python", "bot.py"])
-
 if __name__ == "__main__":
 
-    threading.Thread(
-        target=start_telegram_bot,
-        daemon=True
-    ).start()
-
-    PORT = int(
-        os.getenv("PORT", 8080)
-    )
+    PORT = int(os.getenv("PORT", 8080))
 
     web_app.run(
         host="0.0.0.0",
