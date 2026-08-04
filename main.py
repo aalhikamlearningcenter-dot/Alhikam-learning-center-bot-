@@ -1,40 +1,23 @@
-# ============================================================
-# ALHIKAM LEARNING CENTER V2
-# MAIN.PY (PART 1)
-# ============================================================
-
 import os
-import threading
 import logging
-from payment import (
-    PAYMENT_HTML,
-    create_flutterwave_payment,
-    verify_flutterwave_payment,
-)
-import os
-import uuid
-import requests
-import threading
-import subprocess
-from registration import registration_page
-from telegram_service import (
-    send_message,
-    send_welcome_message,
-)
+
 from flask import (
     Flask,
     request,
     redirect,
     jsonify,
     render_template_string,
-    session,
 )
 
-from database import (
-    initialize_database,
+from payment import (
+    PAYMENT_HTML,
+    create_flutterwave_payment,
+    verify_flutterwave_payment,
 )
 
-from config import *
+from registration import registration_page
+from database import initialize_database
+from config import BOT_USERNAME
 
 # ============================================================
 # FLASK APP
@@ -65,7 +48,7 @@ logging.basicConfig(
 logger = logging.getLogger("ALHIKAM")
 
 # ============================================================
-# HOME PAGE
+# HOME
 # ============================================================
 
 @web_app.route("/")
@@ -80,6 +63,8 @@ def home():
 @web_app.route("/payment", methods=["GET"])
 def payment_page():
     return render_template_string(PAYMENT_HTML)
+
+
 @web_app.route("/create-payment", methods=["POST"])
 def create_payment():
 
@@ -87,13 +72,14 @@ def create_payment():
 
     payment = create_flutterwave_payment(
         plan_id,
-        os.getenv("RAILWAY_URL")
+        os.getenv("RAILWAY_URL"),
     )
 
     if payment is None:
         return "Unable to create payment.", 500
 
     return redirect(payment["payment_link"])
+
 
 # ============================================================
 # REGISTRATION
@@ -103,16 +89,10 @@ def create_payment():
 def register():
     return registration_page()
 
-# ============================================================
-# HEALTH CHECK
-# ============================================================
-@web_app.route("/health")
-def health():
 
-    return jsonify({
-        "status": "healthy",
-        "app": "ALHIKAM V2"
-    })
+# ============================================================
+# PAYMENT CALLBACK
+# ============================================================
 
 @web_app.route("/payment-callback")
 def payment_callback():
@@ -132,14 +112,31 @@ def payment_callback():
 
     return redirect(f"https://t.me/{BOT_USERNAME}?start=login")
 
+
+# ============================================================
+# HEALTH
+# ============================================================
+
+@web_app.route("/health")
+def health():
+
+    return jsonify(
+        {
+            "status": "healthy",
+            "app": "ALHIKAM V2",
+        }
+    )
+
+
 # ============================================================
 # START SERVER
 # ============================================================
+
 if __name__ == "__main__":
 
     PORT = int(os.getenv("PORT", 8080))
 
     web_app.run(
         host="0.0.0.0",
-        port=PORT
+        port=PORT,
     )
