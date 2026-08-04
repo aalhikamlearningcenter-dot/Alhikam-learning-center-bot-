@@ -152,13 +152,18 @@ def create_flutterwave_payment(plan_id, app_url):
     data = response.json()
 
     if data.get("status") != "success":
-        return None
+    return None
 
-        pending_payments[tx_ref] = {
-        "plan_id": plan_id,
-        "plan": plan,
-        "status": "pending",
-    }
+pending_payments[tx_ref] = {
+    "plan_id": plan_id,
+    "plan": plan,
+    "status": "pending",
+}
+
+return {
+    "tx_ref": tx_ref,
+    "payment_link": data["data"]["link"],
+}
 
     return {
         "tx_ref": tx_ref,
