@@ -127,11 +127,6 @@ def health():
         }
     )
 
-
-# ============================================================
-# START SERVER
-# ============================================================
-
 import threading
 import subprocess
 
@@ -142,7 +137,16 @@ def start_telegram_bot():
 
 
 
+# ============================================================
+# START SERVER
+# ============================================================
+
 if __name__ == "__main__":
+
+    threading.Thread(
+        target=start_telegram_bot,
+        daemon=True,
+    ).start()
 
     PORT = int(os.getenv("PORT", 8080))
 
