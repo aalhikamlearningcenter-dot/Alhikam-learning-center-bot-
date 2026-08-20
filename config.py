@@ -17,12 +17,6 @@ APP_URL = os.getenv(
     "https://precious-trust-production-956b.up.railway.app"
 ).rstrip("/")
 
-# Compatibility
-RAILWAY_URL = os.getenv(
-    "RAILWAY_URL",
-    APP_URL
-).rstrip("/")
-
 BOT_USERNAME = "Alhikamcenterbot"
 
 
