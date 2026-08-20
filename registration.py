@@ -1,7 +1,6 @@
 # ==========================================================
 # ALHIKAM LEARNING CENTER V2
 # registration.py
-# STUDENT REGISTRATION + GOOGLE SHEET + TELEGRAM
 # ==========================================================
 
 from flask import (
@@ -12,18 +11,17 @@ from flask import (
 import asyncio
 
 from telegram_service import (
-    send_student_links
+    send_student_links,
 )
 
 from sheets import (
-    save_to_google_sheet
+    save_to_google_sheet,
 )
 
 from database import (
     add_student,
-    get_promoter_by_referral_code,
     get_payment_by_tx_ref,
-    get_student_by_tx_ref,
+    get_promoter_by_referral_code,
 )
 
 from config import (
@@ -32,7 +30,7 @@ from config import (
 
 
 # ==========================================================
-# REGISTRATION HTML
+# HTML
 # ==========================================================
 
 REGISTRATION_HTML = """
@@ -43,14 +41,10 @@ REGISTRATION_HTML = """
 
 <head>
 
-<meta
-name="viewport"
-content="width=device-width, initial-scale=1"
->
+<meta name="viewport"
+content="width=device-width, initial-scale=1">
 
-<title>
-ALHIKAM Registration
-</title>
+<title>ALHIKAM Registration</title>
 
 <style>
 
@@ -94,7 +88,6 @@ button{
     border-radius:10px;
     font-size:18px;
     font-weight:bold;
-    cursor:pointer;
 }
 
 .payment{
@@ -109,7 +102,6 @@ button{
     padding:12px;
     border-radius:10px;
     margin-bottom:20px;
-    font-size:14px;
 }
 
 .info{
@@ -117,7 +109,6 @@ button{
     padding:12px;
     border-radius:10px;
     margin-bottom:20px;
-    font-size:14px;
 }
 
 </style>
@@ -134,7 +125,7 @@ button{
 
 <div class="payment">
 
-<b>Payment:</b>
+<b>Payment</b>
 
 <br><br>
 
@@ -154,39 +145,30 @@ Status:
 </div>
 
 
-<div class="referral">
-
 {% if referral_code %}
+
+<div class="referral">
 
 🔗 Referral Code:
 
-<b>
-{{ referral_code }}
-</b>
+<b>{{ referral_code }}</b>
 
 <br><br>
 
 Promoter:
 
-<b>
-{{ promoter_name }}
-</b>
-
-{% else %}
-
-No referral code detected.
-
-{% endif %}
+<b>{{ promoter_name }}</b>
 
 </div>
+
+{% endif %}
 
 
 <div class="info">
 
 Please enter your correct information.
 
-This information will be used to create
-your ALHIKAM student record.
+Your information will be used to create your ALHIKAM student record.
 
 </div>
 
@@ -197,12 +179,6 @@ your ALHIKAM student record.
 type="hidden"
 name="tx_ref"
 value="{{ tx_ref }}"
->
-
-<input
-type="hidden"
-name="referral_code"
-value="{{ referral_code }}"
 >
 
 <input
@@ -224,9 +200,7 @@ value="{{ telegram_username }}"
 >
 
 
-<label>
-Full Name
-</label>
+<label>Full Name</label>
 
 <input
 type="text"
@@ -235,9 +209,7 @@ required
 >
 
 
-<label>
-Phone Number
-</label>
+<label>Phone Number</label>
 
 <input
 type="tel"
@@ -246,9 +218,7 @@ required
 >
 
 
-<label>
-Email Address
-</label>
+<label>Email Address</label>
 
 <input
 type="email"
@@ -257,9 +227,7 @@ required
 >
 
 
-<label>
-Faculty
-</label>
+<label>Faculty</label>
 
 <select
 name="faculty"
@@ -303,296 +271,104 @@ Complete Registration
 
 
 # ==========================================================
-# ERROR PAGE
+# PAGE
 # ==========================================================
 
-def error_page(
-    title,
-    message,
-    status_code=400
-):
-
-    return f"""
-
-    <!DOCTYPE html>
-
-    <html>
-
-    <body
-    style="
-    font-family:Arial;
-    text-align:center;
-    padding:40px;
-    background:#f5f5f5;
-    "
-    >
-
-    <div
-    style="
-    max-width:550px;
-    margin:auto;
-    background:white;
-    padding:30px;
-    border-radius:15px;
-    box-shadow:0 4px 12px rgba(0,0,0,.1);
-    "
-    >
-
-    <h2>
-    {title}
-    </h2>
-
-    <p>
-    {message}
-    </p>
-
-    </div>
-
-    </body>
-
-    </html>
-
-    """, status_code
-
-
-# ==========================================================
-# REGISTRATION PAGE
-# ==========================================================
-
-def registration_page(
-    payment_sessions=None
-):
-
-    if payment_sessions is None:
-
-        payment_sessions = {}
-
-
-    # ======================================================
-    # GET TX REF
-    # ======================================================
+def registration_page():
 
     tx_ref = request.args.get(
         "tx_ref",
         ""
     ).strip()
 
+    telegram_id = request.args.get(
+        "telegram_id",
+        ""
+    ).strip()
+
+    telegram_name = request.args.get(
+        "telegram_name",
+        ""
+    ).strip()
+
+    telegram_username = request.args.get(
+        "telegram_username",
+        ""
+    ).strip()
 
     if not tx_ref:
 
-        return error_page(
-
-            "❌ Payment Reference Missing",
-
-            "We could not identify your payment.",
-
+        return (
+            "❌ Payment reference is missing.",
             400
-
         )
 
-
-    # ======================================================
-    # DATABASE FIRST
-    #
-    # Payment database is the main source.
-    # ======================================================
-
-    payment = None
-
-
-    try:
-
-        payment = get_payment_by_tx_ref(
-            tx_ref
-        )
-
-    except Exception as e:
-
-        print(
-            "Payment database lookup error:",
-            e
-        )
-
-
-    # ======================================================
-    # MEMORY FALLBACK
-    # ======================================================
-
-    if not payment:
-
-        payment = payment_sessions.get(
-            tx_ref
-        )
-
-
-    # ======================================================
-    # PAYMENT NOT FOUND
-    # ======================================================
-
-    if not payment:
-
-        return error_page(
-
-            "❌ Payment Not Found",
-
-            "We could not find your payment record. "
-            "Please contact ALHIKAM support.",
-
-            404
-
-        )
-
-
-    # ======================================================
-    # PAYMENT STATUS
-    # ======================================================
-
-    payment_status = (
-        payment["payment_status"]
-        if "payment_status" in payment.keys()
-        else payment.get(
-            "payment_status",
-            ""
-        )
+    payment = get_payment_by_tx_ref(
+        tx_ref
     )
 
+    if not payment:
 
-    if payment_status != "Successful":
-
-        return error_page(
-
-            "❌ Payment Not Completed",
-
-            "Your payment has not been verified yet.",
-
-            400
-
+        return (
+            "❌ Payment record was not found.",
+            404
         )
 
+    if payment["payment_status"] != "Successful":
 
-    # ======================================================
-    # PAYMENT DATA
-    # ======================================================
+        return (
+            "❌ Payment has not been verified yet.",
+            400
+        )
 
-    payment_plan = payment[
-        "payment_plan"
-    ]
-
+    payment_plan = payment["payment_plan"]
 
     amount = float(
-        payment[
-            "amount"
-        ]
+        payment["amount"] or 0
     )
 
+    payment_status = payment["payment_status"]
 
     referral_code = (
-        payment[
-            "referral_code"
-        ]
+        payment["referral_code"]
         or ""
     )
 
+    promoter_id = payment["promoter_id"]
 
     promoter_name = (
-        payment[
-            "promoter_name"
-        ]
+        payment["promoter_name"]
         or ""
     )
 
+    # ------------------------------------------------------
+    # Get Telegram information saved during payment
+    # ------------------------------------------------------
 
-    promoter_id = payment[
-        "promoter_id"
-    ]
+    if not telegram_id:
 
-
-    commission = float(
-        payment[
-            "commission"
-        ]
-        or 0
-    )
-
-
-    # ======================================================
-    # CHECK IF ALREADY REGISTERED
-    # ======================================================
-
-    existing_student = None
-
-
-    try:
-
-        existing_student = (
-            get_student_by_tx_ref(
-                tx_ref
-            )
+        telegram_id = (
+            payment["telegram_id"]
+            or ""
         )
 
-    except Exception as e:
+    if not telegram_username:
 
-        print(
-            "Student lookup error:",
-            e
+        telegram_username = (
+            payment["telegram_username"]
+            or ""
         )
 
+    if not telegram_name:
 
-    if existing_student:
+        telegram_name = (
+            payment["telegram_name"]
+            or ""
+        )
 
-        return f"""
-
-        <!DOCTYPE html>
-
-        <html>
-
-        <body
-        style="
-        font-family:Arial;
-        text-align:center;
-        padding:40px;
-        background:#f5f5f5;
-        "
-        >
-
-        <div
-        style="
-        max-width:550px;
-        margin:auto;
-        background:white;
-        padding:30px;
-        border-radius:15px;
-        "
-        >
-
-        <h2>
-        ✅ Registration Already Completed
-        </h2>
-
-        <p>
-        This payment has already been used
-        to complete a registration.
-        </p>
-
-        <p>
-        Student:
-        <b>
-        {existing_student["full_name"]}
-        </b>
-        </p>
-
-        </div>
-
-        </body>
-
-        </html>
-
-        """
-
-
-    # ======================================================
+    # ------------------------------------------------------
     # GET
-    # ======================================================
+    # ------------------------------------------------------
 
     if request.method == "GET":
 
@@ -612,105 +388,46 @@ def registration_page(
 
             promoter_name=promoter_name,
 
-            telegram_id=request.args.get(
-                "telegram_id",
-                ""
-            ),
+            telegram_id=telegram_id,
 
-            telegram_name=request.args.get(
-                "telegram_name",
-                ""
-            ),
+            telegram_name=telegram_name,
 
-            telegram_username=request.args.get(
-                "telegram_username",
-                ""
-            ),
+            telegram_username=telegram_username,
 
         )
 
-
-    # ======================================================
-    # POST DATA
-    # ======================================================
+    # ------------------------------------------------------
+    # POST
+    # ------------------------------------------------------
 
     full_name = request.form.get(
         "full_name",
         ""
     ).strip()
 
-
     phone = request.form.get(
         "phone",
         ""
     ).strip()
-
 
     email = request.form.get(
         "email",
         ""
     ).strip()
 
-
     faculty = request.form.get(
         "faculty",
         ""
     ).strip()
 
-
-    telegram_id = request.form.get(
-        "telegram_id",
-        ""
-    ).strip()
-
-
-    telegram_name = request.form.get(
-        "telegram_name",
-        ""
-    ).strip()
-
-
-    telegram_username = request.form.get(
-        "telegram_username",
-        ""
-    ).strip()
-
-
-    # ======================================================
-    # VALIDATION
-    # ======================================================
-
     if not full_name:
-
-        return (
-            "Full name is required.",
-            400
-        )
-
+        return "Full name is required.", 400
 
     if not phone:
-
-        return (
-            "Phone number is required.",
-            400
-        )
-
+        return "Phone number is required.", 400
 
     if not email:
-
-        return (
-            "Email address is required.",
-            400
-        )
-
-
-    if not faculty:
-
-        return (
-            "Please select your faculty.",
-            400
-        )
-
+        return "Email address is required.", 400
 
     if faculty not in (
         "Science",
@@ -723,31 +440,19 @@ def registration_page(
             400
         )
 
-
-    # ======================================================
-    # VERIFY PROMOTER
-    # ======================================================
+    # ------------------------------------------------------
+    # Verify promoter
+    # ------------------------------------------------------
 
     promoter = None
 
-
     if referral_code:
 
-        try:
-
-            promoter = (
-                get_promoter_by_referral_code(
-                    referral_code
-                )
+        promoter = (
+            get_promoter_by_referral_code(
+                referral_code
             )
-
-        except Exception as e:
-
-            print(
-                "Promoter lookup error:",
-                e
-            )
-
+        )
 
         if not promoter:
 
@@ -757,14 +462,11 @@ def registration_page(
 
             promoter_name = ""
 
-            commission = 0
+    # ------------------------------------------------------
+    # Student
+    # ------------------------------------------------------
 
-
-    # ======================================================
-    # DATABASE DATA
-    # ======================================================
-
-    database_data = {
+    student_data = {
 
         "payment_token":
             tx_ref,
@@ -813,15 +515,10 @@ def registration_page(
 
     }
 
-
-    # ======================================================
-    # SAVE STUDENT
-    # ======================================================
-
     try:
 
         student_id = add_student(
-            database_data
+            student_data
         )
 
         print(
@@ -832,7 +529,7 @@ def registration_page(
     except Exception as e:
 
         print(
-            "Database Error:",
+            "Student database error:",
             e
         )
 
@@ -841,12 +538,11 @@ def registration_page(
             500
         )
 
+    # ------------------------------------------------------
+    # Google Sheet
+    # ------------------------------------------------------
 
-    # ======================================================
-    # GOOGLE SHEET
-    # ======================================================
-
-    student_data = {
+    sheet_data = {
 
         "telegram_id":
             telegram_id,
@@ -885,45 +581,31 @@ def registration_page(
             "Successful",
 
         "commission":
-            commission,
+            payment["commission"],
 
         "tx_ref":
             tx_ref,
 
     }
 
-
     try:
 
-        result = save_to_google_sheet(
-            student_data
-        )
-
-        print(
-            "Google Sheet result:",
-            result
+        save_to_google_sheet(
+            sheet_data
         )
 
     except Exception as e:
 
         print(
-            "Google Sheets Error:",
+            "Google Sheet error:",
             e
         )
 
+    # ------------------------------------------------------
+    # Telegram links
+    # ------------------------------------------------------
 
-    # ======================================================
-    # TELEGRAM
-    # ======================================================
-
-    telegram_message = """
-
-    <p>
-    🎓 Your Telegram invitation links have been sent.
-    </p>
-
-    """
-
+    telegram_error = None
 
     if telegram_id:
 
@@ -943,92 +625,25 @@ def registration_page(
 
         except Exception as e:
 
+            telegram_error = e
+
             print(
-                "Telegram Error:",
+                "Telegram invite error:",
                 e
             )
 
-            telegram_message = """
-
-            <p
-            style="color:#b45309;"
-            >
-
-            ⚠️ Registration succeeded, but
-            Telegram links could not be sent.
-
-            Please contact ALHIKAM support.
-
-            </p>
-
-            """
-
-    else:
-
-        telegram_message = """
-
-        <p
-        style="color:#b45309;"
-        >
-
-        ⚠️ Telegram ID was not provided.
-
-        Please contact ALHIKAM support
-        to receive your Telegram links.
-
-        </p>
-
-        """
-
-
-    # ======================================================
-    # PROMOTER MESSAGE
-    # ======================================================
-
-    promoter_message = ""
-
-
-    if promoter:
-
-        promoter_message = f"""
-
-        <div
-        style="
-        background:#f0f8f5;
-        padding:15px;
-        border-radius:10px;
-        margin-top:20px;
-        "
-        >
-
-        🔗 Referred by:
-
-        <b>
-        {promoter_name}
-        </b>
-
-        </div>
-
-        """
-
-
-    # ======================================================
-    # WHATSAPP
-    # ======================================================
+    # ------------------------------------------------------
+    # WhatsApp
+    # ------------------------------------------------------
 
     whatsapp_button = ""
-
 
     if WHATSAPP_COMMUNITY_LINK:
 
         whatsapp_button = f"""
 
-        <a
-
-        href="{WHATSAPP_COMMUNITY_LINK}"
-
+        <a href="{WHATSAPP_COMMUNITY_LINK}"
         target="_blank"
-
         style="
         display:inline-block;
         background:#25D366;
@@ -1038,9 +653,7 @@ def registration_page(
         text-decoration:none;
         font-weight:bold;
         margin-top:15px;
-        "
-
-        >
+        ">
 
         💬 Join WhatsApp Community
 
@@ -1048,10 +661,52 @@ def registration_page(
 
         """
 
+    # ------------------------------------------------------
+    # Telegram status
+    # ------------------------------------------------------
 
-    # ======================================================
-    # SUCCESS PAGE
-    # ======================================================
+    if telegram_id and not telegram_error:
+
+        telegram_message = """
+
+        <p>
+        🎉 Your Telegram class links have been sent.
+        </p>
+
+        """
+
+    elif telegram_error:
+
+        telegram_message = """
+
+        <p style="color:#b45309;">
+
+        ⚠️ Registration is successful, but Telegram links
+        could not be sent automatically.
+
+        Please contact ALHIKAM support.
+
+        </p>
+
+        """
+
+    else:
+
+        telegram_message = """
+
+        <p style="color:#b45309;">
+
+        ⚠️ Telegram ID was not provided.
+
+        Please contact ALHIKAM support.
+
+        </p>
+
+        """
+
+    # ------------------------------------------------------
+    # SUCCESS
+    # ------------------------------------------------------
 
     return f"""
 
@@ -1061,10 +716,8 @@ def registration_page(
 
     <head>
 
-    <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1"
-    >
+    <meta name="viewport"
+    content="width=device-width, initial-scale=1">
 
     <title>
     Registration Successful
@@ -1072,79 +725,52 @@ def registration_page(
 
     </head>
 
-    <body
-
-    style="
+    <body style="
     font-family:Arial;
     text-align:center;
     padding:40px;
     background:#f5f5f5;
-    "
-    >
+    ">
 
-    <div
-
-    style="
+    <div style="
     max-width:550px;
     margin:auto;
     background:white;
     padding:30px;
     border-radius:15px;
     box-shadow:0 4px 12px rgba(0,0,0,.1);
-    "
-    >
+    ">
 
     <h2>
     ✅ Registration Successful
     </h2>
 
     <p>
-
-    Thank you
-
-    <b>
-    {full_name}
-    </b>
-
+    Thank you <b>{full_name}</b>
     </p>
 
     <p>
-    Your ALHIKAM registration has been
-    completed successfully.
+    Your ALHIKAM registration has been completed.
     </p>
 
     <p>
-
     🎓 Plan:
-
-    <b>
-    {payment_plan}
-    </b>
-
+    <b>{payment_plan}</b>
     </p>
 
     <p>
-
     💰 Amount Paid:
-
-    <b>
-    ₦{amount:,.0f}
-    </b>
-
+    <b>₦{amount:,.0f}</b>
     </p>
-
-    {promoter_message}
 
     {telegram_message}
 
     {whatsapp_button}
 
-    <p
-    style="
+    <p style="
     margin-top:25px;
     color:#666;
-    "
-    >
+    ">
 
     Transaction Reference:
 
