@@ -1,10 +1,9 @@
 # ==========================================================
 # ALHIKAM LEARNING CENTER V2
 # telegram_service.py
-# TELEGRAM INVITE LINKS
 # ==========================================================
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from telegram import Bot
 
@@ -31,8 +30,15 @@ from config import (
 
 
 # ==========================================================
-# TELEGRAM BOT
+# BOT
 # ==========================================================
+
+if not BOT_TOKEN:
+
+    raise RuntimeError(
+        "BOT_TOKEN is not set."
+    )
+
 
 bot = Bot(
     token=BOT_TOKEN
@@ -43,10 +49,7 @@ bot = Bot(
 # SEND MESSAGE
 # ==========================================================
 
-async def send_message(
-    chat_id,
-    text
-):
+async def send_message(chat_id, text):
 
     await bot.send_message(
 
@@ -63,18 +66,20 @@ async def send_message(
 # CREATE INVITE LINK
 # ==========================================================
 
-async def create_invite(
-    chat_id
-):
+async def create_invite(chat_id):
+
+    if not chat_id:
+
+        raise ValueError(
+            "Telegram chat ID is missing."
+        )
 
     expire = (
-
-        datetime.utcnow()
+        datetime.now(timezone.utc)
         +
         timedelta(
             minutes=INVITE_LINK_EXPIRE_MINUTES
         )
-
     )
 
     invite = await bot.create_chat_invite_link(
@@ -101,218 +106,164 @@ async def send_student_links(
 
     links = []
 
-
-    # ======================================================
+    # ------------------------------------------------------
     # MAIN GROUP
-    # ======================================================
+    # ------------------------------------------------------
 
     links.append(
-
         (
             "🏠 Main Group",
-
             await create_invite(
                 MAIN_GROUP_ID
             )
-
         )
-
     )
 
-
-    # ======================================================
-    # ANNOUNCEMENT CHANNEL
-    # ======================================================
+    # ------------------------------------------------------
+    # ANNOUNCEMENT
+    # ------------------------------------------------------
 
     links.append(
-
         (
             "📢 Announcement Channel",
-
             await create_invite(
                 ANNOUNCEMENT_CHANNEL_ID
             )
-
         )
-
     )
 
-
-    # ======================================================
+    # ------------------------------------------------------
     # SCIENCE
-    # ======================================================
+    # ------------------------------------------------------
 
     if faculty == "Science":
 
         links.append(
-
             (
                 "🎓 Science Faculty",
-
                 await create_invite(
                     SCIENCE_FACULTY_ID
                 )
-
             )
-
         )
 
         links.append(
-
             (
                 "📘 Physics",
-
                 await create_invite(
                     PHYSICS_ID
                 )
-
             )
-
         )
 
         links.append(
-
             (
                 "🧪 Chemistry",
-
                 await create_invite(
                     CHEMISTRY_ID
                 )
-
             )
-
         )
 
         links.append(
-
             (
                 "🧬 Biology",
-
                 await create_invite(
                     BIOLOGY_ID
                 )
-
             )
-
         )
 
         links.append(
-
             (
                 "📐 Mathematics",
-
                 await create_invite(
                     MATHEMATICS_ID
                 )
-
             )
-
         )
 
         links.append(
-
             (
                 "🌾 Agricultural Science",
-
                 await create_invite(
                     AGRICULTURAL_SCIENCE_ID
                 )
-
             )
-
         )
 
         links.append(
-
             (
                 "🌍 Geography",
-
                 await create_invite(
                     GEOGRAPHY_ID
                 )
-
             )
-
         )
 
-
-    # ======================================================
+    # ------------------------------------------------------
     # ARTS
-    # ======================================================
+    # ------------------------------------------------------
 
     elif faculty == "Arts":
 
         links.append(
-
             (
                 "🎓 Arts Faculty",
-
                 await create_invite(
                     ARTS_FACULTY_ID
                 )
-
             )
-
         )
 
-
-    # ======================================================
+    # ------------------------------------------------------
     # COMMERCIAL
-    # ======================================================
+    # ------------------------------------------------------
 
     elif faculty == "Commercial":
 
         links.append(
-
             (
                 "🎓 Commercial Faculty",
-
                 await create_invite(
                     COMMERCIAL_FACULTY_ID
                 )
-
             )
-
         )
 
+    else:
 
-    # ======================================================
-    # BUILD MESSAGE
-    # ======================================================
+        raise ValueError(
+            "Invalid faculty."
+        )
+
+    # ------------------------------------------------------
+    # MESSAGE
+    # ------------------------------------------------------
 
     text = (
-
-        "🎉 Registration Completed Successfully!\n\n"
-
+        "🎉 ALHIKAM Registration Completed!\n\n"
         "Welcome to ALHIKAM Learning Center.\n\n"
-
-        "🔗 Click the links below to join your classes:\n\n"
-
+        "Click each link below to join your classes:\n\n"
     )
-
 
     for title, link in links:
 
         text += (
-
             f"{title}\n"
             f"{link}\n\n"
-
         )
-
-
-    # ======================================================
-    # SEND LINKS
-    # ======================================================
 
     await send_message(
         chat_id,
         text
     )
 
+    return links
+
 
 # ==========================================================
-# WELCOME MESSAGE
+# WELCOME
 # ==========================================================
 
 async def send_welcome_message(
@@ -320,19 +271,19 @@ async def send_welcome_message(
     full_name
 ):
 
-    text = (
+    text = f"""
 
-        "🎉 Welcome to ALHIKAM Learning Center\n\n"
+🎉 Welcome to ALHIKAM Learning Center
 
-        f"Hello {full_name},\n\n"
+Hello {full_name},
 
-        "✅ Your payment has been verified successfully.\n\n"
+✅ Your payment has been verified successfully.
 
-        "Please complete your registration.\n\n"
+Please complete your registration.
 
-        "Thank you."
+Thank you.
 
-    )
+"""
 
     await send_message(
         chat_id,
