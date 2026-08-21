@@ -3,11 +3,11 @@
 # bot.py
 # ==========================================================
 
-from telegram import (
-    Update,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-)
+import os
+import asyncio
+from urllib.parse import urlencode
+
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 
 from telegram.ext import (
     Application,
@@ -23,9 +23,18 @@ from telegram_service import (
     send_student_links,
 )
 
-from config import (
-    BOT_TOKEN,
-    APP_URL,
+
+# ==========================================================
+# CONFIG
+# ==========================================================
+
+BOT_TOKEN = os.getenv(
+    "BOT_TOKEN"
+)
+
+APP_URL = os.getenv(
+    "APP_URL",
+    "https://precious-trust-production-956b.up.railway.app"
 )
 
 
@@ -38,65 +47,110 @@ async def start(
     context: ContextTypes.DEFAULT_TYPE
 ):
 
-    if not update.effective_user:
-        return
-
     user = update.effective_user
 
-    student = get_student_by_telegram_id(
+    if not user:
+        return
+
+    telegram_id = str(
         user.id
     )
 
-    # ------------------------------------------------------
+    telegram_name = (
+        user.first_name
+        or ""
+    )
+
+    telegram_username = (
+        user.username
+        or ""
+    )
+
+    # ======================================================
+    # CHECK EXISTING STUDENT
+    # ======================================================
+
+    try:
+
+        student = (
+            get_student_by_telegram_id(
+                telegram_id
+            )
+        )
+
+    except Exception as e:
+
+        print(
+            "Student lookup error:",
+            e
+        )
+
+        student = None
+
+    # ======================================================
     # ALREADY REGISTERED
-    # ------------------------------------------------------
+    # ======================================================
 
     if (
         student
-        and
-        student["registration_completed"] == 1
-        and
-        student["payment_status"] == "Successful"
+        and int(
+            student.get(
+                "registration_completed",
+                0
+            ) or 0
+        ) == 1
     ):
+
+        await update.message.reply_text(
+
+            f"🎓 Welcome back to ALHIKAM Learning Center\n\n"
+            f"Hello {telegram_name},\n\n"
+            "✅ Your registration is already completed.\n\n"
+            "🔗 I will send your invitation links again now."
+        )
 
         try:
 
             await send_student_links(
-
-                user.id,
-
-                student["course"]
-
+                telegram_id,
+                student.get(
+                    "course",
+                    ""
+                )
             )
 
         except Exception as e:
 
             print(
-                "Could not send Telegram links:",
+                "Could not resend Telegram links:",
                 e
             )
 
             await update.message.reply_text(
-                "⚠️ We could not generate your class links right now. Please try /start again."
+                "⚠️ I could not create your links right now. "
+                "Please contact ALHIKAM support."
             )
 
         return
 
-    # ------------------------------------------------------
-    # REGISTRATION LINK
-    # ------------------------------------------------------
+    # ======================================================
+    # PAYMENT URL
+    # ======================================================
 
-    register_link = (
+    params = urlencode({
 
-        f"{APP_URL}/register"
+        "telegram_id":
+            telegram_id,
 
-        f"?telegram_id={user.id}"
+        "telegram_name":
+            telegram_name,
 
-        f"&telegram_name={user.first_name}"
+        "telegram_username":
+            telegram_username
+    })
 
-        f"&telegram_username="
-        f"{user.username or ''}"
-
+    payment_url = (
+        f"{APP_URL}/payment?{params}"
     )
 
     keyboard = [
@@ -104,11 +158,8 @@ async def start(
         [
 
             InlineKeyboardButton(
-
-                "📝 Continue Registration",
-
-                url=register_link
-
+                "💳 Start Registration",
+                url=payment_url
             )
 
         ]
@@ -121,18 +172,14 @@ async def start(
 
     await update.message.reply_text(
 
-        f"""
-🎓 Welcome to ALHIKAM Learning Center
-
-Hello {user.first_name},
-
-Please tap the button below to continue your registration.
-
-If you have already paid, your payment will be connected to your registration.
-""",
+        f"🎓 Welcome to ALHIKAM Learning Center\n\n"
+        f"Hello {telegram_name},\n\n"
+        "You are about to register as an ALHIKAM student.\n\n"
+        "Your Telegram account will automatically be "
+        "connected to your registration.\n\n"
+        "Tap the button below to continue.",
 
         reply_markup=reply_markup
-
     )
 
 
@@ -143,7 +190,7 @@ If you have already paid, your payment will be connected to your registration.
 if not BOT_TOKEN:
 
     raise RuntimeError(
-        "BOT_TOKEN is not set."
+        "BOT_TOKEN is missing."
     )
 
 
