@@ -4,59 +4,28 @@
 # FLUTTERWAVE PAYMENT
 # ==========================================================
 
-import os
 import uuid
 import requests
+from urllib.parse import urlencode
+
+from config import (
+    APP_URL,
+    FLW_SECRET_KEY,
+    PAYMENT_PLANS,
+)
+
+
+FLUTTERWAVE_PAYMENT_URL = (
+    "https://api.flutterwave.com/v3/payments"
+)
+
+FLUTTERWAVE_VERIFY_URL = (
+    "https://api.flutterwave.com/v3/transactions/{}/verify"
+)
 
 
 # ==========================================================
-# PAYMENT PLANS
-# ==========================================================
-
-PAYMENT_PLANS = {
-
-    "1": {
-        "name": "1 Month",
-        "amount": 3600
-    },
-
-    "2": {
-        "name": "2 Months",
-        "amount": 6800
-    },
-
-    "3": {
-        "name": "3 Months",
-        "amount": 10000
-    },
-
-    "4": {
-        "name": "4 Months",
-        "amount": 13600
-    },
-
-    "5": {
-        "name": "5 Months",
-        "amount": 16500
-    },
-
-    "6": {
-        "name": "6 Months",
-        "amount": 20000
-    },
-
-}
-
-
-# ==========================================================
-# SECRET KEY
-# ==========================================================
-
-FLW_SECRET_KEY = os.getenv("FLW_SECRET_KEY")
-
-
-# ==========================================================
-# PAYMENT PAGE
+# PAYMENT HTML
 # ==========================================================
 
 PAYMENT_HTML = """
@@ -68,20 +37,20 @@ PAYMENT_HTML = """
 <head>
 
 <meta name="viewport"
-content="width=device-width, initial-scale=1">
+      content="width=device-width, initial-scale=1">
 
-<title>ALHIKAM Learning Center</title>
+<title>ALHIKAM Payment</title>
 
 <style>
 
 body{
     font-family:Arial,sans-serif;
-    background:#f4f7f6;
+    background:#f5f5f5;
     padding:20px;
 }
 
 .container{
-    max-width:500px;
+    max-width:550px;
     margin:auto;
     background:white;
     padding:25px;
@@ -90,37 +59,71 @@ body{
 }
 
 h2{
-    color:#087f5b;
     text-align:center;
+    color:#087f5b;
 }
 
-select{
-    width:100%;
-    padding:15px;
-    margin-top:15px;
+.info{
+    background:#fff8e1;
+    padding:14px;
     border-radius:10px;
-    border:1px solid #ccc;
+    margin-bottom:20px;
+}
+
+.referral{
+    background:#f0f8f5;
+    padding:14px;
+    border-radius:10px;
+    margin-bottom:20px;
+}
+
+.plan{
+    border:1px solid #ddd;
+    padding:15px;
+    margin-bottom:12px;
+    border-radius:10px;
+}
+
+.plan label{
+    display:block;
+    cursor:pointer;
+}
+
+.plan input{
+    width:auto;
+    margin-right:8px;
+}
+
+.referral input{
+    width:100%;
+    padding:14px;
+    margin-top:8px;
     box-sizing:border-box;
+    border:1px solid #ccc;
+    border-radius:8px;
 }
 
 button{
     width:100%;
     padding:15px;
-    margin-top:15px;
-    border-radius:10px;
-    border:none;
     background:#087f5b;
     color:white;
+    border:none;
+    border-radius:10px;
     font-size:18px;
     font-weight:bold;
+    cursor:pointer;
 }
 
-.referral{
-    background:#f0f8f5;
-    padding:12px;
+button:hover{
+    opacity:.9;
+}
+
+.telegram{
+    background:#e8f4ff;
+    padding:14px;
     border-radius:10px;
-    margin-top:15px;
-    font-size:14px;
+    margin-bottom:20px;
 }
 
 </style>
@@ -135,30 +138,36 @@ button{
 🎓 ALHIKAM Learning Center
 </h2>
 
-{% if referral_code %}
 
-<div class="referral">
+<div class="telegram">
 
-🔗 Referral Code:
-
-<b>{{ referral_code }}</b>
+<b>📱 Telegram Connected</b>
 
 <br><br>
 
-✅ Referral has been recorded.
+Your Telegram account will be connected
+to your ALHIKAM registration automatically.
 
 </div>
 
-{% endif %}
 
-<form action="/create-payment"
-method="POST">
+<div class="info">
 
-<input
-type="hidden"
-name="referral_code"
-value="{{ referral_code }}"
->
+<b>Choose your subscription plan.</b>
+
+<br><br>
+
+After successful payment, you will be
+redirected automatically to registration.
+
+</div>
+
+
+<form method="POST"
+      action="/create-payment">
+
+
+<!-- TELEGRAM DATA -->
 
 <input
 type="hidden"
@@ -178,40 +187,172 @@ name="telegram_username"
 value="{{ telegram_username }}"
 >
 
-<select name="plan" required>
 
-<option value="">
-Select Subscription
-</option>
+<!-- REFERRAL -->
 
-<option value="1">
-1 Month — ₦3,600
-</option>
+<div class="referral">
 
-<option value="2">
-2 Months — ₦6,800
-</option>
+<label>
+<b>🔗 Referral Code</b>
+</label>
 
-<option value="3">
-3 Months — ₦10,000
-</option>
+<input
+type="text"
+name="referral_code"
+value="{{ referral_code }}"
+placeholder="Enter referral code if you have one"
+>
 
-<option value="4">
-4 Months — ₦13,600
-</option>
+{% if referral_code %}
 
-<option value="5">
-5 Months — ₦16,500
-</option>
+<br>
 
-<option value="6">
-6 Months — ₦20,000
-</option>
+<div>
 
-</select>
+✅ Referral code detected:
+
+<b>
+{{ referral_code }}
+</b>
+
+</div>
+
+{% endif %}
+
+</div>
+
+
+<!-- PLAN 1 -->
+
+<div class="plan">
+
+<label>
+
+<input
+type="radio"
+name="plan"
+value="1"
+required
+>
+
+<b>1 Month</b>
+
+— ₦3,600
+
+</label>
+
+</div>
+
+
+<!-- PLAN 2 -->
+
+<div class="plan">
+
+<label>
+
+<input
+type="radio"
+name="plan"
+value="2"
+>
+
+<b>2 Months</b>
+
+— ₦6,800
+
+</label>
+
+</div>
+
+
+<!-- PLAN 3 -->
+
+<div class="plan">
+
+<label>
+
+<input
+type="radio"
+name="plan"
+value="3"
+>
+
+<b>3 Months</b>
+
+— ₦10,000
+
+</label>
+
+</div>
+
+
+<!-- PLAN 4 -->
+
+<div class="plan">
+
+<label>
+
+<input
+type="radio"
+name="plan"
+value="4"
+>
+
+<b>4 Months</b>
+
+— ₦13,600
+
+</label>
+
+</div>
+
+
+<!-- PLAN 5 -->
+
+<div class="plan">
+
+<label>
+
+<input
+type="radio"
+name="plan"
+value="5"
+>
+
+<b>5 Months</b>
+
+— ₦16,500
+
+</label>
+
+</div>
+
+
+<!-- PLAN 6 -->
+
+<div class="plan">
+
+<label>
+
+<input
+type="radio"
+name="plan"
+value="6"
+>
+
+<b>6 Months</b>
+
+— ₦20,000
+
+</label>
+
+</div>
+
 
 <button type="submit">
-Continue To Payment
+
+💳 Continue to Payment
+
 </button>
 
 </form>
@@ -226,58 +367,133 @@ Continue To Payment
 
 
 # ==========================================================
-# CREATE PAYMENT
+# GENERATE TRANSACTION REFERENCE
+# ==========================================================
+
+def generate_tx_ref():
+
+    return (
+        "ALHIKAM_"
+        + uuid.uuid4().hex
+    )
+
+
+# ==========================================================
+# CREATE FLUTTERWAVE PAYMENT
 # ==========================================================
 
 def create_flutterwave_payment(
     plan_id,
-    app_url,
+    app_url=None,
     referral_code="",
     telegram_id="",
     telegram_name="",
-    telegram_username=""
+    telegram_username="",
 ):
 
-    if plan_id not in PAYMENT_PLANS:
-        return None
-
     if not FLW_SECRET_KEY:
-        print("ERROR: FLW_SECRET_KEY is not set.")
+
+        print(
+            "ERROR: FLW_SECRET_KEY is not configured."
+        )
+
         return None
 
-    if not app_url:
-        print("ERROR: APP_URL is not set.")
+
+    # ------------------------------------------------------
+    # Validate plan
+    # ------------------------------------------------------
+
+    if plan_id not in PAYMENT_PLANS:
+
+        print(
+            "ERROR: Invalid payment plan:",
+            plan_id
+        )
+
         return None
 
-    plan = PAYMENT_PLANS[plan_id]
 
-    tx_ref = (
-        "ALHIKAM_" +
-        uuid.uuid4().hex
+    payment_plan, amount = PAYMENT_PLANS[
+        plan_id
+    ]
+
+
+    # ------------------------------------------------------
+    # Generate TX reference
+    # ------------------------------------------------------
+
+    tx_ref = generate_tx_ref()
+
+
+    # ------------------------------------------------------
+    # APP URL
+    # ------------------------------------------------------
+
+    base_url = (
+        app_url
+        or APP_URL
+    ).rstrip("/")
+
+
+    # ------------------------------------------------------
+    # Callback URL
+    #
+    # Telegram data is included so it can be recovered
+    # after Flutterwave redirects the student.
+    # ------------------------------------------------------
+
+    callback_params = {
+
+        "telegram_id":
+            telegram_id or "",
+
+        "telegram_name":
+            telegram_name or "",
+
+        "telegram_username":
+            telegram_username or "",
+
+    }
+
+
+    callback_url = (
+
+        f"{base_url}/payment-callback?"
+
+        + urlencode(
+            callback_params
+        )
+
     )
 
-    referral_code = (
-        referral_code or ""
-    ).strip()
+
+    # ------------------------------------------------------
+    # PAYMENT PAYLOAD
+    # ------------------------------------------------------
 
     payload = {
 
-        "tx_ref": tx_ref,
+        "tx_ref":
+            tx_ref,
 
-        "amount": plan["amount"],
+        "amount":
+            amount,
 
-        "currency": "NGN",
+        "currency":
+            "NGN",
 
         "redirect_url":
-            f"{app_url}/payment-callback",
+            callback_url,
 
         "customer": {
 
             "email":
-                f"{tx_ref.lower()}@alhikam.com",
+                "student@alhikam.ng",
 
             "name":
-                "ALHIKAM Student"
+                telegram_name
+                or "ALHIKAM Student",
 
         },
 
@@ -287,33 +503,35 @@ def create_flutterwave_payment(
                 "ALHIKAM Learning Center",
 
             "description":
-                plan["name"]
+                payment_plan,
 
         },
 
         "meta": {
 
-            "referral_code":
-                referral_code,
-
             "payment_plan":
-                plan["name"],
+                payment_plan,
 
-            "plan_id":
-                plan_id,
+            "referral_code":
+                referral_code
+                or "",
 
             "telegram_id":
-                str(telegram_id or ""),
+                telegram_id
+                or "",
 
             "telegram_name":
-                telegram_name or "",
+                telegram_name
+                or "",
 
             "telegram_username":
-                telegram_username or ""
+                telegram_username
+                or "",
 
-        }
+        },
 
     }
+
 
     headers = {
 
@@ -321,25 +539,100 @@ def create_flutterwave_payment(
             f"Bearer {FLW_SECRET_KEY}",
 
         "Content-Type":
-            "application/json"
+            "application/json",
 
     }
+
+
+    # ------------------------------------------------------
+    # SEND REQUEST
+    # ------------------------------------------------------
 
     try:
 
         response = requests.post(
 
-            "https://api.flutterwave.com/v3/payments",
+            FLUTTERWAVE_PAYMENT_URL,
 
             json=payload,
 
             headers=headers,
 
-            timeout=30
+            timeout=30,
 
         )
 
-    except Exception as e:
+
+        print(
+            "Flutterwave create response:",
+            response.text
+        )
+
+
+        if response.status_code != 200:
+
+            print(
+                "Flutterwave HTTP error:",
+                response.status_code
+            )
+
+            return None
+
+
+        data = response.json()
+
+
+        if data.get(
+            "status"
+        ) != "success":
+
+            print(
+                "Flutterwave returned failure:",
+                data
+            )
+
+            return None
+
+
+        payment_link = (
+
+            data.get(
+                "data",
+                {}
+            ).get(
+                "link"
+            )
+
+        )
+
+
+        if not payment_link:
+
+            print(
+                "ERROR: Flutterwave payment link missing."
+            )
+
+            return None
+
+
+        return {
+
+            "tx_ref":
+                tx_ref,
+
+            "amount":
+                amount,
+
+            "plan":
+                payment_plan,
+
+            "payment_link":
+                payment_link,
+
+        }
+
+
+    except requests.RequestException as e:
 
         print(
             "Flutterwave request error:",
@@ -348,84 +641,19 @@ def create_flutterwave_payment(
 
         return None
 
-    if response.status_code not in (200, 201):
-
-        print(
-            "Flutterwave HTTP Error:",
-            response.status_code
-        )
-
-        print(response.text)
-
-        return None
-
-    try:
-
-        result = response.json()
 
     except Exception as e:
 
         print(
-            "Flutterwave JSON Error:",
+            "Flutterwave payment error:",
             e
         )
 
         return None
 
-    if result.get("status") != "success":
-
-        print(
-            "Flutterwave Payment Error:",
-            result
-        )
-
-        return None
-
-    payment_link = (
-        result
-        .get("data", {})
-        .get("link")
-    )
-
-    if not payment_link:
-
-        print(
-            "Flutterwave did not return payment link."
-        )
-
-        return None
-
-    return {
-
-        "tx_ref":
-            tx_ref,
-
-        "payment_link":
-            payment_link,
-
-        "plan":
-            plan["name"],
-
-        "amount":
-            plan["amount"],
-
-        "referral_code":
-            referral_code,
-
-        "telegram_id":
-            str(telegram_id or ""),
-
-        "telegram_name":
-            telegram_name or "",
-
-        "telegram_username":
-            telegram_username or ""
-
-    }
-
 
 # ==========================================================
-# VERIFY PAYMENT
+# VERIFY FLUTTERWAVE PAYMENT
 # ==========================================================
 
 def verify_flutterwave_payment(
@@ -435,13 +663,27 @@ def verify_flutterwave_payment(
     if not FLW_SECRET_KEY:
 
         print(
-            "ERROR: FLW_SECRET_KEY is not set."
+            "ERROR: FLW_SECRET_KEY is not configured."
         )
 
         return None
 
+
     if not transaction_id:
+
+        print(
+            "ERROR: Transaction ID is missing."
+        )
+
         return None
+
+
+    url = (
+        FLUTTERWAVE_VERIFY_URL.format(
+            transaction_id
+        )
+    )
+
 
     headers = {
 
@@ -449,14 +691,10 @@ def verify_flutterwave_payment(
             f"Bearer {FLW_SECRET_KEY}",
 
         "Content-Type":
-            "application/json"
+            "application/json",
 
     }
 
-    url = (
-        "https://api.flutterwave.com/v3/"
-        f"transactions/{transaction_id}/verify"
-    )
 
     try:
 
@@ -466,9 +704,68 @@ def verify_flutterwave_payment(
 
             headers=headers,
 
-            timeout=30
+            timeout=30,
 
         )
+
+
+        print(
+            "Flutterwave verify response:",
+            response.text
+        )
+
+
+        if response.status_code != 200:
+
+            print(
+                "Flutterwave verification HTTP error:",
+                response.status_code
+            )
+
+            return None
+
+
+        result = response.json()
+
+
+        if result.get(
+            "status"
+        ) != "success":
+
+            print(
+                "Flutterwave verification failed:",
+                result
+            )
+
+            return None
+
+
+        payment_data = result.get(
+            "data"
+        )
+
+
+        if not payment_data:
+
+            print(
+                "ERROR: Flutterwave verification data missing."
+            )
+
+            return None
+
+
+        return payment_data
+
+
+    except requests.RequestException as e:
+
+        print(
+            "Flutterwave verification request error:",
+            e
+        )
+
+        return None
+
 
     except Exception as e:
 
@@ -478,59 +775,3 @@ def verify_flutterwave_payment(
         )
 
         return None
-
-    if response.status_code != 200:
-
-        print(
-            "Verification HTTP Error:",
-            response.status_code
-        )
-
-        print(response.text)
-
-        return None
-
-    try:
-
-        result = response.json()
-
-    except Exception as e:
-
-        print(
-            "Verification JSON Error:",
-            e
-        )
-
-        return None
-
-    if result.get("status") != "success":
-
-        print(
-            "Verification failed:",
-            result
-        )
-
-        return None
-
-    data = result.get("data")
-
-    if not data:
-        return None
-
-    if data.get("currency") != "NGN":
-
-        print(
-            "Invalid payment currency."
-        )
-
-        return None
-
-    if data.get("status") != "successful":
-
-        print(
-            "Payment is not successful."
-        )
-
-        return None
-
-    return data
