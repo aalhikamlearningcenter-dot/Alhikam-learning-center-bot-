@@ -42,7 +42,9 @@ FLW_ENCRYPTION_KEY = os.getenv("FLW_ENCRYPTION_KEY")
 # GOOGLE SHEETS
 # ==========================================================
 
-GOOGLE_SCRIPT_URL = os.getenv("GOOGLE_SCRIPT_URL")
+GOOGLE_SCRIPT_URL = os.getenv(
+    "GOOGLE_SCRIPT_URL"
+)
 
 
 # ==========================================================
