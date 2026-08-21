@@ -1,12 +1,14 @@
 # ==========================================================
 # ALHIKAM LEARNING CENTER V2
 # main.py
+# PAYMENT + REGISTRATION + REFERRAL + TELEGRAM
 # ==========================================================
 
 import os
 import logging
 import threading
 import subprocess
+import sys
 
 from flask import (
     Flask,
@@ -22,9 +24,7 @@ from payment import (
     verify_flutterwave_payment,
 )
 
-from registration import (
-    registration_page,
-)
+from registration import registration_page
 
 from database import (
     initialize_database,
@@ -42,7 +42,7 @@ from config import (
 
 
 # ==========================================================
-# APP
+# FLASK APP
 # ==========================================================
 
 web_app = Flask(__name__)
@@ -51,13 +51,6 @@ web_app.secret_key = os.getenv(
     "SECRET_KEY",
     "alhikam-secret-key"
 )
-
-
-# ==========================================================
-# DATABASE
-# ==========================================================
-
-initialize_database()
 
 
 # ==========================================================
@@ -75,7 +68,14 @@ logger = logging.getLogger(
 
 
 # ==========================================================
-# COMMISSION
+# DATABASE
+# ==========================================================
+
+initialize_database()
+
+
+# ==========================================================
+# COMMISSION RULES
 # ==========================================================
 
 COMMISSION_BY_AMOUNT = {
@@ -96,6 +96,28 @@ COMMISSION_BY_AMOUNT = {
 
 
 # ==========================================================
+# PAYMENT MEMORY
+#
+# Database is the main storage.
+# Memory is only a temporary cache.
+# ==========================================================
+
+PAYMENT_SESSIONS = {}
+
+
+# ==========================================================
+# HOME
+# ==========================================================
+
+@web_app.route("/")
+def home():
+
+    return redirect(
+        "/payment"
+    )
+
+
+# ==========================================================
 # PAYMENT PAGE
 # ==========================================================
 
@@ -105,28 +127,64 @@ COMMISSION_BY_AMOUNT = {
 )
 def payment_page():
 
-    referral_code = request.args.get(
-        "ref",
-        ""
+    # ------------------------------------------------------
+    # Telegram information
+    # ------------------------------------------------------
+
+    telegram_id = (
+        request.args.get(
+            "telegram_id",
+            ""
+        )
+        or ""
     ).strip()
 
-    telegram_id = request.args.get(
-        "telegram_id",
-        ""
+
+    telegram_name = (
+        request.args.get(
+            "telegram_name",
+            ""
+        )
+        or ""
     ).strip()
 
-    telegram_name = request.args.get(
-        "telegram_name",
-        ""
+
+    telegram_username = (
+        request.args.get(
+            "telegram_username",
+            ""
+        )
+        or ""
     ).strip()
 
-    telegram_username = request.args.get(
-        "telegram_username",
-        ""
-    ).strip()
 
     # ------------------------------------------------------
-    # Verify referral
+    # Referral
+    # ------------------------------------------------------
+
+    referral_code = (
+        request.args.get(
+            "ref",
+            ""
+        )
+        or ""
+    ).strip()
+
+
+    # Also accept referral_code
+    if not referral_code:
+
+        referral_code = (
+            request.args.get(
+                "referral_code",
+                ""
+            )
+            or ""
+        ).strip()
+
+
+    # ------------------------------------------------------
+    # Validate referral
     # ------------------------------------------------------
 
     if referral_code:
@@ -148,34 +206,37 @@ def payment_page():
 
             promoter = None
 
+
         if not promoter:
 
+            logger.warning(
+                "Invalid referral code on payment page: %s",
+                referral_code
+            )
+
             referral_code = ""
+
+
+    # ------------------------------------------------------
+    # Render
+    # ------------------------------------------------------
 
     return render_template_string(
 
         PAYMENT_HTML,
 
-        referral_code=referral_code,
+        telegram_id=
+            telegram_id,
 
-        telegram_id=telegram_id,
+        telegram_name=
+            telegram_name,
 
-        telegram_name=telegram_name,
+        telegram_username=
+            telegram_username,
 
-        telegram_username=telegram_username,
+        referral_code=
+            referral_code,
 
-    )
-
-
-# ==========================================================
-# HOME
-# ==========================================================
-
-@web_app.route("/")
-def home():
-
-    return redirect(
-        "/payment"
     )
 
 
@@ -189,47 +250,78 @@ def home():
 )
 def create_payment():
 
-    plan_id = request.form.get(
-        "plan",
-        ""
-    ).strip()
-
-    referral_code = request.form.get(
-        "referral_code",
-        ""
-    ).strip()
-
-    telegram_id = request.form.get(
-        "telegram_id",
-        ""
-    ).strip()
-
-    telegram_name = request.form.get(
-        "telegram_name",
-        ""
-    ).strip()
-
-    telegram_username = request.form.get(
-        "telegram_username",
-        ""
-    ).strip()
-
     # ------------------------------------------------------
-    # Plan
+    # Get form data
     # ------------------------------------------------------
+
+    plan_id = (
+        request.form.get(
+            "plan",
+            ""
+        )
+        or ""
+    ).strip()
+
+
+    referral_code = (
+        request.form.get(
+            "referral_code",
+            ""
+        )
+        or ""
+    ).strip()
+
+
+    telegram_id = (
+        request.form.get(
+            "telegram_id",
+            ""
+        )
+        or ""
+    ).strip()
+
+
+    telegram_name = (
+        request.form.get(
+            "telegram_name",
+            ""
+        )
+        or ""
+    ).strip()
+
+
+    telegram_username = (
+        request.form.get(
+            "telegram_username",
+            ""
+        )
+        or ""
+    ).strip()
+
+
+    # ======================================================
+    # VALIDATE PLAN
+    # ======================================================
 
     if plan_id not in PAYMENT_PLANS:
+
+        logger.warning(
+            "Invalid payment plan: %s",
+            plan_id
+        )
 
         return (
             "Invalid payment plan.",
             400
         )
 
-    # ------------------------------------------------------
-    # Referral
-    # ------------------------------------------------------
+
+    # ======================================================
+    # VALIDATE REFERRAL
+    # ======================================================
 
     promoter = None
+
 
     if referral_code:
 
@@ -244,55 +336,104 @@ def create_payment():
         except Exception as e:
 
             logger.error(
-                "Referral error: %s",
+                "Referral lookup error: %s",
                 e
             )
 
             promoter = None
 
+
         if not promoter:
+
+            logger.warning(
+                "Invalid referral code: %s",
+                referral_code
+            )
 
             referral_code = ""
 
-    # ------------------------------------------------------
-    # Flutterwave
-    # ------------------------------------------------------
+
+    # ======================================================
+    # CREATE FLUTTERWAVE PAYMENT
+    # ======================================================
 
     payment = create_flutterwave_payment(
 
-        plan_id,
+        plan_id=
+            plan_id,
 
-        APP_URL,
+        app_url=
+            APP_URL,
 
-        referral_code=referral_code,
+        referral_code=
+            referral_code,
 
-        telegram_id=telegram_id,
+        telegram_id=
+            telegram_id,
 
-        telegram_name=telegram_name,
+        telegram_name=
+            telegram_name,
 
-        telegram_username=telegram_username,
+        telegram_username=
+            telegram_username,
 
     )
+
 
     if not payment:
 
+        logger.error(
+            "Flutterwave payment creation failed."
+        )
+
         return (
-            "Unable to create payment. "
-            "Please check Railway logs.",
+            """
+            <h3>
+            Unable to create payment.
+            </h3>
+
+            <p>
+            Please try again.
+            </p>
+            """,
             500
         )
 
-    tx_ref = payment["tx_ref"]
+
+    # ======================================================
+    # PAYMENT DATA
+    # ======================================================
+
+    tx_ref = (
+        payment.get(
+            "tx_ref",
+            ""
+        )
+        or ""
+    ).strip()
+
 
     amount = float(
-        payment["amount"]
+        payment.get(
+            "amount",
+            0
+        )
+        or 0
     )
 
-    payment_plan = payment["plan"]
 
-    # ------------------------------------------------------
-    # Commission
-    # ------------------------------------------------------
+    payment_plan = (
+        payment.get(
+            "plan",
+            ""
+        )
+        or ""
+    )
+
+
+    # ======================================================
+    # COMMISSION
+    # ======================================================
 
     commission_amount = (
         COMMISSION_BY_AMOUNT.get(
@@ -301,11 +442,13 @@ def create_payment():
         )
     )
 
+
     promoter_id = (
         promoter["id"]
         if promoter
         else None
     )
+
 
     promoter_name = (
         promoter["full_name"]
@@ -313,9 +456,13 @@ def create_payment():
         else ""
     )
 
-    # ------------------------------------------------------
+
+    # ======================================================
     # SAVE PENDING PAYMENT
-    # ------------------------------------------------------
+    #
+    # VERY IMPORTANT:
+    # We save before sending user to Flutterwave.
+    # ======================================================
 
     try:
 
@@ -361,9 +508,8 @@ def create_payment():
 
     except Exception as e:
 
-        logger.error(
-            "Payment save error: %s",
-            e
+        logger.exception(
+            "Could not save pending payment."
         )
 
         return (
@@ -371,13 +517,63 @@ def create_payment():
             500
         )
 
+
+    # ======================================================
+    # MEMORY CACHE
+    # ======================================================
+
+    PAYMENT_SESSIONS[tx_ref] = {
+
+        "tx_ref":
+            tx_ref,
+
+        "transaction_id":
+            "",
+
+        "amount":
+            amount,
+
+        "payment_plan":
+            payment_plan,
+
+        "payment_status":
+            "Pending",
+
+        "referral_code":
+            referral_code,
+
+        "promoter_id":
+            promoter_id,
+
+        "promoter_name":
+            promoter_name,
+
+        "commission":
+            commission_amount,
+
+        "telegram_id":
+            telegram_id,
+
+        "telegram_username":
+            telegram_username,
+
+        "telegram_name":
+            telegram_name,
+
+        "registration_completed":
+            0,
+
+    }
+
+
     logger.info(
 
         "PAYMENT CREATED | "
         "TX=%s | "
         "PLAN=%s | "
         "AMOUNT=%s | "
-        "REF=%s",
+        "REF=%s | "
+        "TELEGRAM=%s",
 
         tx_ref,
 
@@ -385,12 +581,21 @@ def create_payment():
 
         amount,
 
-        referral_code
+        referral_code,
+
+        telegram_id
 
     )
 
+
+    # ======================================================
+    # REDIRECT TO FLUTTERWAVE
+    # ======================================================
+
     return redirect(
-        payment["payment_link"]
+        payment[
+            "payment_link"
+        ]
     )
 
 
@@ -404,7 +609,10 @@ def create_payment():
 )
 def register():
 
-    return registration_page()
+    return registration_page(
+        payment_sessions=
+            PAYMENT_SESSIONS
+    )
 
 
 # ==========================================================
@@ -412,43 +620,158 @@ def register():
 # ==========================================================
 
 @web_app.route(
-    "/payment-callback"
+    "/payment-callback",
+    methods=["GET"]
 )
 def payment_callback():
 
-    transaction_id = request.args.get(
-        "transaction_id",
-        ""
+    # ------------------------------------------------------
+    # Flutterwave transaction ID
+    # ------------------------------------------------------
+
+    transaction_id = (
+        request.args.get(
+            "transaction_id",
+            ""
+        )
+        or ""
     ).strip()
+
+
+    # ------------------------------------------------------
+    # tx_ref backup
+    # ------------------------------------------------------
+
+    callback_tx_ref = (
+        request.args.get(
+            "tx_ref",
+            ""
+        )
+        or ""
+    ).strip()
+
+
+    # ------------------------------------------------------
+    # Telegram backup
+    # ------------------------------------------------------
+
+    callback_telegram_id = (
+        request.args.get(
+            "telegram_id",
+            ""
+        )
+        or ""
+    ).strip()
+
+
+    callback_telegram_name = (
+        request.args.get(
+            "telegram_name",
+            ""
+        )
+        or ""
+    ).strip()
+
+
+    callback_telegram_username = (
+        request.args.get(
+            "telegram_username",
+            ""
+        )
+        or ""
+    ).strip()
+
+
+    # ======================================================
+    # TRANSACTION ID REQUIRED
+    # ======================================================
 
     if not transaction_id:
 
+        logger.error(
+            "Payment callback missing transaction_id."
+        )
+
         return (
-            "Missing transaction_id.",
+            """
+            <h3>
+            Payment verification could not start.
+            </h3>
+
+            <p>
+            Transaction ID is missing.
+            </p>
+            """,
             400
         )
 
-    # ------------------------------------------------------
-    # Verify with Flutterwave
-    # ------------------------------------------------------
+
+    # ======================================================
+    # VERIFY WITH FLUTTERWAVE
+    # ======================================================
 
     payment = verify_flutterwave_payment(
         transaction_id
     )
 
+
     if not payment:
 
+        logger.error(
+            "Flutterwave verification failed."
+        )
+
         return (
-            "Payment verification failed.",
+            """
+            <h3>
+            Payment verification failed.
+            </h3>
+
+            <p>
+            Please contact ALHIKAM support.
+            </p>
+            """,
             400
         )
 
-    if payment.get("status") != "successful":
+
+    # ======================================================
+    # PAYMENT STATUS
+    # ======================================================
+
+    payment_status = (
+        payment.get(
+            "status",
+            ""
+        )
+        or ""
+    ).lower().strip()
+
+
+    if payment_status != "successful":
+
+        logger.warning(
+            "Payment not successful: %s",
+            payment_status
+        )
 
         return (
-            "Payment was not successful.",
+            """
+            <h3>
+            Payment was not successful.
+            </h3>
+
+            <p>
+            Please try again.
+            </p>
+            """,
             400
         )
+
+
+    # ======================================================
+    # VERIFIED TX REF
+    # ======================================================
 
     tx_ref = (
         payment.get(
@@ -458,46 +781,90 @@ def payment_callback():
         or ""
     ).strip()
 
-    amount = float(
-        payment.get(
-            "amount",
-            0
-        )
-        or 0
-    )
 
-    currency = payment.get(
-        "currency",
-        ""
-    )
+    # Use callback tx_ref only as fallback
+    if not tx_ref:
 
-    # ------------------------------------------------------
-    # Security
-    # ------------------------------------------------------
+        tx_ref = callback_tx_ref
+
 
     if not tx_ref:
+
+        logger.error(
+            "Verified payment has no tx_ref."
+        )
 
         return (
             "Transaction reference missing.",
             400
         )
 
+
+    # ======================================================
+    # CURRENCY
+    # ======================================================
+
+    currency = (
+        payment.get(
+            "currency",
+            ""
+        )
+        or ""
+    ).upper().strip()
+
+
     if currency != "NGN":
+
+        logger.error(
+            "Invalid currency: %s",
+            currency
+        )
 
         return (
             "Invalid payment currency.",
             400
         )
 
-    # ------------------------------------------------------
-    # Original payment
-    # ------------------------------------------------------
+
+    # ======================================================
+    # AMOUNT
+    # ======================================================
+
+    try:
+
+        amount = float(
+            payment.get(
+                "amount",
+                0
+            )
+            or 0
+        )
+
+    except Exception:
+
+        amount = 0
+
+
+    if amount <= 0:
+
+        return (
+            "Invalid payment amount.",
+            400
+        )
+
+
+    # ======================================================
+    # GET ORIGINAL PAYMENT
+    #
+    # This is the payment we created before redirect.
+    # ======================================================
 
     original_payment = (
         get_payment_by_tx_ref(
             tx_ref
         )
     )
+
 
     if not original_payment:
 
@@ -507,15 +874,34 @@ def payment_callback():
         )
 
         return (
-            "Unknown payment reference.",
+            """
+            <h3>
+            Unknown payment reference.
+            </h3>
+
+            <p>
+            Please contact ALHIKAM support.
+            </p>
+            """,
             400
         )
 
+
+    # ======================================================
+    # CHECK ORIGINAL AMOUNT
+    # ======================================================
+
     expected_amount = float(
-        original_payment["amount"]
+        original_payment[
+            "amount"
+        ]
+        or 0
     )
 
-    if amount != expected_amount:
+
+    if abs(
+        amount - expected_amount
+    ) > 0.01:
 
         logger.error(
 
@@ -537,58 +923,139 @@ def payment_callback():
             400
         )
 
+
+    # ======================================================
+    # ORIGINAL PAYMENT PLAN
+    # ======================================================
+
     payment_plan = (
-        original_payment["payment_plan"]
+        original_payment[
+            "payment_plan"
+        ]
         or ""
     )
 
+
+    # ======================================================
+    # ORIGINAL REFERRAL
+    #
+    # Never trust referral code from callback.
+    # Use our saved payment record.
+    # ======================================================
+
     referral_code = (
-        original_payment["referral_code"]
+        original_payment[
+            "referral_code"
+        ]
         or ""
     ).strip()
 
+
     promoter_id = (
-        original_payment["promoter_id"]
+        original_payment[
+            "promoter_id"
+        ]
     )
 
+
     promoter_name = (
-        original_payment["promoter_name"]
+        original_payment[
+            "promoter_name"
+        ]
         or ""
     )
 
+
     commission_amount = float(
-        original_payment["commission"]
+        original_payment[
+            "commission"
+        ]
         or 0
     )
 
+
+    # ======================================================
+    # TELEGRAM DATA
+    #
+    # First use original database record.
+    # Callback values are fallback.
+    # ======================================================
+
     telegram_id = (
-        original_payment["telegram_id"]
+        original_payment[
+            "telegram_id"
+        ]
+        or callback_telegram_id
         or ""
     )
 
-    telegram_username = (
-        original_payment["telegram_username"]
-        or ""
-    )
 
     telegram_name = (
-        original_payment["telegram_name"]
+        original_payment[
+            "telegram_name"
+        ]
+        or callback_telegram_name
         or ""
     )
 
-    # ------------------------------------------------------
-    # Verify promoter
-    # ------------------------------------------------------
+
+    telegram_username = (
+        original_payment[
+            "telegram_username"
+        ]
+        or callback_telegram_username
+        or ""
+    )
+
+
+    telegram_id = str(
+        telegram_id
+    ).strip()
+
+
+    telegram_name = str(
+        telegram_name
+    ).strip()
+
+
+    telegram_username = str(
+        telegram_username
+    ).strip()
+
+
+    # ======================================================
+    # VERIFY PROMOTER AGAIN
+    # ======================================================
+
+    promoter = None
+
 
     if referral_code:
 
-        promoter = (
-            get_promoter_by_referral_code(
-                referral_code
+        try:
+
+            promoter = (
+                get_promoter_by_referral_code(
+                    referral_code
+                )
             )
-        )
+
+        except Exception as e:
+
+            logger.error(
+                "Promoter verification error: %s",
+                e
+            )
+
+            promoter = None
+
 
         if not promoter:
+
+            logger.warning(
+                "Referral promoter no longer valid: %s",
+                referral_code
+            )
 
             referral_code = ""
 
@@ -598,9 +1065,10 @@ def payment_callback():
 
             commission_amount = 0
 
-    # ------------------------------------------------------
-    # Save successful payment
-    # ------------------------------------------------------
+
+    # ======================================================
+    # SAVE SUCCESSFUL PAYMENT
+    # ======================================================
 
     try:
 
@@ -646,60 +1114,175 @@ def payment_callback():
 
     except Exception as e:
 
-        logger.error(
-            "Successful payment save error: %s",
-            e
+        logger.exception(
+            "Payment update error."
         )
 
         return (
-            "Payment verified but could not be saved.",
+            """
+            <h3>
+            Payment verified but could not be saved.
+            </h3>
+
+            <p>
+            Please contact ALHIKAM support.
+            </p>
+            """,
             500
         )
 
-    # ------------------------------------------------------
-    # Commission
-    # ------------------------------------------------------
+
+    # ======================================================
+    # UPDATE MEMORY
+    # ======================================================
+
+    PAYMENT_SESSIONS[tx_ref] = {
+
+        "tx_ref":
+            tx_ref,
+
+        "transaction_id":
+            transaction_id,
+
+        "amount":
+            amount,
+
+        "payment_plan":
+            payment_plan,
+
+        "payment_status":
+            "Successful",
+
+        "referral_code":
+            referral_code,
+
+        "promoter_id":
+            promoter_id,
+
+        "promoter_name":
+            promoter_name,
+
+        "commission":
+            commission_amount,
+
+        "telegram_id":
+            telegram_id,
+
+        "telegram_username":
+            telegram_username,
+
+        "telegram_name":
+            telegram_name,
+
+        "registration_completed":
+            0,
+
+    }
+
+
+    # ======================================================
+    # CREATE COMMISSION
+    # ======================================================
 
     if (
         promoter_id
         and
         commission_amount > 0
-        and
-        not commission_exists(tx_ref)
     ):
 
-        try:
+        if not commission_exists(
+            tx_ref
+        ):
 
-            create_commission(
+            try:
 
-                promoter_id=promoter_id,
+                result = create_commission(
 
-                student_id=None,
+                    promoter_id=
+                        promoter_id,
 
-                tx_ref=tx_ref,
+                    student_id=
+                        None,
 
-                payment_amount=amount,
+                    tx_ref=
+                        tx_ref,
 
-                commission_amount=
-                    commission_amount
+                    payment_amount=
+                        amount,
 
+                    commission_amount=
+                        commission_amount,
+
+                )
+
+
+                logger.info(
+
+                    "COMMISSION CREATED | "
+                    "PROMOTER=%s | "
+                    "AMOUNT=%s | "
+                    "COMMISSION=%s",
+
+                    promoter_name,
+
+                    amount,
+
+                    result[
+                        "commission_amount"
+                    ]
+
+                )
+
+
+            except Exception as e:
+
+                logger.exception(
+                    "Commission creation error."
+                )
+
+        else:
+
+            logger.info(
+                "Commission already exists for TX=%s",
+                tx_ref
             )
 
-        except Exception as e:
 
-            logger.error(
-                "Commission error: %s",
-                e
-            )
-
-    # ------------------------------------------------------
-    # Registration URL
-    # ------------------------------------------------------
+    # ======================================================
+    # REGISTRATION URL
+    # ======================================================
 
     registration_url = (
-        f"{APP_URL}/register"
+
+        f"{APP_URL}"
+        f"/register"
         f"?tx_ref={tx_ref}"
+
     )
+
+
+    logger.info(
+
+        "PAYMENT SUCCESSFUL | "
+        "TX=%s | "
+        "AMOUNT=%s | "
+        "TELEGRAM=%s | "
+        "REF=%s",
+
+        tx_ref,
+
+        amount,
+
+        telegram_id,
+
+        referral_code
+
+    )
+
+
+    # ======================================================
+    # REDIRECT TO REGISTRATION
+    # ======================================================
 
     return redirect(
         registration_url
@@ -707,7 +1290,7 @@ def payment_callback():
 
 
 # ==========================================================
-# HEALTH
+# HEALTH CHECK
 # ==========================================================
 
 @web_app.route(
@@ -721,7 +1304,7 @@ def health():
             "healthy",
 
         "app":
-            "ALHIKAM V2"
+            "ALHIKAM V2",
 
     })
 
@@ -739,10 +1322,12 @@ def start_telegram_bot():
     try:
 
         subprocess.Popen(
+
             [
-                "python",
+                sys.executable,
                 "bot.py"
             ]
+
         )
 
         print(
@@ -751,37 +1336,54 @@ def start_telegram_bot():
 
     except Exception as e:
 
-        logger.error(
-            "Telegram bot error: %s",
-            e
+        logger.exception(
+            "Telegram bot error."
         )
 
 
 # ==========================================================
-# SERVER
+# START SERVER
 # ==========================================================
 
 if __name__ == "__main__":
 
+    # ------------------------------------------------------
+    # Start Telegram bot
+    # ------------------------------------------------------
+
     threading.Thread(
 
-        target=start_telegram_bot,
+        target=
+            start_telegram_bot,
 
         daemon=True
 
     ).start()
 
+
+    # ------------------------------------------------------
+    # Railway PORT
+    # ------------------------------------------------------
+
     PORT = int(
+
         os.getenv(
             "PORT",
             "8080"
         )
+
     )
+
+
+    print(
+        f"ALHIKAM WEB SERVER STARTING ON PORT {PORT}"
+    )
+
 
     web_app.run(
 
         host="0.0.0.0",
 
-        port=PORT
+        port=PORT,
 
     )
