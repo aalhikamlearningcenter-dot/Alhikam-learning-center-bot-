@@ -26,14 +26,17 @@ def get_connection():
 
 
 # ==========================================================
-# INITIALIZE
+# INITIALIZE DATABASE
 # ==========================================================
 
 def initialize_database():
 
     conn = get_connection()
-
     cursor = conn.cursor()
+
+    # ------------------------------------------------------
+    # STUDENTS
+    # ------------------------------------------------------
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS students(
@@ -75,6 +78,10 @@ def initialize_database():
     )
     """)
 
+    # ------------------------------------------------------
+    # PROMOTERS
+    # ------------------------------------------------------
+
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS promoters(
 
@@ -105,6 +112,10 @@ def initialize_database():
     )
     """)
 
+    # ------------------------------------------------------
+    # PAYMENTS
+    # ------------------------------------------------------
+
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS payments(
 
@@ -134,10 +145,16 @@ def initialize_database():
 
         telegram_name TEXT,
 
+        registration_completed INTEGER DEFAULT 0,
+
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 
     )
     """)
+
+    # ------------------------------------------------------
+    # COMMISSIONS
+    # ------------------------------------------------------
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS commissions(
@@ -169,6 +186,10 @@ def initialize_database():
     )
     """)
 
+    # ------------------------------------------------------
+    # WITHDRAWALS
+    # ------------------------------------------------------
+
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS withdrawals(
 
@@ -195,7 +216,7 @@ def initialize_database():
     """)
 
     # ------------------------------------------------------
-    # Indexes
+    # INDEXES
     # ------------------------------------------------------
 
     cursor.execute("""
@@ -235,7 +256,6 @@ def initialize_database():
     """)
 
     conn.commit()
-
     conn.close()
 
 
@@ -246,7 +266,6 @@ def initialize_database():
 def add_student(data):
 
     conn = get_connection()
-
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -286,15 +305,34 @@ def add_student(data):
 
         data.get("course", ""),
 
-        str(data.get("telegram_id", "")),
+        str(
+            data.get(
+                "telegram_id",
+                ""
+            )
+        ),
 
-        data.get("telegram_username", ""),
+        data.get(
+            "telegram_username",
+            ""
+        ),
 
-        data.get("telegram_name", ""),
+        data.get(
+            "telegram_name",
+            ""
+        ),
 
-        data.get("payment_plan", ""),
+        data.get(
+            "payment_plan",
+            ""
+        ),
 
-        float(data.get("amount_paid", 0) or 0),
+        float(
+            data.get(
+                "amount_paid",
+                0
+            ) or 0
+        ),
 
         data.get(
             "payment_status",
@@ -308,29 +346,37 @@ def add_student(data):
             )
         ),
 
-        data.get("referral_code", ""),
+        data.get(
+            "referral_code",
+            ""
+        ),
 
-        data.get("promoter_id")
+        data.get(
+            "promoter_id"
+        )
 
     ))
 
     student_id = cursor.lastrowid
 
     conn.commit()
-
     conn.close()
 
     return student_id
 
 
 # ==========================================================
-# GET STUDENT
+# GET STUDENT BY TELEGRAM ID
 # ==========================================================
 
-def get_student_by_telegram_id(telegram_id):
+def get_student_by_telegram_id(
+    telegram_id
+):
+
+    if not telegram_id:
+        return None
 
     conn = get_connection()
-
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -351,16 +397,48 @@ def get_student_by_telegram_id(telegram_id):
 
 
 # ==========================================================
-# PROMOTER BY REFERRAL
+# GET STUDENT BY TX REF
 # ==========================================================
 
-def get_promoter_by_referral_code(referral_code):
+def get_student_by_tx_ref(
+    tx_ref
+):
+
+    if not tx_ref:
+        return None
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    SELECT *
+    FROM students
+    WHERE tx_ref=?
+    ORDER BY id DESC
+    LIMIT 1
+    """, (
+        tx_ref,
+    ))
+
+    result = cursor.fetchone()
+
+    conn.close()
+
+    return result
+
+
+# ==========================================================
+# GET PROMOTER BY REFERRAL CODE
+# ==========================================================
+
+def get_promoter_by_referral_code(
+    referral_code
+):
 
     if not referral_code:
         return None
 
     conn = get_connection()
-
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -393,7 +471,6 @@ def add_promoter(
 ):
 
     conn = get_connection()
-
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -412,13 +489,9 @@ def add_promoter(
     """, (
 
         full_name,
-
         phone,
-
         email,
-
-        referral_code,
-
+        referral_code.strip(),
         commission_rate
 
     ))
@@ -426,20 +499,23 @@ def add_promoter(
     promoter_id = cursor.lastrowid
 
     conn.commit()
-
     conn.close()
 
     return promoter_id
 
 
 # ==========================================================
-# PROMOTER BY ID
+# GET PROMOTER BY ID
 # ==========================================================
 
-def get_promoter_by_id(promoter_id):
+def get_promoter_by_id(
+    promoter_id
+):
+
+    if not promoter_id:
+        return None
 
     conn = get_connection()
-
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -460,19 +536,28 @@ def get_promoter_by_id(promoter_id):
 
 # ==========================================================
 # SAVE PAYMENT
+#
+# INSERT OR REPLACE is used so that the same tx_ref
+# can first be saved as Pending and later as Successful.
 # ==========================================================
 
 def save_payment(data):
 
-    tx_ref = data.get("tx_ref", "")
+    tx_ref = (
+        data.get(
+            "tx_ref",
+            ""
+        )
+        or ""
+    ).strip()
 
     if not tx_ref:
+
         raise ValueError(
             "tx_ref is required."
         )
 
     conn = get_connection()
-
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -489,35 +574,58 @@ def save_payment(data):
         commission,
         telegram_id,
         telegram_username,
-        telegram_name
+        telegram_name,
+        registration_completed
 
     )
 
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
 
     """, (
 
         tx_ref,
 
-        data.get("transaction_id", ""),
+        data.get(
+            "transaction_id",
+            ""
+        ),
 
-        data.get("payment_plan", ""),
+        data.get(
+            "payment_plan",
+            ""
+        ),
 
-        float(data.get("amount", 0) or 0),
+        float(
+            data.get(
+                "amount",
+                0
+            ) or 0
+        ),
 
         data.get(
             "payment_status",
             "Pending"
         ),
 
-        data.get("referral_code", ""),
+        data.get(
+            "referral_code",
+            ""
+        ),
 
-        data.get("promoter_id"),
+        data.get(
+            "promoter_id"
+        ),
 
-        data.get("promoter_name", ""),
+        data.get(
+            "promoter_name",
+            ""
+        ),
 
         float(
-            data.get("commission", 0) or 0
+            data.get(
+                "commission",
+                0
+            ) or 0
         ),
 
         str(
@@ -535,28 +643,35 @@ def save_payment(data):
         data.get(
             "telegram_name",
             ""
+        ),
+
+        int(
+            data.get(
+                "registration_completed",
+                0
+            )
         )
 
     ))
 
     conn.commit()
-
     conn.close()
 
     return True
 
 
 # ==========================================================
-# GET PAYMENT
+# GET PAYMENT BY TX REF
 # ==========================================================
 
-def get_payment_by_tx_ref(tx_ref):
+def get_payment_by_tx_ref(
+    tx_ref
+):
 
     if not tx_ref:
         return None
 
     conn = get_connection()
-
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -586,7 +701,6 @@ def update_payment_status(
 ):
 
     conn = get_connection()
-
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -612,21 +726,85 @@ def update_payment_status(
     ))
 
     conn.commit()
-
     conn.close()
+
+
+# ==========================================================
+# MARK PAYMENT REGISTRATION COMPLETED
+# ==========================================================
+
+def mark_payment_registration_completed(
+    tx_ref
+):
+
+    if not tx_ref:
+        return False
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    UPDATE payments
+
+    SET registration_completed=1
+
+    WHERE tx_ref=?
+
+    """, (
+        tx_ref,
+    ))
+
+    changed = cursor.rowcount > 0
+
+    conn.commit()
+    conn.close()
+
+    return changed
+
+
+# ==========================================================
+# CHECK IF PAYMENT ALREADY REGISTERED
+# ==========================================================
+
+def payment_registration_completed(
+    tx_ref
+):
+
+    payment = get_payment_by_tx_ref(
+        tx_ref
+    )
+
+    if not payment:
+        return False
+
+    try:
+
+        return (
+            int(
+                payment[
+                    "registration_completed"
+                ]
+            )
+            == 1
+        )
+
+    except Exception:
+
+        return False
 
 
 # ==========================================================
 # COMMISSION EXISTS
 # ==========================================================
 
-def commission_exists(tx_ref):
+def commission_exists(
+    tx_ref
+):
 
     if not tx_ref:
         return False
 
     conn = get_connection()
-
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -649,13 +827,14 @@ def commission_exists(tx_ref):
 # GET COMMISSION
 # ==========================================================
 
-def get_commission_by_tx_ref(tx_ref):
+def get_commission_by_tx_ref(
+    tx_ref
+):
 
     if not tx_ref:
         return None
 
     conn = get_connection()
-
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -687,6 +866,7 @@ def create_commission(
 ):
 
     if not promoter_id:
+
         raise ValueError(
             "Promoter ID is required."
         )
@@ -700,14 +880,23 @@ def create_commission(
     )
 
     if commission_amount <= 0:
+
         raise ValueError(
             "Commission amount must be greater than zero."
         )
 
-    if tx_ref and commission_exists(tx_ref):
+    # ------------------------------------------------------
+    # Prevent duplicate commission
+    # ------------------------------------------------------
 
-        existing = get_commission_by_tx_ref(
-            tx_ref
+    if tx_ref and commission_exists(
+        tx_ref
+    ):
+
+        existing = (
+            get_commission_by_tx_ref(
+                tx_ref
+            )
         )
 
         return {
@@ -717,22 +906,27 @@ def create_commission(
 
             "commission_amount":
                 float(
-                    existing["commission_amount"]
+                    existing[
+                        "commission_amount"
+                    ]
                 )
 
         }
+
+    # ------------------------------------------------------
+    # Calculate actual commission rate
+    # ------------------------------------------------------
 
     rate = 0
 
     if payment_amount > 0:
 
         rate = (
-            commission_amount /
-            payment_amount
+            commission_amount
+            / payment_amount
         ) * 100
 
     conn = get_connection()
-
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -770,6 +964,10 @@ def create_commission(
 
     commission_id = cursor.lastrowid
 
+    # ------------------------------------------------------
+    # Update promoter balance
+    # ------------------------------------------------------
+
     cursor.execute("""
     UPDATE promoters
 
@@ -797,7 +995,6 @@ def create_commission(
     ))
 
     conn.commit()
-
     conn.close()
 
     return {
@@ -815,10 +1012,15 @@ def create_commission(
 # UPDATE STUDENT
 # ==========================================================
 
-def update_student(payment_token, data):
+def update_student(
+    payment_token,
+    data
+):
+
+    if not payment_token:
+        return False
 
     conn = get_connection()
-
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -845,23 +1047,48 @@ def update_student(payment_token, data):
 
     """, (
 
-        data.get("full_name", ""),
-
-        data.get("phone", ""),
-
-        data.get("email", ""),
-
-        data.get("course", ""),
-
-        str(data.get("telegram_id", "")),
-
-        data.get("telegram_username", ""),
-
-        data.get("telegram_name", ""),
+        data.get(
+            "full_name",
+            ""
+        ),
 
         data.get(
-            "registration_completed",
-            0
+            "phone",
+            ""
+        ),
+
+        data.get(
+            "email",
+            ""
+        ),
+
+        data.get(
+            "course",
+            ""
+        ),
+
+        str(
+            data.get(
+                "telegram_id",
+                ""
+            )
+        ),
+
+        data.get(
+            "telegram_username",
+            ""
+        ),
+
+        data.get(
+            "telegram_name",
+            ""
+        ),
+
+        int(
+            data.get(
+                "registration_completed",
+                0
+            )
         ),
 
         data.get(
@@ -873,21 +1100,43 @@ def update_student(payment_token, data):
             data.get(
                 "amount_paid",
                 0
-            ) or 0
+            )
+            or 0
         ),
 
-        data.get("referral_code", ""),
+        data.get(
+            "referral_code",
+            ""
+        ),
 
-        data.get("promoter_id"),
+        data.get(
+            "promoter_id"
+        ),
 
-        data.get("payment_plan", ""),
+        data.get(
+            "payment_plan",
+            ""
+        ),
 
-        data.get("tx_ref", ""),
+        data.get(
+            "tx_ref",
+            ""
+        ),
 
         payment_token
 
     ))
 
-    conn.commit()
+    changed = cursor.rowcount > 0
 
+    conn.commit()
     conn.close()
+
+    return changed
+
+
+# ==========================================================
+# INITIALIZE WHEN IMPORTED
+# ==========================================================
+
+initialize_database()
