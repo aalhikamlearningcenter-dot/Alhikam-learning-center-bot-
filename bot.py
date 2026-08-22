@@ -4,10 +4,13 @@
 # ==========================================================
 
 import os
-import asyncio
 from urllib.parse import urlencode
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+)
 
 from telegram.ext import (
     Application,
@@ -35,7 +38,7 @@ BOT_TOKEN = os.getenv(
 APP_URL = os.getenv(
     "APP_URL",
     "https://precious-trust-production-956b.up.railway.app"
-)
+).rstrip("/")
 
 
 # ==========================================================
@@ -50,7 +53,13 @@ async def start(
     user = update.effective_user
 
     if not user:
+
         return
+
+
+    # ======================================================
+    # TELEGRAM INFORMATION
+    # ======================================================
 
     telegram_id = str(
         user.id
@@ -59,12 +68,25 @@ async def start(
     telegram_name = (
         user.first_name
         or ""
-    )
+    ).strip()
 
     telegram_username = (
         user.username
         or ""
+    ).strip()
+
+
+    # ======================================================
+    # LOG
+    # ======================================================
+
+    print(
+        "TELEGRAM /START | "
+        f"ID={telegram_id} | "
+        f"NAME={telegram_name} | "
+        f"USERNAME={telegram_username}"
     )
+
 
     # ======================================================
     # CHECK EXISTING STUDENT
@@ -74,7 +96,7 @@ async def start(
 
         student = (
             get_student_by_telegram_id(
-                telegram_id
+                user.id
             )
         )
 
@@ -86,6 +108,7 @@ async def start(
         )
 
         student = None
+
 
     # ======================================================
     # ALREADY REGISTERED
@@ -109,15 +132,34 @@ async def start(
             "🔗 I will send your invitation links again now."
         )
 
+
+        # --------------------------------------------------
+        # SEND LINKS AGAIN
+        # --------------------------------------------------
+
         try:
 
-            await send_student_links(
-                telegram_id,
+            faculty = (
                 student.get(
+                    "faculty",
+                    ""
+                )
+                or student.get(
                     "course",
                     ""
                 )
+                or ""
             )
+
+
+            await send_student_links(
+
+                telegram_id,
+
+                faculty
+
+            )
+
 
         except Exception as e:
 
@@ -126,56 +168,93 @@ async def start(
                 e
             )
 
+
             await update.message.reply_text(
-                "⚠️ I could not create your links right now. "
+
+                "⚠️ I could not create your invitation "
+                "links right now.\n\n"
                 "Please contact ALHIKAM support."
             )
 
+
         return
+
 
     # ======================================================
     # PAYMENT URL
     # ======================================================
 
-    payment_params = urlencode({
-    "telegram_id": telegram_id,
-    "telegram_name": telegram_name,
-    "telegram_username": telegram_username,
-})
+    payment_params = {
 
-payment_url = (
-    f"{APP_URL}/payment?{payment_params}"
-)
+        "telegram_id":
+            telegram_id,
 
-    
+        "telegram_name":
+            telegram_name,
+
+        "telegram_username":
+            telegram_username,
+
+    }
+
+
+    payment_url = (
+
+        f"{APP_URL}/payment?"
+        + urlencode(
+            payment_params
+        )
+
+    )
+
+
+    # ======================================================
+    # BUTTON
+    # ======================================================
 
     keyboard = [
 
         [
 
             InlineKeyboardButton(
+
                 "💳 Start Registration",
+
                 url=payment_url
+
             )
 
         ]
 
     ]
 
+
     reply_markup = InlineKeyboardMarkup(
         keyboard
     )
 
+
+    # ======================================================
+    # SEND PAYMENT MESSAGE
+    # ======================================================
+
     await update.message.reply_text(
 
         f"🎓 Welcome to ALHIKAM Learning Center\n\n"
+
         f"Hello {telegram_name},\n\n"
-        "You are about to register as an ALHIKAM student.\n\n"
-        "Your Telegram account will automatically be "
-        "connected to your registration.\n\n"
-        "Tap the button below to continue.",
+
+        "You are about to register as an "
+        "ALHIKAM student.\n\n"
+
+        "🔗 Your Telegram account will automatically "
+        "be connected to your registration.\n\n"
+
+        "💳 Tap the button below to choose your "
+        "payment plan and continue registration.",
 
         reply_markup=reply_markup
+
     )
 
 
@@ -191,31 +270,50 @@ if not BOT_TOKEN:
 
 
 application = (
+
     Application
     .builder()
     .token(BOT_TOKEN)
     .build()
-)
 
-
-application.add_handler(
-    CommandHandler(
-        "start",
-        start
-    )
 )
 
 
 # ==========================================================
-# RUN
+# COMMAND HANDLER
+# ==========================================================
+
+application.add_handler(
+
+    CommandHandler(
+        "start",
+        start
+    )
+
+)
+
+
+# ==========================================================
+# RUN BOT
 # ==========================================================
 
 if __name__ == "__main__":
 
     print(
-        "ALHIKAM BOT STARTED..."
+        "=================================================="
     )
 
+    print(
+        "ALHIKAM TELEGRAM BOT STARTING..."
+    )
+
+    print(
+        "=================================================="
+    )
+
+
     application.run_polling(
+
         drop_pending_updates=True
+
     )
