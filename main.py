@@ -139,6 +139,13 @@ def payment_page():
         or ""
     ).strip()
 
+logger.info(
+    "PAYMENT PAGE | TELEGRAM_ID=%s | NAME=%s | USERNAME=%s",
+    telegram_id,
+    telegram_name,
+    telegram_username
+)
+
 
     telegram_name = (
         request.args.get(
