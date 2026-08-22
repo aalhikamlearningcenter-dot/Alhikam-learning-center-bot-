@@ -1,7 +1,7 @@
 # ==========================================================
 # ALHIKAM LEARNING CENTER V2
 # registration.py
-# PAYMENT -> REGISTRATION -> TELEGRAM
+# PAYMENT -> REGISTRATION -> TELEGRAM BOT
 # ==========================================================
 
 from flask import (
@@ -10,6 +10,7 @@ from flask import (
 )
 
 import asyncio
+from urllib.parse import quote
 
 from telegram_service import (
     send_student_links,
@@ -25,6 +26,13 @@ from database import (
     get_payment_by_tx_ref,
     mark_payment_registration_completed,
 )
+
+
+# ==========================================================
+# CONFIG
+# ==========================================================
+
+BOT_USERNAME = "Alhikamcenterbot"
 
 
 # ==========================================================
@@ -132,7 +140,6 @@ button{
 🎓 ALHIKAM Registration
 </h2>
 
-
 <div class="payment">
 
 <b>Payment Information</b>
@@ -176,10 +183,13 @@ Your Telegram account has been connected.
 
 {% else %}
 
-⚠️ Telegram is not connected.
+⚠️ Telegram has not been connected yet.
 
-Please contact ALHIKAM support after registration
-to receive your Telegram links.
+<br><br>
+
+After completing registration,
+tap the Telegram button on the success page
+to connect with ALHIKAM Bot.
 
 {% endif %}
 
@@ -228,13 +238,11 @@ ALHIKAM student record.
 
 <form method="POST">
 
-
 <input
 type="hidden"
 name="tx_ref"
 value="{{ tx_ref }}"
 >
-
 
 <input
 type="hidden"
@@ -242,13 +250,11 @@ name="telegram_id"
 value="{{ telegram_id }}"
 >
 
-
 <input
 type="hidden"
 name="telegram_name"
 value="{{ telegram_name }}"
 >
-
 
 <input
 type="hidden"
@@ -350,6 +356,18 @@ def success_page(
     telegram_message
 ):
 
+    # ------------------------------------------------------
+    # CREATE TELEGRAM DEEP LINK
+    # ------------------------------------------------------
+
+    bot_url = (
+        f"https://t.me/"
+        f"{BOT_USERNAME}"
+        f"?start="
+        f"{quote(tx_ref, safe='')}"
+    )
+
+
     return f"""
 
 <!DOCTYPE html>
@@ -393,6 +411,26 @@ h2{{
     background:#e8f7ef;
     padding:15px;
     border-radius:10px;
+}}
+
+.telegram-button{{
+    display:block;
+    width:100%;
+    box-sizing:border-box;
+    padding:16px;
+    margin-top:25px;
+    background:#229ED9;
+    color:white;
+    text-decoration:none;
+    border-radius:10px;
+    font-size:18px;
+    font-weight:bold;
+}}
+
+.telegram-info{{
+    margin-top:12px;
+    color:#555;
+    font-size:14px;
 }}
 
 </style>
@@ -444,6 +482,28 @@ Your ALHIKAM registration has been completed.
 
 
 {telegram_message}
+
+
+<!-- ================================================== -->
+<!-- TELEGRAM BOT BUTTON -->
+<!-- ================================================== -->
+
+<a
+href="{bot_url}"
+class="telegram-button"
+>
+
+🤖 START ALHIKAM BOT
+
+</a>
+
+
+<p class="telegram-info">
+
+Tap the button above to open Telegram
+and receive your ALHIKAM invitation links.
+
+</p>
 
 
 <p
@@ -512,7 +572,6 @@ def registration_page(
     payment = None
 
 
-    # First try memory
     if payment_sessions:
 
         payment = (
@@ -522,7 +581,6 @@ def registration_page(
         )
 
 
-    # Then database
     if not payment:
 
         try:
@@ -1219,7 +1277,8 @@ def registration_page(
 
         <br><br>
 
-        Please contact ALHIKAM support.
+        You can use the Telegram button below
+        to continue.
 
         </p>
 
@@ -1234,12 +1293,14 @@ def registration_page(
         font-weight:bold;
         ">
 
-        ⚠️ Telegram was not connected.
+        📱 Telegram is not connected yet.
 
         <br><br>
 
-        Please contact ALHIKAM support
-        to receive your invitation links.
+        Tap the
+        <b>START ALHIKAM BOT</b>
+        button below to connect your Telegram
+        and receive your invitation links.
 
         </p>
 
