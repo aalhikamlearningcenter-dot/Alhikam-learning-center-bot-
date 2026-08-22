@@ -10,6 +10,8 @@ import threading
 import subprocess
 import sys
 
+from urllib.parse import urlencode
+
 from flask import (
     Flask,
     request,
@@ -62,9 +64,7 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s"
 )
 
-logger = logging.getLogger(
-    "ALHIKAM"
-)
+logger = logging.getLogger("ALHIKAM")
 
 
 # ==========================================================
@@ -97,9 +97,6 @@ COMMISSION_BY_AMOUNT = {
 
 # ==========================================================
 # PAYMENT MEMORY
-#
-# Database is the main storage.
-# Memory is only a temporary cache.
 # ==========================================================
 
 PAYMENT_SESSIONS = {}
@@ -112,9 +109,7 @@ PAYMENT_SESSIONS = {}
 @web_app.route("/")
 def home():
 
-    return redirect(
-        "/payment"
-    )
+    return redirect("/payment")
 
 
 # ==========================================================
@@ -139,14 +134,6 @@ def payment_page():
         or ""
     ).strip()
 
-logger.info(
-    "PAYMENT PAGE | TELEGRAM_ID=%s | NAME=%s | USERNAME=%s",
-    telegram_id,
-    telegram_name,
-    telegram_username
-)
-
-
     telegram_name = (
         request.args.get(
             "telegram_name",
@@ -155,7 +142,6 @@ logger.info(
         or ""
     ).strip()
 
-
     telegram_username = (
         request.args.get(
             "telegram_username",
@@ -163,6 +149,18 @@ logger.info(
         )
         or ""
     ).strip()
+
+
+    # ------------------------------------------------------
+    # LOG TELEGRAM DATA
+    # ------------------------------------------------------
+
+    logger.info(
+        "PAYMENT PAGE | TELEGRAM_ID=%s | NAME=%s | USERNAME=%s",
+        telegram_id,
+        telegram_name,
+        telegram_username
+    )
 
 
     # ------------------------------------------------------
@@ -178,7 +176,6 @@ logger.info(
     ).strip()
 
 
-    # Also accept referral_code
     if not referral_code:
 
         referral_code = (
@@ -225,24 +222,20 @@ logger.info(
 
 
     # ------------------------------------------------------
-    # Render
+    # Render payment page
     # ------------------------------------------------------
 
     return render_template_string(
 
         PAYMENT_HTML,
 
-        telegram_id=
-            telegram_id,
+        telegram_id=telegram_id,
 
-        telegram_name=
-            telegram_name,
+        telegram_name=telegram_name,
 
-        telegram_username=
-            telegram_username,
+        telegram_username=telegram_username,
 
-        referral_code=
-            referral_code,
+        referral_code=referral_code,
 
     )
 
@@ -306,6 +299,20 @@ def create_payment():
     ).strip()
 
 
+    # ------------------------------------------------------
+    # Log payment request
+    # ------------------------------------------------------
+
+    logger.info(
+        "CREATE PAYMENT | PLAN=%s | TELEGRAM_ID=%s | NAME=%s | USERNAME=%s | REF=%s",
+        plan_id,
+        telegram_id,
+        telegram_name,
+        telegram_username,
+        referral_code
+    )
+
+
     # ======================================================
     # VALIDATE PLAN
     # ======================================================
@@ -366,23 +373,17 @@ def create_payment():
 
     payment = create_flutterwave_payment(
 
-        plan_id=
-            plan_id,
+        plan_id=plan_id,
 
-        app_url=
-            APP_URL,
+        app_url=APP_URL,
 
-        referral_code=
-            referral_code,
+        referral_code=referral_code,
 
-        telegram_id=
-            telegram_id,
+        telegram_id=telegram_id,
 
-        telegram_name=
-            telegram_name,
+        telegram_name=telegram_name,
 
-        telegram_username=
-            telegram_username,
+        telegram_username=telegram_username,
 
     )
 
@@ -466,50 +467,35 @@ def create_payment():
 
     # ======================================================
     # SAVE PENDING PAYMENT
-    #
-    # VERY IMPORTANT:
-    # We save before sending user to Flutterwave.
     # ======================================================
 
     try:
 
         save_payment({
 
-            "tx_ref":
-                tx_ref,
+            "tx_ref": tx_ref,
 
-            "transaction_id":
-                "",
+            "transaction_id": "",
 
-            "payment_plan":
-                payment_plan,
+            "payment_plan": payment_plan,
 
-            "amount":
-                amount,
+            "amount": amount,
 
-            "payment_status":
-                "Pending",
+            "payment_status": "Pending",
 
-            "referral_code":
-                referral_code,
+            "referral_code": referral_code,
 
-            "promoter_id":
-                promoter_id,
+            "promoter_id": promoter_id,
 
-            "promoter_name":
-                promoter_name,
+            "promoter_name": promoter_name,
 
-            "commission":
-                commission_amount,
+            "commission": commission_amount,
 
-            "telegram_id":
-                telegram_id,
+            "telegram_id": telegram_id,
 
-            "telegram_username":
-                telegram_username,
+            "telegram_username": telegram_username,
 
-            "telegram_name":
-                telegram_name,
+            "telegram_name": telegram_name,
 
         })
 
@@ -531,67 +517,42 @@ def create_payment():
 
     PAYMENT_SESSIONS[tx_ref] = {
 
-        "tx_ref":
-            tx_ref,
+        "tx_ref": tx_ref,
 
-        "transaction_id":
-            "",
+        "transaction_id": "",
 
-        "amount":
-            amount,
+        "amount": amount,
 
-        "payment_plan":
-            payment_plan,
+        "payment_plan": payment_plan,
 
-        "payment_status":
-            "Pending",
+        "payment_status": "Pending",
 
-        "referral_code":
-            referral_code,
+        "referral_code": referral_code,
 
-        "promoter_id":
-            promoter_id,
+        "promoter_id": promoter_id,
 
-        "promoter_name":
-            promoter_name,
+        "promoter_name": promoter_name,
 
-        "commission":
-            commission_amount,
+        "commission": commission_amount,
 
-        "telegram_id":
-            telegram_id,
+        "telegram_id": telegram_id,
 
-        "telegram_username":
-            telegram_username,
+        "telegram_username": telegram_username,
 
-        "telegram_name":
-            telegram_name,
+        "telegram_name": telegram_name,
 
-        "registration_completed":
-            0,
+        "registration_completed": 0,
 
     }
 
 
     logger.info(
-
-        "PAYMENT CREATED | "
-        "TX=%s | "
-        "PLAN=%s | "
-        "AMOUNT=%s | "
-        "REF=%s | "
-        "TELEGRAM=%s",
-
+        "PAYMENT CREATED | TX=%s | PLAN=%s | AMOUNT=%s | REF=%s | TELEGRAM=%s",
         tx_ref,
-
         payment_plan,
-
         amount,
-
         referral_code,
-
         telegram_id
-
     )
 
 
@@ -600,9 +561,7 @@ def create_payment():
     # ======================================================
 
     return redirect(
-        payment[
-            "payment_link"
-        ]
+        payment["payment_link"]
     )
 
 
@@ -617,8 +576,7 @@ def create_payment():
 def register():
 
     return registration_page(
-        payment_sessions=
-            PAYMENT_SESSIONS
+        payment_sessions=PAYMENT_SESSIONS
     )
 
 
@@ -687,6 +645,14 @@ def payment_callback():
         )
         or ""
     ).strip()
+
+
+    logger.info(
+        "PAYMENT CALLBACK | TRANSACTION_ID=%s | TX_REF=%s | TELEGRAM_ID=%s",
+        transaction_id,
+        callback_tx_ref,
+        callback_telegram_id
+    )
 
 
     # ======================================================
@@ -789,7 +755,6 @@ def payment_callback():
     ).strip()
 
 
-    # Use callback tx_ref only as fallback
     if not tx_ref:
 
         tx_ref = callback_tx_ref
@@ -862,8 +827,6 @@ def payment_callback():
 
     # ======================================================
     # GET ORIGINAL PAYMENT
-    #
-    # This is the payment we created before redirect.
     # ======================================================
 
     original_payment = (
@@ -899,9 +862,7 @@ def payment_callback():
     # ======================================================
 
     expected_amount = float(
-        original_payment[
-            "amount"
-        ]
+        original_payment["amount"]
         or 0
     )
 
@@ -911,18 +872,10 @@ def payment_callback():
     ) > 0.01:
 
         logger.error(
-
-            "AMOUNT MISMATCH | "
-            "TX=%s | "
-            "EXPECTED=%s | "
-            "RECEIVED=%s",
-
+            "AMOUNT MISMATCH | TX=%s | EXPECTED=%s | RECEIVED=%s",
             tx_ref,
-
             expected_amount,
-
             amount
-
         )
 
         return (
@@ -936,47 +889,34 @@ def payment_callback():
     # ======================================================
 
     payment_plan = (
-        original_payment[
-            "payment_plan"
-        ]
+        original_payment["payment_plan"]
         or ""
     )
 
 
     # ======================================================
     # ORIGINAL REFERRAL
-    #
-    # Never trust referral code from callback.
-    # Use our saved payment record.
     # ======================================================
 
     referral_code = (
-        original_payment[
-            "referral_code"
-        ]
+        original_payment["referral_code"]
         or ""
     ).strip()
 
 
     promoter_id = (
-        original_payment[
-            "promoter_id"
-        ]
+        original_payment["promoter_id"]
     )
 
 
     promoter_name = (
-        original_payment[
-            "promoter_name"
-        ]
+        original_payment["promoter_name"]
         or ""
     )
 
 
     commission_amount = float(
-        original_payment[
-            "commission"
-        ]
+        original_payment["commission"]
         or 0
     )
 
@@ -984,32 +924,27 @@ def payment_callback():
     # ======================================================
     # TELEGRAM DATA
     #
-    # First use original database record.
-    # Callback values are fallback.
+    # Priority:
+    # 1. Original payment database
+    # 2. Callback values
     # ======================================================
 
     telegram_id = (
-        original_payment[
-            "telegram_id"
-        ]
+        original_payment["telegram_id"]
         or callback_telegram_id
         or ""
     )
 
 
     telegram_name = (
-        original_payment[
-            "telegram_name"
-        ]
+        original_payment["telegram_name"]
         or callback_telegram_name
         or ""
     )
 
 
     telegram_username = (
-        original_payment[
-            "telegram_username"
-        ]
+        original_payment["telegram_username"]
         or callback_telegram_username
         or ""
     )
@@ -1028,6 +963,14 @@ def payment_callback():
     telegram_username = str(
         telegram_username
     ).strip()
+
+
+    logger.info(
+        "VERIFIED PAYMENT TELEGRAM | ID=%s | NAME=%s | USERNAME=%s",
+        telegram_id,
+        telegram_name,
+        telegram_username
+    )
 
 
     # ======================================================
@@ -1081,41 +1024,29 @@ def payment_callback():
 
         save_payment({
 
-            "tx_ref":
-                tx_ref,
+            "tx_ref": tx_ref,
 
-            "transaction_id":
-                transaction_id,
+            "transaction_id": transaction_id,
 
-            "payment_plan":
-                payment_plan,
+            "payment_plan": payment_plan,
 
-            "amount":
-                amount,
+            "amount": amount,
 
-            "payment_status":
-                "Successful",
+            "payment_status": "Successful",
 
-            "referral_code":
-                referral_code,
+            "referral_code": referral_code,
 
-            "promoter_id":
-                promoter_id,
+            "promoter_id": promoter_id,
 
-            "promoter_name":
-                promoter_name,
+            "promoter_name": promoter_name,
 
-            "commission":
-                commission_amount,
+            "commission": commission_amount,
 
-            "telegram_id":
-                telegram_id,
+            "telegram_id": telegram_id,
 
-            "telegram_username":
-                telegram_username,
+            "telegram_username": telegram_username,
 
-            "telegram_name":
-                telegram_name,
+            "telegram_name": telegram_name,
 
         })
 
@@ -1145,44 +1076,31 @@ def payment_callback():
 
     PAYMENT_SESSIONS[tx_ref] = {
 
-        "tx_ref":
-            tx_ref,
+        "tx_ref": tx_ref,
 
-        "transaction_id":
-            transaction_id,
+        "transaction_id": transaction_id,
 
-        "amount":
-            amount,
+        "amount": amount,
 
-        "payment_plan":
-            payment_plan,
+        "payment_plan": payment_plan,
 
-        "payment_status":
-            "Successful",
+        "payment_status": "Successful",
 
-        "referral_code":
-            referral_code,
+        "referral_code": referral_code,
 
-        "promoter_id":
-            promoter_id,
+        "promoter_id": promoter_id,
 
-        "promoter_name":
-            promoter_name,
+        "promoter_name": promoter_name,
 
-        "commission":
-            commission_amount,
+        "commission": commission_amount,
 
-        "telegram_id":
-            telegram_id,
+        "telegram_id": telegram_id,
 
-        "telegram_username":
-            telegram_username,
+        "telegram_username": telegram_username,
 
-        "telegram_name":
-            telegram_name,
+        "telegram_name": telegram_name,
 
-        "registration_completed":
-            0,
+        "registration_completed": 0,
 
     }
 
@@ -1193,8 +1111,7 @@ def payment_callback():
 
     if (
         promoter_id
-        and
-        commission_amount > 0
+        and commission_amount > 0
     ):
 
         if not commission_exists(
@@ -1205,43 +1122,28 @@ def payment_callback():
 
                 result = create_commission(
 
-                    promoter_id=
-                        promoter_id,
+                    promoter_id=promoter_id,
 
-                    student_id=
-                        None,
+                    student_id=None,
 
-                    tx_ref=
-                        tx_ref,
+                    tx_ref=tx_ref,
 
-                    payment_amount=
-                        amount,
+                    payment_amount=amount,
 
-                    commission_amount=
-                        commission_amount,
+                    commission_amount=commission_amount,
 
                 )
 
 
                 logger.info(
-
-                    "COMMISSION CREATED | "
-                    "PROMOTER=%s | "
-                    "AMOUNT=%s | "
-                    "COMMISSION=%s",
-
+                    "COMMISSION CREATED | PROMOTER=%s | AMOUNT=%s | COMMISSION=%s",
                     promoter_name,
-
                     amount,
-
-                    result[
-                        "commission_amount"
-                    ]
-
+                    result["commission_amount"]
                 )
 
 
-            except Exception as e:
+            except Exception:
 
                 logger.exception(
                     "Commission creation error."
@@ -1259,31 +1161,22 @@ def payment_callback():
     # REGISTRATION URL
     # ======================================================
 
+    registration_params = urlencode({
+        "tx_ref": tx_ref,
+    })
+
+
     registration_url = (
-
-        f"{APP_URL}"
-        f"/register"
-        f"?tx_ref={tx_ref}"
-
+        f"{APP_URL}/register?{registration_params}"
     )
 
 
     logger.info(
-
-        "PAYMENT SUCCESSFUL | "
-        "TX=%s | "
-        "AMOUNT=%s | "
-        "TELEGRAM=%s | "
-        "REF=%s",
-
+        "PAYMENT SUCCESSFUL | TX=%s | AMOUNT=%s | TELEGRAM=%s | REF=%s",
         tx_ref,
-
         amount,
-
         telegram_id,
-
         referral_code
-
     )
 
 
@@ -1300,18 +1193,14 @@ def payment_callback():
 # HEALTH CHECK
 # ==========================================================
 
-@web_app.route(
-    "/health"
-)
+@web_app.route("/health")
 def health():
 
     return jsonify({
 
-        "status":
-            "healthy",
+        "status": "healthy",
 
-        "app":
-            "ALHIKAM V2",
+        "app": "ALHIKAM V2",
 
     })
 
@@ -1329,19 +1218,17 @@ def start_telegram_bot():
     try:
 
         subprocess.Popen(
-
             [
                 sys.executable,
                 "bot.py"
             ]
-
         )
 
         print(
             "TELEGRAM BOT STARTED."
         )
 
-    except Exception as e:
+    except Exception:
 
         logger.exception(
             "Telegram bot error."
@@ -1359,12 +1246,8 @@ if __name__ == "__main__":
     # ------------------------------------------------------
 
     threading.Thread(
-
-        target=
-            start_telegram_bot,
-
+        target=start_telegram_bot,
         daemon=True
-
     ).start()
 
 
@@ -1373,12 +1256,10 @@ if __name__ == "__main__":
     # ------------------------------------------------------
 
     PORT = int(
-
         os.getenv(
             "PORT",
             "8080"
         )
-
     )
 
 
@@ -1388,9 +1269,6 @@ if __name__ == "__main__":
 
 
     web_app.run(
-
         host="0.0.0.0",
-
         port=PORT,
-
     )
