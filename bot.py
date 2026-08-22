@@ -137,21 +137,17 @@ async def start(
     # PAYMENT URL
     # ======================================================
 
-    params = urlencode({
+    payment_params = urlencode({
+    "telegram_id": telegram_id,
+    "telegram_name": telegram_name,
+    "telegram_username": telegram_username,
+})
 
-        "telegram_id":
-            telegram_id,
+payment_url = (
+    f"{APP_URL}/payment?{payment_params}"
+)
 
-        "telegram_name":
-            telegram_name,
-
-        "telegram_username":
-            telegram_username
-    })
-
-    payment_url = (
-        f"{APP_URL}/payment?{params}"
-    )
+    
 
     keyboard = [
 
