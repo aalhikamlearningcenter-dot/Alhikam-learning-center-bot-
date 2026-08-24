@@ -1,7 +1,7 @@
+Database.py
 # ==========================================================
 # ALHIKAM LEARNING CENTER V2
 # database.py
-# DATABASE + STUDENTS + PAYMENTS + REFERRALS
 # ==========================================================
 
 import sqlite3
@@ -23,11 +23,6 @@ def get_connection():
 
     conn.row_factory = sqlite3.Row
 
-    # Enable foreign keys
-    conn.execute(
-        "PRAGMA foreign_keys = ON"
-    )
-
     return conn
 
 
@@ -40,9 +35,9 @@ def initialize_database():
     conn = get_connection()
     cursor = conn.cursor()
 
-    # ======================================================
+    # ------------------------------------------------------
     # STUDENTS
-    # ======================================================
+    # ------------------------------------------------------
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS students(
@@ -84,9 +79,9 @@ def initialize_database():
     )
     """)
 
-    # ======================================================
+    # ------------------------------------------------------
     # PROMOTERS
-    # ======================================================
+    # ------------------------------------------------------
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS promoters(
@@ -118,9 +113,9 @@ def initialize_database():
     )
     """)
 
-    # ======================================================
+    # ------------------------------------------------------
     # PAYMENTS
-    # ======================================================
+    # ------------------------------------------------------
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS payments(
@@ -158,9 +153,9 @@ def initialize_database():
     )
     """)
 
-    # ======================================================
+    # ------------------------------------------------------
     # COMMISSIONS
-    # ======================================================
+    # ------------------------------------------------------
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS commissions(
@@ -171,7 +166,7 @@ def initialize_database():
 
         student_id INTEGER,
 
-        tx_ref TEXT UNIQUE,
+        tx_ref TEXT,
 
         payment_amount REAL DEFAULT 0,
 
@@ -184,17 +179,17 @@ def initialize_database():
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
         FOREIGN KEY(promoter_id)
-            REFERENCES promoters(id),
+        REFERENCES promoters(id),
 
         FOREIGN KEY(student_id)
-            REFERENCES students(id)
+        REFERENCES students(id)
 
     )
     """)
 
-    # ======================================================
+    # ------------------------------------------------------
     # WITHDRAWALS
-    # ======================================================
+    # ------------------------------------------------------
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS withdrawals(
@@ -216,14 +211,14 @@ def initialize_database():
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
         FOREIGN KEY(promoter_id)
-            REFERENCES promoters(id)
+        REFERENCES promoters(id)
 
     )
     """)
 
-    # ======================================================
+    # ------------------------------------------------------
     # INDEXES
-    # ======================================================
+    # ------------------------------------------------------
 
     cursor.execute("""
     CREATE INDEX IF NOT EXISTS
@@ -296,37 +291,20 @@ def add_student(data):
     )
 
     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+
     """, (
 
-        data.get(
-            "payment_token",
-            ""
-        ),
+        data.get("payment_token", ""),
 
-        data.get(
-            "tx_ref",
-            ""
-        ),
+        data.get("tx_ref", ""),
 
-        data.get(
-            "full_name",
-            ""
-        ),
+        data.get("full_name", ""),
 
-        data.get(
-            "phone",
-            ""
-        ),
+        data.get("phone", ""),
 
-        data.get(
-            "email",
-            ""
-        ),
+        data.get("email", ""),
 
-        data.get(
-            "course",
-            ""
-        ),
+        data.get("course", ""),
 
         str(
             data.get(
@@ -451,74 +429,12 @@ def get_student_by_tx_ref(
 
 
 # ==========================================================
-# CONNECT STUDENT TO TELEGRAM
-# ==========================================================
-
-def connect_student_to_telegram(
-    tx_ref,
-    telegram_id,
-    telegram_username="",
-    telegram_name=""
-):
-
-    if not tx_ref:
-        return False
-
-    if not telegram_id:
-        return False
-
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("""
-    UPDATE students
-
-    SET
-
-        telegram_id=?,
-
-        telegram_username=?,
-
-        telegram_name=?
-
-    WHERE tx_ref=?
-
-    AND registration_completed=1
-
-    """, (
-
-        str(telegram_id),
-
-        telegram_username or "",
-
-        telegram_name or "",
-
-        tx_ref
-
-    ))
-
-    changed = cursor.rowcount > 0
-
-    conn.commit()
-    conn.close()
-
-    return changed
-
-
-# ==========================================================
 # GET PROMOTER BY REFERRAL CODE
 # ==========================================================
 
 def get_promoter_by_referral_code(
     referral_code
 ):
-
-    if not referral_code:
-        return None
-
-    referral_code = str(
-        referral_code
-    ).strip()
 
     if not referral_code:
         return None
@@ -533,7 +449,7 @@ def get_promoter_by_referral_code(
     AND status='active'
     LIMIT 1
     """, (
-        referral_code,
+        referral_code.strip(),
     ))
 
     result = cursor.fetchone()
@@ -555,15 +471,6 @@ def add_promoter(
     commission_rate=20
 ):
 
-    referral_code = str(
-        referral_code or ""
-    ).strip()
-
-    if not referral_code:
-        raise ValueError(
-            "Referral code is required."
-        )
-
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -579,12 +486,13 @@ def add_promoter(
     )
 
     VALUES(?,?,?,?,?)
+
     """, (
 
         full_name,
         phone,
         email,
-        referral_code,
+        referral_code.strip(),
         commission_rate
 
     ))
@@ -628,7 +536,10 @@ def get_promoter_by_id(
 
 
 # ==========================================================
-# SAVE / UPDATE PAYMENT
+# SAVE PAYMENT
+#
+# INSERT OR REPLACE is used so that the same tx_ref
+# can first be saved as Pending and later as Successful.
 # ==========================================================
 
 def save_payment(data):
@@ -642,271 +553,107 @@ def save_payment(data):
     ).strip()
 
     if not tx_ref:
+
         raise ValueError(
             "tx_ref is required."
         )
 
-    transaction_id = (
-        data.get(
-            "transaction_id",
-            ""
-        )
-        or ""
-    )
-
-    payment_plan = (
-        data.get(
-            "payment_plan",
-            ""
-        )
-        or ""
-    )
-
-    amount = float(
-        data.get(
-            "amount",
-            0
-        )
-        or 0
-    )
-
-    payment_status = (
-        data.get(
-            "payment_status",
-            "Pending"
-        )
-        or "Pending"
-    )
-
-    referral_code = (
-        data.get(
-            "referral_code",
-            ""
-        )
-        or ""
-    )
-
-    promoter_id = data.get(
-        "promoter_id"
-    )
-
-    promoter_name = (
-        data.get(
-            "promoter_name",
-            ""
-        )
-        or ""
-    )
-
-    commission = float(
-        data.get(
-            "commission",
-            0
-        )
-        or 0
-    )
-
-    telegram_id = str(
-        data.get(
-            "telegram_id",
-            ""
-        )
-        or ""
-    )
-
-    telegram_username = (
-        data.get(
-            "telegram_username",
-            ""
-        )
-        or ""
-    )
-
-    telegram_name = (
-        data.get(
-            "telegram_name",
-            ""
-        )
-        or ""
-    )
-
-    registration_completed = int(
-        data.get(
-            "registration_completed",
-            0
-        )
-        or 0
-    )
-
     conn = get_connection()
     cursor = conn.cursor()
 
-    # ======================================================
-    # CHECK EXISTING PAYMENT
-    # ======================================================
-
     cursor.execute("""
-    SELECT *
-    FROM payments
-    WHERE tx_ref=?
-    LIMIT 1
-    """, (
+    INSERT OR REPLACE INTO payments(
+
         tx_ref,
+        transaction_id,
+        payment_plan,
+        amount,
+        payment_status,
+        referral_code,
+        promoter_id,
+        promoter_name,
+        commission,
+        telegram_id,
+        telegram_username,
+        telegram_name,
+        registration_completed
+
+    )
+
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+
+    """, (
+
+        tx_ref,
+
+        data.get(
+            "transaction_id",
+            ""
+        ),
+
+        data.get(
+            "payment_plan",
+            ""
+        ),
+
+        float(
+            data.get(
+                "amount",
+                0
+            ) or 0
+        ),
+
+        data.get(
+            "payment_status",
+            "Pending"
+        ),
+
+        data.get(
+            "referral_code",
+            ""
+        ),
+
+        data.get(
+            "promoter_id"
+        ),
+
+        data.get(
+            "promoter_name",
+            ""
+        ),
+
+        float(
+            data.get(
+                "commission",
+                0
+            ) or 0
+        ),
+
+        str(
+            data.get(
+                "telegram_id",
+                ""
+            )
+        ),
+
+        data.get(
+            "telegram_username",
+            ""
+        ),
+
+        data.get(
+            "telegram_name",
+            ""
+        ),
+
+        int(
+            data.get(
+                "registration_completed",
+                0
+            )
+        )
+
     ))
-
-    existing = cursor.fetchone()
-
-    # ======================================================
-    # INSERT NEW PAYMENT
-    # ======================================================
-
-    if not existing:
-
-        cursor.execute("""
-        INSERT INTO payments(
-
-            tx_ref,
-            transaction_id,
-            payment_plan,
-            amount,
-            payment_status,
-            referral_code,
-            promoter_id,
-            promoter_name,
-            commission,
-            telegram_id,
-            telegram_username,
-            telegram_name,
-            registration_completed
-
-        )
-
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
-        """, (
-
-            tx_ref,
-            transaction_id,
-            payment_plan,
-            amount,
-            payment_status,
-            referral_code,
-            promoter_id,
-            promoter_name,
-            commission,
-            telegram_id,
-            telegram_username,
-            telegram_name,
-            registration_completed
-
-        ))
-
-    # ======================================================
-    # UPDATE EXISTING PAYMENT
-    # ======================================================
-
-    else:
-
-        # Never turn completed registration back to 0
-        old_registration = int(
-            existing[
-                "registration_completed"
-            ]
-            or 0
-        )
-
-        final_registration = max(
-            old_registration,
-            registration_completed
-        )
-
-        cursor.execute("""
-        UPDATE payments
-
-        SET
-
-            transaction_id=?,
-
-            payment_plan=?,
-
-            amount=?,
-
-            payment_status=?,
-
-            referral_code=?,
-
-            promoter_id=?,
-
-            promoter_name=?,
-
-            commission=?,
-
-            telegram_id=?,
-
-            telegram_username=?,
-
-            telegram_name=?,
-
-            registration_completed=?
-
-        WHERE tx_ref=?
-
-        """, (
-
-            transaction_id
-            or existing["transaction_id"]
-            or "",
-
-            payment_plan
-            or existing["payment_plan"]
-            or "",
-
-            amount
-            if amount > 0
-            else float(
-                existing["amount"]
-                or 0
-            ),
-
-            payment_status
-            or existing["payment_status"]
-            or "Pending",
-
-            referral_code
-            or existing["referral_code"]
-            or "",
-
-            promoter_id
-            if promoter_id is not None
-            else existing["promoter_id"],
-
-            promoter_name
-            or existing["promoter_name"]
-            or "",
-
-            commission
-            if commission > 0
-            else float(
-                existing["commission"]
-                or 0
-            ),
-
-            telegram_id
-            or existing["telegram_id"]
-            or "",
-
-            telegram_username
-            or existing["telegram_username"]
-            or "",
-
-            telegram_name
-            or existing["telegram_name"]
-            or "",
-
-            final_registration,
-
-            tx_ref
-
-        ))
 
     conn.commit()
     conn.close()
@@ -954,9 +701,6 @@ def update_payment_status(
     transaction_id=None
 ):
 
-    if not tx_ref:
-        return False
-
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -968,10 +712,7 @@ def update_payment_status(
         payment_status=?,
 
         transaction_id=
-        COALESCE(
-            ?,
-            transaction_id
-        )
+        COALESCE(?, transaction_id)
 
     WHERE tx_ref=?
 
@@ -985,12 +726,8 @@ def update_payment_status(
 
     ))
 
-    changed = cursor.rowcount > 0
-
     conn.commit()
     conn.close()
-
-    return changed
 
 
 # ==========================================================
@@ -1027,7 +764,7 @@ def mark_payment_registration_completed(
 
 
 # ==========================================================
-# CHECK PAYMENT REGISTRATION
+# CHECK IF PAYMENT ALREADY REGISTERED
 # ==========================================================
 
 def payment_registration_completed(
@@ -1043,11 +780,14 @@ def payment_registration_completed(
 
     try:
 
-        return int(
-            payment[
-                "registration_completed"
-            ]
-        ) == 1
+        return (
+            int(
+                payment[
+                    "registration_completed"
+                ]
+            )
+            == 1
+        )
 
     except Exception:
 
@@ -1146,35 +886,37 @@ def create_commission(
             "Commission amount must be greater than zero."
         )
 
-    # ======================================================
-    # DUPLICATE PROTECTION
-    # ======================================================
+    # ------------------------------------------------------
+    # Prevent duplicate commission
+    # ------------------------------------------------------
 
-    if tx_ref:
+    if tx_ref and commission_exists(
+        tx_ref
+    ):
 
-        existing = get_commission_by_tx_ref(
-            tx_ref
+        existing = (
+            get_commission_by_tx_ref(
+                tx_ref
+            )
         )
 
-        if existing:
+        return {
 
-            return {
+            "commission_id":
+                existing["id"],
 
-                "commission_id":
-                    existing["id"],
+            "commission_amount":
+                float(
+                    existing[
+                        "commission_amount"
+                    ]
+                )
 
-                "commission_amount":
-                    float(
-                        existing[
-                            "commission_amount"
-                        ]
-                    )
+        }
 
-            }
-
-    # ======================================================
-    # CALCULATE RATE
-    # ======================================================
+    # ------------------------------------------------------
+    # Calculate actual commission rate
+    # ------------------------------------------------------
 
     rate = 0
 
@@ -1182,16 +924,11 @@ def create_commission(
 
         rate = (
             commission_amount
-            /
-            payment_amount
+            / payment_amount
         ) * 100
 
     conn = get_connection()
     cursor = conn.cursor()
-
-    # ======================================================
-    # CREATE COMMISSION
-    # ======================================================
 
     cursor.execute("""
     INSERT INTO commissions(
@@ -1228,9 +965,9 @@ def create_commission(
 
     commission_id = cursor.lastrowid
 
-    # ======================================================
-    # UPDATE PROMOTER BALANCE
-    # ======================================================
+    # ------------------------------------------------------
+    # Update promoter balance
+    # ------------------------------------------------------
 
     cursor.execute("""
     UPDATE promoters
@@ -1238,13 +975,13 @@ def create_commission(
     SET
 
         total_sales =
-        total_sales + 1,
+            total_sales + 1,
 
         total_earned =
-        total_earned + ?,
+            total_earned + ?,
 
         available_balance =
-        available_balance + ?
+            available_balance + ?
 
     WHERE id=?
 
@@ -1273,44 +1010,6 @@ def create_commission(
 
 
 # ==========================================================
-# UPDATE COMMISSION WITH STUDENT ID
-# ==========================================================
-
-def update_commission_student(
-    tx_ref,
-    student_id
-):
-
-    if not tx_ref or not student_id:
-        return False
-
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("""
-    UPDATE commissions
-
-    SET student_id=?
-
-    WHERE tx_ref=?
-
-    """, (
-
-        student_id,
-
-        tx_ref
-
-    ))
-
-    changed = cursor.rowcount > 0
-
-    conn.commit()
-    conn.close()
-
-    return changed
-
-
-# ==========================================================
 # UPDATE STUDENT
 # ==========================================================
 
@@ -1331,31 +1030,18 @@ def update_student(
     SET
 
         full_name=?,
-
         phone=?,
-
         email=?,
-
         course=?,
-
         telegram_id=?,
-
         telegram_username=?,
-
         telegram_name=?,
-
         registration_completed=?,
-
         payment_status=?,
-
         amount_paid=?,
-
         referral_code=?,
-
         promoter_id=?,
-
         payment_plan=?,
-
         tx_ref=?
 
     WHERE payment_token=?
