@@ -54,6 +54,51 @@ APP_URL = os.getenv(
 
 
 # ==========================================================
+# SQLITE ROW HELPER
+# ==========================================================
+#
+# database.py returns sqlite3.Row.
+# sqlite3.Row does NOT have .get()
+#
+# Wannan helper din zai ba mu damar karanta
+# data ko Row ne ko dict.
+# ==========================================================
+
+def row_get(
+    row,
+    key,
+    default=""
+):
+
+    if row is None:
+        return default
+
+    try:
+
+        if key in row.keys():
+
+            value = row[key]
+
+            if value is None:
+                return default
+
+            return value
+
+    except Exception:
+        pass
+
+    try:
+
+        return row.get(
+            key,
+            default
+        )
+
+    except Exception:
+        return default
+
+
+# ==========================================================
 # START COMMAND
 # ==========================================================
 
@@ -65,7 +110,6 @@ async def start(
     user = update.effective_user
 
     if not user:
-
         return
 
 
@@ -147,7 +191,8 @@ async def start(
     # CASE 1
     # START WITH PAYMENT TX_REF
     #
-    # This happens after registration.
+    # Wannan shi ne lokacin da student ya yi registration
+    # daga browser/payment page sannan aka tura shi zuwa bot.
     # ======================================================
 
     if tx_ref:
@@ -207,7 +252,8 @@ async def start(
 
         registration_completed = int(
 
-            student.get(
+            row_get(
+                student,
                 "registration_completed",
                 0
             )
@@ -232,15 +278,23 @@ async def start(
 
         # --------------------------------------------------
         # GET FACULTY / COURSE
+        #
+        # Database dinka currently yana da "course",
+        # ba "faculty" column ba.
+        #
+        # Saboda haka muna fara duba faculty idan akwai,
+        # sannan course.
         # --------------------------------------------------
 
         faculty = (
 
-            student.get(
+            row_get(
+                student,
                 "faculty",
                 ""
             )
-            or student.get(
+            or row_get(
+                student,
                 "course",
                 ""
             )
@@ -255,7 +309,8 @@ async def start(
 
         student_name = (
 
-            student.get(
+            row_get(
+                student,
                 "full_name",
                 ""
             )
@@ -263,6 +318,39 @@ async def start(
             or "Student"
 
         ).strip()
+
+
+        # --------------------------------------------------
+        # UPDATE TELEGRAM INFORMATION
+        #
+        # Wannan yana tabbatar database yana dauke da
+        # Telegram ID na wanda ya bude deep link.
+        # --------------------------------------------------
+
+        try:
+
+            from database import (
+                connect_student_to_telegram
+            )
+
+            connect_student_to_telegram(
+
+                tx_ref,
+
+                telegram_id,
+
+                telegram_username,
+
+                telegram_name
+
+            )
+
+        except Exception as e:
+
+            print(
+                "Could not connect Telegram account:",
+                e
+            )
 
 
         # --------------------------------------------------
@@ -289,7 +377,7 @@ async def start(
 
         try:
 
-            await send_student_links(
+            result = await send_student_links(
 
                 telegram_id,
 
@@ -299,10 +387,37 @@ async def start(
 
 
             print(
-                "STUDENT LINKS SENT | "
-                f"TX_REF={tx_ref} | "
-                f"TELEGRAM_ID={telegram_id} | "
+                "=================================================="
+            )
+
+            print(
+                "STUDENT LINKS SENT"
+            )
+
+            print(
+                f"TX_REF={tx_ref}"
+            )
+
+            print(
+                f"TELEGRAM_ID={telegram_id}"
+            )
+
+            print(
                 f"FACULTY={faculty}"
+            )
+
+            print(
+                f"SUCCESSFUL="
+                f"{len(result.get('successful_links', []))}"
+            )
+
+            print(
+                f"FAILED="
+                f"{len(result.get('failed_links', []))}"
+            )
+
+            print(
+                "=================================================="
             )
 
 
@@ -312,7 +427,8 @@ async def start(
                 "have been sent successfully.\n\n"
 
                 "📚 Please check the message above and "
-                "join your classes."
+                "join your Main Group, Faculty and "
+                "Subject classes."
 
             )
 
@@ -343,7 +459,7 @@ async def start(
     # CASE 2
     # NORMAL /START
     #
-    # Student opens bot directly without tx_ref.
+    # Student ya bude bot kai tsaye ba tare da TX_REF ba.
     # ======================================================
 
     print(
@@ -377,19 +493,29 @@ async def start(
     # EXISTING REGISTERED STUDENT
     # ======================================================
 
-    if (
+    if student:
 
-        student
+        registration_completed = int(
 
-        and int(
-
-            student.get(
+            row_get(
+                student,
                 "registration_completed",
                 0
             )
             or 0
 
-        ) == 1
+        )
+
+    else:
+
+        registration_completed = 0
+
+
+    if (
+
+        student
+
+        and registration_completed == 1
 
     ):
 
@@ -412,11 +538,13 @@ async def start(
 
         faculty = (
 
-            student.get(
+            row_get(
+                student,
                 "faculty",
                 ""
             )
-            or student.get(
+            or row_get(
+                student,
                 "course",
                 ""
             )
@@ -431,7 +559,7 @@ async def start(
 
         try:
 
-            await send_student_links(
+            result = await send_student_links(
 
                 telegram_id,
 
@@ -439,9 +567,13 @@ async def start(
 
             )
 
+
             print(
                 "LINKS RESENT | "
-                f"TELEGRAM_ID={telegram_id}"
+                f"TELEGRAM_ID={telegram_id} | "
+                f"FACULTY={faculty} | "
+                f"SUCCESS="
+                f"{len(result.get('successful_links', []))}"
             )
 
 
