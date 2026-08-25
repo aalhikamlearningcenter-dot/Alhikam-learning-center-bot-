@@ -1,4 +1,3 @@
-
 # ==========================================================
 # ALHIKAM LEARNING CENTER V2
 # config.py
@@ -64,7 +63,7 @@ DATABASE_NAME = os.getenv(
 
 WHATSAPP_COMMUNITY_LINK = os.getenv(
     "WHATSAPP_COMMUNITY_LINK",
-    ""
+    "https://chat.whatsapp.com/GvypYrvjtTECNh2MsONyKa"
 )
 
 
@@ -78,12 +77,21 @@ MINIMUM_WITHDRAWAL = 5000
 
 
 # ==========================================================
-# TELEGRAM GROUPS
+# TELEGRAM SYSTEM CHANNELS
 # ==========================================================
 
 MAIN_GROUP_ID = -1004384506380
 
 ANNOUNCEMENT_CHANNEL_ID = -1004315707986
+
+
+# ==========================================================
+# SYSTEM CHANNELS
+# ==========================================================
+
+BOT_ACCESS_ID = -1003800935640
+
+PAYMENT_REGISTRATION_ID = -1003935952561
 
 
 # ==========================================================
@@ -118,30 +126,44 @@ GEOGRAPHY_ID = -1003901130871
 # ARTS SUBJECTS
 # ==========================================================
 
-LITERATURE_ID = None
+FINE_ARTS_ID = -1003801904375
 
-GOVERNMENT_ID = None
+HISTORY_ID = -1004494276405
 
-ISLAMIC_STUDIES_ID = None
+HAUSA_ID = -1004436228793
 
-HISTORY_ID = None
+CRS_ID = -1004469127265
 
-CIVIC_EDUCATION_ID = None
+ISLAMIC_STUDIES_ID = -1003823376901
+
+GOVERNMENT_ID = -1003735736424
+
+LITERATURE_ID = -1004317587777
+
+USE_OF_ENGLISH_ID = -1003759215809
 
 
 # ==========================================================
 # COMMERCIAL SUBJECTS
 # ==========================================================
 
-ACCOUNTING_ID = None
+ACCOUNTING_ID = -1004459228986
 
-COMMERCE_ID = None
+COMMERCE_ID = -1003930273330
 
-ECONOMICS_ID = None
+ECONOMICS_ID = -1003632758498
 
-OFFICE_PRACTICE_ID = None
 
-MARKETING_ID = None
+# ==========================================================
+# OTHER / SHARED SUBJECTS
+# ==========================================================
+
+# Idan kana son Use of English ya kasance ga
+# Science, Arts da Commercial, ana iya amfani da:
+#
+# USE_OF_ENGLISH_ID
+#
+# daga sama.
 
 
 # ==========================================================
