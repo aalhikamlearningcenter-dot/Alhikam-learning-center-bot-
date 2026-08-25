@@ -1,6 +1,18 @@
 # ==========================================================
 # ALHIKAM LEARNING CENTER V2
 # telegram_service.py
+#
+# TELEGRAM LINKS
+#   ↓
+# MAIN GROUP
+#   ↓
+# ANNOUNCEMENT CHANNEL
+#   ↓
+# FACULTY
+#   ↓
+# SUBJECTS
+#   ↓
+# WHATSAPP COMMUNITY
 # ==========================================================
 
 from datetime import datetime, timedelta, timezone
@@ -30,6 +42,15 @@ from config import (
 
 
 # ==========================================================
+# WHATSAPP COMMUNITY
+# ==========================================================
+
+WHATSAPP_COMMUNITY_LINK = (
+    "https://chat.whatsapp.com/GvypYrvjtTECNh2MsONyKa"
+)
+
+
+# ==========================================================
 # BOT
 # ==========================================================
 
@@ -49,7 +70,10 @@ bot = Bot(
 # SEND MESSAGE
 # ==========================================================
 
-async def send_message(chat_id, text):
+async def send_message(
+    chat_id,
+    text
+):
 
     await bot.send_message(
 
@@ -63,10 +87,12 @@ async def send_message(chat_id, text):
 
 
 # ==========================================================
-# CREATE INVITE LINK
+# CREATE TELEGRAM INVITE LINK
 # ==========================================================
 
-async def create_invite(chat_id):
+async def create_invite(
+    chat_id
+):
 
     if not chat_id:
 
@@ -74,13 +100,21 @@ async def create_invite(chat_id):
             "Telegram chat ID is missing."
         )
 
+
     expire = (
-        datetime.now(timezone.utc)
+
+        datetime.now(
+            timezone.utc
+        )
+
         +
+
         timedelta(
             minutes=INVITE_LINK_EXPIRE_MINUTES
         )
+
     )
+
 
     invite = await bot.create_chat_invite_link(
 
@@ -91,6 +125,7 @@ async def create_invite(chat_id):
         member_limit=INVITE_LINK_MEMBER_LIMIT
 
     )
+
 
     return invite.invite_link
 
@@ -106,164 +141,481 @@ async def send_student_links(
 
     links = []
 
-    # ------------------------------------------------------
+
+    # ======================================================
     # MAIN GROUP
-    # ------------------------------------------------------
+    # ======================================================
 
-    links.append(
-        (
-            "🏠 Main Group",
-            await create_invite(
-                MAIN_GROUP_ID
+    try:
+
+        main_link = await create_invite(
+            MAIN_GROUP_ID
+        )
+
+        links.append(
+            (
+                "🏠 Main Group",
+                main_link
             )
         )
-    )
 
-    # ------------------------------------------------------
-    # ANNOUNCEMENT
-    # ------------------------------------------------------
+        print(
+            "MAIN GROUP LINK CREATED"
+        )
 
-    links.append(
-        (
-            "📢 Announcement Channel",
-            await create_invite(
-                ANNOUNCEMENT_CHANNEL_ID
+    except Exception as e:
+
+        print(
+            "MAIN GROUP LINK ERROR:",
+            repr(e)
+        )
+
+
+    # ======================================================
+    # ANNOUNCEMENT CHANNEL
+    # ======================================================
+
+    try:
+
+        announcement_link = await create_invite(
+            ANNOUNCEMENT_CHANNEL_ID
+        )
+
+        links.append(
+            (
+                "📢 Announcement Channel",
+                announcement_link
             )
         )
-    )
 
-    # ------------------------------------------------------
+        print(
+            "ANNOUNCEMENT LINK CREATED"
+        )
+
+    except Exception as e:
+
+        print(
+            "ANNOUNCEMENT LINK ERROR:",
+            repr(e)
+        )
+
+
+    # ======================================================
     # SCIENCE
-    # ------------------------------------------------------
+    # ======================================================
 
     if faculty == "Science":
 
-        links.append(
-            (
-                "🎓 Science Faculty",
-                await create_invite(
-                    SCIENCE_FACULTY_ID
+        # --------------------------------------------------
+        # SCIENCE FACULTY
+        # --------------------------------------------------
+
+        try:
+
+            science_link = await create_invite(
+                SCIENCE_FACULTY_ID
+            )
+
+            links.append(
+                (
+                    "🎓 Science Faculty",
+                    science_link
                 )
             )
-        )
 
-        links.append(
-            (
-                "📘 Physics",
-                await create_invite(
-                    PHYSICS_ID
+            print(
+                "SCIENCE FACULTY LINK CREATED"
+            )
+
+        except Exception as e:
+
+            print(
+                "SCIENCE FACULTY LINK ERROR:",
+                repr(e)
+            )
+
+
+        # --------------------------------------------------
+        # PHYSICS
+        # --------------------------------------------------
+
+        try:
+
+            physics_link = await create_invite(
+                PHYSICS_ID
+            )
+
+            links.append(
+                (
+                    "📘 Physics",
+                    physics_link
                 )
             )
-        )
 
-        links.append(
-            (
-                "🧪 Chemistry",
-                await create_invite(
-                    CHEMISTRY_ID
+            print(
+                "PHYSICS LINK CREATED"
+            )
+
+        except Exception as e:
+
+            print(
+                "PHYSICS LINK ERROR:",
+                repr(e)
+            )
+
+
+        # --------------------------------------------------
+        # CHEMISTRY
+        # --------------------------------------------------
+
+        try:
+
+            chemistry_link = await create_invite(
+                CHEMISTRY_ID
+            )
+
+            links.append(
+                (
+                    "🧪 Chemistry",
+                    chemistry_link
                 )
             )
-        )
 
-        links.append(
-            (
-                "🧬 Biology",
-                await create_invite(
-                    BIOLOGY_ID
+            print(
+                "CHEMISTRY LINK CREATED"
+            )
+
+        except Exception as e:
+
+            print(
+                "CHEMISTRY LINK ERROR:",
+                repr(e)
+            )
+
+
+        # --------------------------------------------------
+        # BIOLOGY
+        # --------------------------------------------------
+
+        try:
+
+            biology_link = await create_invite(
+                BIOLOGY_ID
+            )
+
+            links.append(
+                (
+                    "🧬 Biology",
+                    biology_link
                 )
             )
-        )
 
-        links.append(
-            (
-                "📐 Mathematics",
-                await create_invite(
-                    MATHEMATICS_ID
+            print(
+                "BIOLOGY LINK CREATED"
+            )
+
+        except Exception as e:
+
+            print(
+                "BIOLOGY LINK ERROR:",
+                repr(e)
+            )
+
+
+        # --------------------------------------------------
+        # MATHEMATICS
+        # --------------------------------------------------
+
+        try:
+
+            mathematics_link = await create_invite(
+                MATHEMATICS_ID
+            )
+
+            links.append(
+                (
+                    "📐 Mathematics",
+                    mathematics_link
                 )
             )
-        )
 
-        links.append(
-            (
-                "🌾 Agricultural Science",
-                await create_invite(
-                    AGRICULTURAL_SCIENCE_ID
+            print(
+                "MATHEMATICS LINK CREATED"
+            )
+
+        except Exception as e:
+
+            print(
+                "MATHEMATICS LINK ERROR:",
+                repr(e)
+            )
+
+
+        # --------------------------------------------------
+        # AGRICULTURAL SCIENCE
+        # --------------------------------------------------
+
+        try:
+
+            agricultural_link = await create_invite(
+                AGRICULTURAL_SCIENCE_ID
+            )
+
+            links.append(
+                (
+                    "🌾 Agricultural Science",
+                    agricultural_link
                 )
             )
-        )
 
-        links.append(
-            (
-                "🌍 Geography",
-                await create_invite(
-                    GEOGRAPHY_ID
+            print(
+                "AGRICULTURAL SCIENCE LINK CREATED"
+            )
+
+        except Exception as e:
+
+            print(
+                "AGRICULTURAL SCIENCE LINK ERROR:",
+                repr(e)
+            )
+
+
+        # --------------------------------------------------
+        # GEOGRAPHY
+        # --------------------------------------------------
+
+        try:
+
+            geography_link = await create_invite(
+                GEOGRAPHY_ID
+            )
+
+            links.append(
+                (
+                    "🌍 Geography",
+                    geography_link
                 )
             )
-        )
 
-    # ------------------------------------------------------
+            print(
+                "GEOGRAPHY LINK CREATED"
+            )
+
+        except Exception as e:
+
+            print(
+                "GEOGRAPHY LINK ERROR:",
+                repr(e)
+            )
+
+
+    # ======================================================
     # ARTS
-    # ------------------------------------------------------
+    # ======================================================
 
     elif faculty == "Arts":
 
-        links.append(
-            (
-                "🎓 Arts Faculty",
-                await create_invite(
-                    ARTS_FACULTY_ID
+        try:
+
+            arts_link = await create_invite(
+                ARTS_FACULTY_ID
+            )
+
+            links.append(
+                (
+                    "🎓 Arts Faculty",
+                    arts_link
                 )
             )
-        )
 
-    # ------------------------------------------------------
+            print(
+                "ARTS FACULTY LINK CREATED"
+            )
+
+        except Exception as e:
+
+            print(
+                "ARTS FACULTY LINK ERROR:",
+                repr(e)
+            )
+
+
+    # ======================================================
     # COMMERCIAL
-    # ------------------------------------------------------
+    # ======================================================
 
     elif faculty == "Commercial":
 
-        links.append(
-            (
-                "🎓 Commercial Faculty",
-                await create_invite(
-                    COMMERCIAL_FACULTY_ID
+        try:
+
+            commercial_link = await create_invite(
+                COMMERCIAL_FACULTY_ID
+            )
+
+            links.append(
+                (
+                    "🎓 Commercial Faculty",
+                    commercial_link
                 )
             )
-        )
+
+            print(
+                "COMMERCIAL FACULTY LINK CREATED"
+            )
+
+        except Exception as e:
+
+            print(
+                "COMMERCIAL FACULTY LINK ERROR:",
+                repr(e)
+            )
+
+
+    # ======================================================
+    # INVALID FACULTY
+    # ======================================================
 
     else:
 
-        raise ValueError(
-            "Invalid faculty."
+        print(
+            f"WARNING: Invalid faculty received: {faculty}"
         )
 
-    # ------------------------------------------------------
+
+    # ======================================================
+    # WHATSAPP COMMUNITY
+    #
+    # Wannan ba Telegram invite ba ne.
+    # Direct WhatsApp Community link ne.
+    # ======================================================
+
+    links.append(
+        (
+            "💬 WhatsApp Community",
+            WHATSAPP_COMMUNITY_LINK
+        )
+    )
+
+
+    print(
+        "WHATSAPP COMMUNITY LINK ADDED"
+    )
+
+
+    # ======================================================
+    # CHECK IF TELEGRAM LINKS EXIST
+    # ======================================================
+
+    telegram_link_count = len(
+        links
+    ) - 1
+
+
+    if telegram_link_count <= 0:
+
+        raise RuntimeError(
+            "No Telegram invitation links were created."
+        )
+
+
+    # ======================================================
     # MESSAGE
-    # ------------------------------------------------------
+    # ======================================================
 
     text = (
+
         "🎉 ALHIKAM Registration Completed!\n\n"
-        "Welcome to ALHIKAM Learning Center.\n\n"
-        "Click each link below to join your classes:\n\n"
+
+        "Welcome to ALHIKAM Learning Center. ❤️\n\n"
+
+        "✅ Your registration has been successfully "
+        "connected to your Telegram account.\n\n"
+
+        "📚 Please click each link below to join "
+        "your classes and community:\n\n"
+
     )
+
 
     for title, link in links:
 
         text += (
+
             f"{title}\n"
             f"{link}\n\n"
+
         )
 
-    await send_message(
-        chat_id,
-        text
+
+    text += (
+
+        "⚠️ Important:\n"
+        "Please join all the groups/channels that "
+        "apply to your faculty.\n\n"
+
+        "💬 Also join our WhatsApp Community to "
+        "receive important updates and announcements.\n\n"
+
+        "🎓 Welcome once again to ALHIKAM Learning Center!"
+
     )
+
+
+    # ======================================================
+    # SEND ALL LINKS TO STUDENT
+    # ======================================================
+
+    await send_message(
+
+        chat_id,
+
+        text
+
+    )
+
+
+    # ======================================================
+    # FINAL LOG
+    # ======================================================
+
+    print(
+        "=================================================="
+    )
+
+    print(
+        "STUDENT LINKS RESULT"
+    )
+
+    print(
+        f"TELEGRAM_ID={chat_id}"
+    )
+
+    print(
+        f"FACULTY={faculty}"
+    )
+
+    print(
+        f"TOTAL_LINKS_SENT={len(links)}"
+    )
+
+    print(
+        f"TELEGRAM_LINKS={telegram_link_count}"
+    )
+
+    print(
+        "WHATSAPP_COMMUNITY=YES"
+    )
+
+    print(
+        "=================================================="
+    )
+
 
     return links
 
 
 # ==========================================================
-# WELCOME
+# WELCOME MESSAGE
 # ==========================================================
 
 async def send_welcome_message(
@@ -271,21 +623,25 @@ async def send_welcome_message(
     full_name
 ):
 
-    text = f"""
+    text = (
 
-🎉 Welcome to ALHIKAM Learning Center
+        "🎉 Welcome to ALHIKAM Learning Center\n\n"
 
-Hello {full_name},
+        f"Hello {full_name},\n\n"
 
-✅ Your payment has been verified successfully.
+        "✅ Your payment has been verified successfully.\n\n"
 
-Please complete your registration.
+        "Please complete your registration.\n\n"
 
-Thank you.
+        "Thank you."
 
-"""
+    )
+
 
     await send_message(
+
         chat_id,
+
         text
+
     )
