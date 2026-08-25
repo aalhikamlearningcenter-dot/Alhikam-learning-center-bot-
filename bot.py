@@ -12,9 +12,11 @@
 #   ↓
 # FIND STUDENT
 #   ↓
+# CHECK FACULTY
+#   ↓
 # SEND TELEGRAM LINKS
 #   ↓
-# WHATSAPP COMMUNITY
+# SEND WHATSAPP COMMUNITY
 # ==========================================================
 
 import os
@@ -59,10 +61,6 @@ APP_URL = os.getenv(
 
 # ==========================================================
 # SQLITE ROW HELPER
-# ==========================================================
-#
-# sqlite3.Row ba shi da .get()
-# Wannan helper zai iya karanta sqlite3.Row ko dict.
 # ==========================================================
 
 def row_get(
@@ -114,6 +112,178 @@ def row_get(
 
 
 # ==========================================================
+# GET FACULTY
+# ==========================================================
+
+def get_student_faculty(
+    student
+):
+
+    faculty = (
+
+        row_get(
+            student,
+            "faculty",
+            ""
+        )
+
+        or
+
+        row_get(
+            student,
+            "course",
+            ""
+        )
+
+        or ""
+
+    )
+
+
+    return str(
+        faculty
+    ).strip()
+
+
+# ==========================================================
+# SEND LINKS
+# ==========================================================
+
+async def send_links_to_student(
+    update,
+    telegram_id,
+    faculty,
+    tx_ref=""
+):
+
+    try:
+
+        result = await send_student_links(
+
+            telegram_id,
+
+            faculty
+
+        )
+
+
+        total_links = len(
+            result
+        )
+
+
+        print(
+            "=================================================="
+        )
+
+        print(
+            "STUDENT LINKS SENT"
+        )
+
+        print(
+            f"TX_REF={tx_ref}"
+        )
+
+        print(
+            f"TELEGRAM_ID={telegram_id}"
+        )
+
+        print(
+            f"FACULTY={faculty}"
+        )
+
+        print(
+            f"TOTAL_LINKS_SENT={total_links}"
+        )
+
+        print(
+            "=================================================="
+        )
+
+
+        if total_links > 0:
+
+            await update.message.reply_text(
+
+                "✅ Your ALHIKAM class links have "
+                "been sent successfully.\n\n"
+
+                "📚 Please check the message above.\n\n"
+
+                "🏠 Join the Main Group.\n"
+                "📢 Join the Announcement Channel.\n"
+                "🎓 Join your Faculty.\n"
+                "📚 Join all your subjects.\n"
+                "💬 Join the WhatsApp Community.\n\n"
+
+                "⚠️ Telegram invitation links are "
+                "limited to one student and expire "
+                "after 10 minutes."
+
+            )
+
+
+        else:
+
+            await update.message.reply_text(
+
+                "⚠️ Your registration is successful, "
+                "but no invitation link was created.\n\n"
+
+                "Please contact ALHIKAM support."
+
+            )
+
+
+        return True
+
+
+    except Exception as e:
+
+        print(
+            "=================================================="
+        )
+
+        print(
+            "TELEGRAM LINKS ERROR"
+        )
+
+        print(
+            f"TX_REF={tx_ref}"
+        )
+
+        print(
+            f"TELEGRAM_ID={telegram_id}"
+        )
+
+        print(
+            f"FACULTY={faculty}"
+        )
+
+        print(
+            f"ERROR={repr(e)}"
+        )
+
+        print(
+            "=================================================="
+        )
+
+
+        await update.message.reply_text(
+
+            "⚠️ Your registration is successful, "
+            "but I could not send your class links "
+            "right now.\n\n"
+
+            "Please contact ALHIKAM support."
+
+        )
+
+
+        return False
+
+
+# ==========================================================
 # START COMMAND
 # ==========================================================
 
@@ -152,7 +322,7 @@ async def start(
 
 
     # ======================================================
-    # GET TX_REF FROM START PAYLOAD
+    # TX_REF
     # ======================================================
 
     tx_ref = ""
@@ -161,8 +331,10 @@ async def start(
     if context.args:
 
         tx_ref = (
+
             context.args[0]
             or ""
+
         ).strip()
 
 
@@ -206,15 +378,6 @@ async def start(
 
     if tx_ref:
 
-        print(
-            f"Looking for student by TX_REF: {tx_ref}"
-        )
-
-
-        # --------------------------------------------------
-        # FIND STUDENT
-        # --------------------------------------------------
-
         student = None
 
 
@@ -229,43 +392,32 @@ async def start(
         except Exception as e:
 
             print(
-                "TX_REF student lookup error:",
+                "TX_REF lookup error:",
                 repr(e)
             )
 
-            student = None
-
-
-        # --------------------------------------------------
-        # STUDENT NOT FOUND
-        # --------------------------------------------------
 
         if not student:
 
             await update.message.reply_text(
 
-                "⚠️ We could not find your ALHIKAM "
-                "registration.\n\n"
+                "⚠️ We could not find your "
+                "ALHIKAM registration.\n\n"
 
                 "Please make sure you opened Telegram "
                 "using the button from your registration "
                 "success page.\n\n"
 
-                "If the problem continues, please contact "
-                "ALHIKAM support."
+                "If the problem continues, please "
+                "contact ALHIKAM support."
 
             )
 
             return
 
 
-        print(
-            "Student found successfully."
-        )
-
-
         # --------------------------------------------------
-        # CHECK REGISTRATION
+        # REGISTRATION CHECK
         # --------------------------------------------------
 
         registration_completed = int(
@@ -277,12 +429,6 @@ async def start(
             )
             or 0
 
-        )
-
-
-        print(
-            f"Registration completed: "
-            f"{registration_completed}"
         )
 
 
@@ -301,33 +447,26 @@ async def start(
 
 
         # --------------------------------------------------
-        # GET FACULTY / COURSE
+        # FACULTY
         # --------------------------------------------------
 
-        faculty = (
-
-            row_get(
-                student,
-                "faculty",
-                ""
-            )
-
-            or
-
-            row_get(
-                student,
-                "course",
-                ""
-            )
-
-            or ""
-
-        ).strip()
-
-
-        print(
-            f"Faculty/Course={faculty}"
+        faculty = get_student_faculty(
+            student
         )
+
+
+        if not faculty:
+
+            await update.message.reply_text(
+
+                "⚠️ Your faculty information could "
+                "not be found.\n\n"
+
+                "Please contact ALHIKAM support."
+
+            )
+
+            return
 
 
         # --------------------------------------------------
@@ -342,32 +481,15 @@ async def start(
                 ""
             )
 
-            or
+            or telegram_name
 
-            telegram_name
-
-            or
-
-            "Student"
+            or "Student"
 
         ).strip()
 
 
         # --------------------------------------------------
-        # NOTE:
-        #
-        # Ba ma connect_student_to_telegram a nan.
-        #
-        # Dalili:
-        # database.py ɗinka na yanzu ba shi da wannan
-        # function.
-        #
-        # Telegram links za su iya aiki ba tare da shi ba.
-        # --------------------------------------------------
-
-
-        # --------------------------------------------------
-        # WELCOME MESSAGE
+        # WELCOME
         # --------------------------------------------------
 
         await update.message.reply_text(
@@ -375,155 +497,30 @@ async def start(
             f"🎉 Congratulations {student_name}!\n\n"
 
             "✅ Your ALHIKAM registration has been "
-            "successfully connected to your Telegram "
-            "account.\n\n"
+            "successfully connected.\n\n"
 
-            "📚 We are now preparing your class "
-            "invitation links..."
+            f"🎓 Faculty: {faculty}\n\n"
+
+            "📚 I am preparing your class links..."
 
         )
 
 
-        # ==================================================
-        # SEND STUDENT LINKS
-        # ==================================================
+        # --------------------------------------------------
+        # SEND LINKS
+        # --------------------------------------------------
 
-        try:
+        await send_links_to_student(
 
-            result = await send_student_links(
+            update,
 
-                telegram_id,
+            telegram_id,
 
-                faculty
+            faculty,
 
-            )
+            tx_ref
 
-
-            # ------------------------------------------------
-            # IMPORTANT:
-            #
-            # telegram_service.py yana dawo da LIST.
-            #
-            # Saboda haka:
-            #
-            # len(result)
-            #
-            # ba:
-            #
-            # result.get(...)
-            # ------------------------------------------------
-
-            total_links = len(
-                result
-            )
-
-
-            print(
-                "=================================================="
-            )
-
-            print(
-                "STUDENT LINKS SENT"
-            )
-
-            print(
-                f"TX_REF={tx_ref}"
-            )
-
-            print(
-                f"TELEGRAM_ID={telegram_id}"
-            )
-
-            print(
-                f"FACULTY={faculty}"
-            )
-
-            print(
-                f"TOTAL_LINKS_SENT={total_links}"
-            )
-
-            print(
-                "=================================================="
-            )
-
-
-            # ------------------------------------------------
-            # SUCCESS
-            # ------------------------------------------------
-
-            if total_links > 0:
-
-                await update.message.reply_text(
-
-                    "✅ Your ALHIKAM class invitation "
-                    "links have been sent successfully.\n\n"
-
-                    "📚 Please check the message above and "
-                    "join your Main Group, Faculty and "
-                    "Subject classes.\n\n"
-
-                    "💬 Don't forget to join the "
-                    "WhatsApp Community as well."
-
-                )
-
-            else:
-
-                await update.message.reply_text(
-
-                    "⚠️ Your registration is successful, "
-                    "but no class invitation link could "
-                    "be created right now.\n\n"
-
-                    "Please contact ALHIKAM support."
-
-                )
-
-
-        except Exception as e:
-
-            # ------------------------------------------------
-            # REAL ERROR ONLY
-            # ------------------------------------------------
-
-            print(
-                "=================================================="
-            )
-
-            print(
-                "TELEGRAM LINKS ERROR"
-            )
-
-            print(
-                f"TX_REF={tx_ref}"
-            )
-
-            print(
-                f"TELEGRAM_ID={telegram_id}"
-            )
-
-            print(
-                f"FACULTY={faculty}"
-            )
-
-            print(
-                f"ERROR={repr(e)}"
-            )
-
-            print(
-                "=================================================="
-            )
-
-
-            await update.message.reply_text(
-
-                "⚠️ Your registration is successful, "
-                "but I could not send your class links "
-                "right now.\n\n"
-
-                "Please contact ALHIKAM support."
-
-            )
+        )
 
 
         return
@@ -531,16 +528,7 @@ async def start(
 
     # ======================================================
     # CASE 2
-    # NORMAL /START WITHOUT TX_REF
-    # ======================================================
-
-    print(
-        "Normal /start without TX_REF"
-    )
-
-
-    # ======================================================
-    # FIND EXISTING STUDENT BY TELEGRAM ID
+    # NORMAL /START
     # ======================================================
 
     try:
@@ -562,7 +550,7 @@ async def start(
 
 
     # ======================================================
-    # CHECK REGISTRATION
+    # EXISTING STUDENT
     # ======================================================
 
     if student:
@@ -578,71 +566,32 @@ async def start(
 
         )
 
-    else:
 
-        registration_completed = 0
+        if registration_completed == 1:
 
-
-    # ======================================================
-    # EXISTING REGISTERED STUDENT
-    # ======================================================
-
-    if (
-
-        student
-
-        and
-
-        registration_completed == 1
-
-    ):
-
-        await update.message.reply_text(
-
-            "🎓 Welcome back to ALHIKAM "
-            "Learning Center\n\n"
-
-            f"Hello {telegram_name},\n\n"
-
-            "✅ Your registration is already completed.\n\n"
-
-            "🔗 I will send your invitation links again."
-
-        )
-
-
-        # --------------------------------------------------
-        # GET FACULTY
-        # --------------------------------------------------
-
-        faculty = (
-
-            row_get(
-                student,
-                "faculty",
-                ""
+            faculty = get_student_faculty(
+                student
             )
 
-            or
 
-            row_get(
-                student,
-                "course",
-                ""
+            await update.message.reply_text(
+
+                "🎓 Welcome back to ALHIKAM "
+                "Learning Center.\n\n"
+
+                f"Hello {telegram_name},\n\n"
+
+                "✅ Your registration is already "
+                "completed.\n\n"
+
+                "🔗 I will send your class links again."
+
             )
 
-            or ""
 
-        ).strip()
+            await send_links_to_student(
 
-
-        # --------------------------------------------------
-        # SEND LINKS AGAIN
-        # --------------------------------------------------
-
-        try:
-
-            result = await send_student_links(
+                update,
 
                 telegram_id,
 
@@ -651,67 +600,7 @@ async def start(
             )
 
 
-            total_links = len(
-                result
-            )
-
-
-            print(
-                "=================================================="
-            )
-
-            print(
-                "LINKS RESENT"
-            )
-
-            print(
-                f"TELEGRAM_ID={telegram_id}"
-            )
-
-            print(
-                f"FACULTY={faculty}"
-            )
-
-            print(
-                f"TOTAL_LINKS_SENT={total_links}"
-            )
-
-            print(
-                "=================================================="
-            )
-
-
-            if total_links <= 0:
-
-                await update.message.reply_text(
-
-                    "⚠️ I could not create your "
-                    "invitation links right now.\n\n"
-
-                    "Please contact ALHIKAM support."
-
-                )
-
-
-        except Exception as e:
-
-            print(
-                "Could not resend Telegram links:",
-                repr(e)
-            )
-
-
-            await update.message.reply_text(
-
-                "⚠️ I could not send your invitation "
-                "links right now.\n\n"
-
-                "Please contact ALHIKAM support."
-
-            )
-
-
-        return
+            return
 
 
     # ======================================================
@@ -778,7 +667,7 @@ async def start(
 
 
     # ======================================================
-    # SEND PAYMENT MESSAGE
+    # MESSAGE
     # ======================================================
 
     await update.message.reply_text(
