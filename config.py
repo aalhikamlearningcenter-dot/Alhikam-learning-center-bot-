@@ -58,7 +58,7 @@ DATABASE_NAME = os.getenv(
 
 
 # ==========================================================
-# WHATSAPP
+# WHATSAPP COMMUNITY
 # ==========================================================
 
 WHATSAPP_COMMUNITY_LINK = os.getenv(
@@ -83,15 +83,6 @@ MINIMUM_WITHDRAWAL = 5000
 MAIN_GROUP_ID = -1004384506380
 
 ANNOUNCEMENT_CHANNEL_ID = -1004315707986
-
-
-# ==========================================================
-# SYSTEM CHANNELS
-# ==========================================================
-
-BOT_ACCESS_ID = -1003800935640
-
-PAYMENT_REGISTRATION_ID = -1003935952561
 
 
 # ==========================================================
@@ -123,8 +114,14 @@ GEOGRAPHY_ID = -1003901130871
 
 
 # ==========================================================
-# ARTS SUBJECTS
+# ARTS / COMMERCIAL SUBJECTS
 # ==========================================================
+
+PRINCIPLES_OF_ACCOUNTS_ID = -1004459228986
+
+COMMERCE_ID = -1003930273330
+
+ECONOMICS_ID = -1003632758498
 
 FINE_ARTS_ID = -1003801904375
 
@@ -144,26 +141,12 @@ USE_OF_ENGLISH_ID = -1003759215809
 
 
 # ==========================================================
-# COMMERCIAL SUBJECTS
+# SYSTEM CHANNELS
 # ==========================================================
 
-ACCOUNTING_ID = -1004459228986
+BOT_ACCESS_ID = -1003800935640
 
-COMMERCE_ID = -1003930273330
-
-ECONOMICS_ID = -1003632758498
-
-
-# ==========================================================
-# OTHER / SHARED SUBJECTS
-# ==========================================================
-
-# Idan kana son Use of English ya kasance ga
-# Science, Arts da Commercial, ana iya amfani da:
-#
-# USE_OF_ENGLISH_ID
-#
-# daga sama.
+PAYMENT_REGISTRATION_ID = -1003935952561
 
 
 # ==========================================================
