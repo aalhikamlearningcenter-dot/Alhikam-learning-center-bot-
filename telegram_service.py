@@ -2,45 +2,24 @@
 # ALHIKAM LEARNING CENTER V2
 # telegram_service.py
 #
-# PAYMENT
-#   ↓
-# REGISTRATION
-#   ↓
-# TELEGRAM /START
-#   ↓
-# FIND STUDENT
-#   ↓
-# DETECT FACULTY
-#   ↓
-# SEND ALL FACULTY LINKS
-#   ↓
-# WHATSAPP COMMUNITY
+# TELEGRAM + WHATSAPP COMMUNITY
 # ==========================================================
-
 
 from datetime import datetime, timedelta, timezone
 
 from telegram import Bot
 
 from config import (
+
     BOT_TOKEN,
 
-    # ------------------------------------------------------
-    # MAIN
-    # ------------------------------------------------------
     MAIN_GROUP_ID,
     ANNOUNCEMENT_CHANNEL_ID,
 
-    # ------------------------------------------------------
-    # FACULTIES
-    # ------------------------------------------------------
     SCIENCE_FACULTY_ID,
     ARTS_FACULTY_ID,
     COMMERCIAL_FACULTY_ID,
 
-    # ------------------------------------------------------
-    # SCIENCE SUBJECTS
-    # ------------------------------------------------------
     PHYSICS_ID,
     CHEMISTRY_ID,
     BIOLOGY_ID,
@@ -48,33 +27,20 @@ from config import (
     AGRICULTURAL_SCIENCE_ID,
     GEOGRAPHY_ID,
 
-    # ------------------------------------------------------
-    # ARTS SUBJECTS
-    # ------------------------------------------------------
-    GOVERNMENT_ID,
-    LITERATURE_ID,
-    USE_OF_ENGLISH_ID,
+    PRINCIPLES_OF_ACCOUNTS_ID,
+    COMMERCE_ID,
+    ECONOMICS_ID,
+    FINE_ARTS_ID,
     HISTORY_ID,
     HAUSA_ID,
     CRS_ID,
     ISLAMIC_STUDIES_ID,
-    FINE_ARTS_ID,
+    GOVERNMENT_ID,
+    LITERATURE_ID,
+    USE_OF_ENGLISH_ID,
 
-    # ------------------------------------------------------
-    # COMMERCIAL SUBJECTS
-    # ------------------------------------------------------
-    ACCOUNTING_ID,
-    COMMERCE_ID,
-    ECONOMICS_ID,
-
-    # ------------------------------------------------------
-    # WHATSAPP
-    # ------------------------------------------------------
     WHATSAPP_COMMUNITY_LINK,
 
-    # ------------------------------------------------------
-    # INVITE SETTINGS
-    # ------------------------------------------------------
     INVITE_LINK_EXPIRE_MINUTES,
     INVITE_LINK_MEMBER_LIMIT,
 )
@@ -105,12 +71,6 @@ async def send_message(
     text
 ):
 
-    if not chat_id:
-
-        raise ValueError(
-            "Telegram chat ID is missing."
-        )
-
     await bot.send_message(
 
         chat_id=chat_id,
@@ -123,16 +83,12 @@ async def send_message(
 
 
 # ==========================================================
-# CREATE TELEGRAM INVITE LINK
+# CREATE INVITE LINK
 # ==========================================================
 
 async def create_invite(
     chat_id
 ):
-
-    # ------------------------------------------------------
-    # If Telegram ID is missing, skip it.
-    # ------------------------------------------------------
 
     if not chat_id:
 
@@ -140,10 +96,6 @@ async def create_invite(
             "Telegram chat ID is missing."
         )
 
-
-    # ------------------------------------------------------
-    # Expiration time
-    # ------------------------------------------------------
 
     expire = (
 
@@ -160,114 +112,18 @@ async def create_invite(
     )
 
 
-    # ------------------------------------------------------
-    # Create invite
-    # ------------------------------------------------------
+    invite = await bot.create_chat_invite_link(
 
-    invite = (
+        chat_id=chat_id,
 
-        await bot.create_chat_invite_link(
+        expire_date=expire,
 
-            chat_id=chat_id,
-
-            expire_date=expire,
-
-            member_limit=INVITE_LINK_MEMBER_LIMIT
-
-        )
+        member_limit=INVITE_LINK_MEMBER_LIMIT
 
     )
 
 
     return invite.invite_link
-
-
-# ==========================================================
-# SAFE ADD TELEGRAM LINK
-#
-# Wannan helper yana hana wani missing Telegram ID
-# ya sa bot ya crash.
-# ==========================================================
-
-async def add_telegram_link(
-    links,
-    title,
-    chat_id
-):
-
-    # ------------------------------------------------------
-    # Skip missing ID
-    # ------------------------------------------------------
-
-    if not chat_id:
-
-        print(
-            f"SKIPPED TELEGRAM LINK | "
-            f"{title} | ID is missing"
-        )
-
-        return
-
-
-    try:
-
-        link = await create_invite(
-            chat_id
-        )
-
-        links.append(
-            (
-                title,
-                link
-            )
-        )
-
-        print(
-            f"TELEGRAM LINK CREATED | "
-            f"{title} | {chat_id}"
-        )
-
-
-    except Exception as e:
-
-        print(
-            f"TELEGRAM LINK FAILED | "
-            f"{title} | "
-            f"ID={chat_id} | "
-            f"ERROR={e}"
-        )
-
-
-# ==========================================================
-# SEND WHATSAPP LINK
-# ==========================================================
-
-def add_whatsapp_link(
-    links
-):
-
-    if not WHATSAPP_COMMUNITY_LINK:
-
-        print(
-            "WHATSAPP LINK SKIPPED | "
-            "WHATSAPP_COMMUNITY_LINK is empty"
-        )
-
-        return
-
-
-    links.append(
-
-        (
-            "💬 WhatsApp Community",
-            WHATSAPP_COMMUNITY_LINK
-        )
-
-    )
-
-    print(
-        "WHATSAPP COMMUNITY LINK ADDED"
-    )
 
 
 # ==========================================================
@@ -279,183 +135,179 @@ async def send_student_links(
     faculty
 ):
 
-    links = []
-
-
-    # ======================================================
-    # NORMALIZE FACULTY
-    # ======================================================
-
     faculty = (
+        faculty
+        or ""
+    ).strip()
 
-        str(
-            faculty
-            or ""
+
+    # ------------------------------------------------------
+    # NORMALIZE FACULTY
+    # ------------------------------------------------------
+
+    faculty_lower = faculty.lower()
+
+
+    if faculty_lower == "science":
+
+        faculty_name = "Science"
+
+    elif faculty_lower == "arts":
+
+        faculty_name = "Arts"
+
+    elif faculty_lower == "commercial":
+
+        faculty_name = "Commercial"
+
+    else:
+
+        raise ValueError(
+            f"Invalid faculty: {faculty}"
         )
 
-        .strip()
 
-    )
+    # ======================================================
+    # LINKS
+    # ======================================================
 
-
-    print(
-        "=================================================="
-    )
-
-    print(
-        "PREPARING STUDENT LINKS"
-    )
-
-    print(
-        f"TELEGRAM_ID={chat_id}"
-    )
-
-    print(
-        f"FACULTY={faculty}"
-    )
-
-    print(
-        "=================================================="
-    )
+    links = []
 
 
     # ======================================================
     # MAIN GROUP
     # ======================================================
 
-    await add_telegram_link(
+    links.append(
 
-        links,
-
-        "🏠 Main Group",
-
-        MAIN_GROUP_ID
+        (
+            "🏠 Main Group",
+            await create_invite(
+                MAIN_GROUP_ID
+            )
+        )
 
     )
 
 
     # ======================================================
-    # ANNOUNCEMENT CHANNEL
+    # ANNOUNCEMENT
     # ======================================================
 
-    await add_telegram_link(
+    links.append(
 
-        links,
-
-        "📢 Announcement Channel",
-
-        ANNOUNCEMENT_CHANNEL_ID
+        (
+            "📢 Announcement Channel",
+            await create_invite(
+                ANNOUNCEMENT_CHANNEL_ID
+            )
+        )
 
     )
+
+
+    # ======================================================
+    # WHATSAPP COMMUNITY
+    # ======================================================
+
+    if WHATSAPP_COMMUNITY_LINK:
+
+        links.append(
+
+            (
+                "💬 WhatsApp Community",
+                WHATSAPP_COMMUNITY_LINK
+            )
+
+        )
 
 
     # ======================================================
     # SCIENCE
     # ======================================================
 
-    if faculty.lower() == "science":
+    if faculty_name == "Science":
 
-        # --------------------------------------------------
-        # Faculty
-        # --------------------------------------------------
+        links.append(
 
-        await add_telegram_link(
-
-            links,
-
-            "🎓 Science Faculty",
-
-            SCIENCE_FACULTY_ID
+            (
+                "🎓 Science Faculty",
+                await create_invite(
+                    SCIENCE_FACULTY_ID
+                )
+            )
 
         )
 
 
-        # --------------------------------------------------
-        # Physics
-        # --------------------------------------------------
+        links.append(
 
-        await add_telegram_link(
-
-            links,
-
-            "📘 Physics",
-
-            PHYSICS_ID
+            (
+                "📘 Physics",
+                await create_invite(
+                    PHYSICS_ID
+                )
+            )
 
         )
 
 
-        # --------------------------------------------------
-        # Chemistry
-        # --------------------------------------------------
+        links.append(
 
-        await add_telegram_link(
-
-            links,
-
-            "🧪 Chemistry",
-
-            CHEMISTRY_ID
+            (
+                "🧪 Chemistry",
+                await create_invite(
+                    CHEMISTRY_ID
+                )
+            )
 
         )
 
 
-        # --------------------------------------------------
-        # Biology
-        # --------------------------------------------------
+        links.append(
 
-        await add_telegram_link(
-
-            links,
-
-            "🧬 Biology",
-
-            BIOLOGY_ID
+            (
+                "🧬 Biology",
+                await create_invite(
+                    BIOLOGY_ID
+                )
+            )
 
         )
 
 
-        # --------------------------------------------------
-        # Mathematics
-        # --------------------------------------------------
+        links.append(
 
-        await add_telegram_link(
-
-            links,
-
-            "📐 Mathematics",
-
-            MATHEMATICS_ID
+            (
+                "📐 Mathematics",
+                await create_invite(
+                    MATHEMATICS_ID
+                )
+            )
 
         )
 
 
-        # --------------------------------------------------
-        # Agricultural Science
-        # --------------------------------------------------
+        links.append(
 
-        await add_telegram_link(
-
-            links,
-
-            "🌾 Agricultural Science",
-
-            AGRICULTURAL_SCIENCE_ID
+            (
+                "🌾 Agricultural Science",
+                await create_invite(
+                    AGRICULTURAL_SCIENCE_ID
+                )
+            )
 
         )
 
 
-        # --------------------------------------------------
-        # Geography
-        # --------------------------------------------------
+        links.append(
 
-        await add_telegram_link(
-
-            links,
-
-            "🌍 Geography",
-
-            GEOGRAPHY_ID
+            (
+                "🌍 Geography",
+                await create_invite(
+                    GEOGRAPHY_ID
+                )
+            )
 
         )
 
@@ -464,156 +316,112 @@ async def send_student_links(
     # ARTS
     # ======================================================
 
-    elif faculty.lower() == "arts":
+    elif faculty_name == "Arts":
 
-        # --------------------------------------------------
-        # Arts Faculty
-        # --------------------------------------------------
+        links.append(
 
-        await add_telegram_link(
-
-            links,
-
-            "🎨 Arts Faculty",
-
-            ARTS_FACULTY_ID
+            (
+                "🎓 Arts Faculty",
+                await create_invite(
+                    ARTS_FACULTY_ID
+                )
+            )
 
         )
 
 
-        # --------------------------------------------------
-        # Government
-        # --------------------------------------------------
+        links.append(
 
-        await add_telegram_link(
-
-            links,
-
-            "🌍 Government",
-
-            GOVERNMENT_ID
+            (
+                "🎭 Fine Arts",
+                await create_invite(
+                    FINE_ARTS_ID
+                )
+            )
 
         )
 
 
-        # --------------------------------------------------
-        # Literature
-        # --------------------------------------------------
+        links.append(
 
-        await add_telegram_link(
-
-            links,
-
-            "📖 Literature in English",
-
-            LITERATURE_ID
+            (
+                "🕰️ History",
+                await create_invite(
+                    HISTORY_ID
+                )
+            )
 
         )
 
 
-        # --------------------------------------------------
-        # Use of English
-        # --------------------------------------------------
+        links.append(
 
-        await add_telegram_link(
-
-            links,
-
-            "📖 Use of English",
-
-            USE_OF_ENGLISH_ID
+            (
+                "🗣️ Hausa",
+                await create_invite(
+                    HAUSA_ID
+                )
+            )
 
         )
 
 
-        # --------------------------------------------------
-        # History
-        # --------------------------------------------------
+        links.append(
 
-        await add_telegram_link(
-
-            links,
-
-            "🕰️ History",
-
-            HISTORY_ID
+            (
+                "✝️ CRS",
+                await create_invite(
+                    CRS_ID
+                )
+            )
 
         )
 
 
-        # --------------------------------------------------
-        # Hausa
-        # --------------------------------------------------
+        links.append(
 
-        await add_telegram_link(
-
-            links,
-
-            "🗣️ Hausa",
-
-            HAUSA_ID
+            (
+                "🕌 Islamic Studies (IRS)",
+                await create_invite(
+                    ISLAMIC_STUDIES_ID
+                )
+            )
 
         )
 
 
-        # --------------------------------------------------
-        # CRS
-        # --------------------------------------------------
+        links.append(
 
-        await add_telegram_link(
-
-            links,
-
-            "✝️ CRS",
-
-            CRS_ID
+            (
+                "🌍 Government",
+                await create_invite(
+                    GOVERNMENT_ID
+                )
+            )
 
         )
 
 
-        # --------------------------------------------------
-        # Islamic Studies
-        # --------------------------------------------------
+        links.append(
 
-        await add_telegram_link(
-
-            links,
-
-            "🕌 Islamic Studies (IRS)",
-
-            ISLAMIC_STUDIES_ID
+            (
+                "📖 Literature in English",
+                await create_invite(
+                    LITERATURE_ID
+                )
+            )
 
         )
 
 
-        # --------------------------------------------------
-        # Fine Arts
-        # --------------------------------------------------
+        links.append(
 
-        await add_telegram_link(
-
-            links,
-
-            "🎭 Fine Arts",
-
-            FINE_ARTS_ID
-
-        )
-
-
-        # --------------------------------------------------
-        # Geography
-        #
-        # Same Geography channel used for Science/Arts.
-        # --------------------------------------------------
-
-        await add_telegram_link(
-
-            links,
-
-            "🌍 Geography",
-
-            GEOGRAPHY_ID
+            (
+                "📖 Use of English",
+                await create_invite(
+                    USE_OF_ENGLISH_ID
+                )
+            )
 
         )
 
@@ -622,138 +430,154 @@ async def send_student_links(
     # COMMERCIAL
     # ======================================================
 
-    elif faculty.lower() == "commercial":
+    elif faculty_name == "Commercial":
 
-        # --------------------------------------------------
-        # Commercial Faculty
-        # --------------------------------------------------
+        links.append(
 
-        await add_telegram_link(
-
-            links,
-
-            "💼 Commercial Faculty",
-
-            COMMERCIAL_FACULTY_ID
+            (
+                "💼 Commercial Faculty",
+                await create_invite(
+                    COMMERCIAL_FACULTY_ID
+                )
+            )
 
         )
 
 
-        # --------------------------------------------------
-        # Principles of Accounts
-        # --------------------------------------------------
+        links.append(
 
-        await add_telegram_link(
-
-            links,
-
-            "📚 Principles of Accounts",
-
-            ACCOUNTING_ID
+            (
+                "📚 Principles of Accounts",
+                await create_invite(
+                    PRINCIPLES_OF_ACCOUNTS_ID
+                )
+            )
 
         )
 
 
-        # --------------------------------------------------
-        # Commerce
-        # --------------------------------------------------
+        links.append(
 
-        await add_telegram_link(
-
-            links,
-
-            "📊 Commerce",
-
-            COMMERCE_ID
+            (
+                "📊 Commerce",
+                await create_invite(
+                    COMMERCE_ID
+                )
+            )
 
         )
 
 
-        # --------------------------------------------------
-        # Economics
-        # --------------------------------------------------
+        links.append(
 
-        await add_telegram_link(
+            (
+                "💼 Economics",
+                await create_invite(
+                    ECONOMICS_ID
+                )
+            )
 
-            links,
+        )
 
-            "💼 Economics",
 
-            ECONOMICS_ID
+        links.append(
+
+            (
+                "🎭 Fine Arts",
+                await create_invite(
+                    FINE_ARTS_ID
+                )
+            )
+
+        )
+
+
+        links.append(
+
+            (
+                "🕰️ History",
+                await create_invite(
+                    HISTORY_ID
+                )
+            )
+
+        )
+
+
+        links.append(
+
+            (
+                "🗣️ Hausa",
+                await create_invite(
+                    HAUSA_ID
+                )
+            )
+
+        )
+
+
+        links.append(
+
+            (
+                "✝️ CRS",
+                await create_invite(
+                    CRS_ID
+                )
+            )
+
+        )
+
+
+        links.append(
+
+            (
+                "🕌 Islamic Studies (IRS)",
+                await create_invite(
+                    ISLAMIC_STUDIES_ID
+                )
+            )
+
+        )
+
+
+        links.append(
+
+            (
+                "🌍 Government",
+                await create_invite(
+                    GOVERNMENT_ID
+                )
+            )
+
+        )
+
+
+        links.append(
+
+            (
+                "📖 Literature in English",
+                await create_invite(
+                    LITERATURE_ID
+                )
+            )
+
+        )
+
+
+        links.append(
+
+            (
+                "📖 Use of English",
+                await create_invite(
+                    USE_OF_ENGLISH_ID
+                )
+            )
 
         )
 
 
     # ======================================================
-    # INVALID FACULTY
-    # ======================================================
-
-    else:
-
-        print(
-            f"INVALID FACULTY: {faculty}"
-        )
-
-        raise ValueError(
-            f"Invalid faculty: {faculty}"
-        )
-
-
-    # ======================================================
-    # WHATSAPP COMMUNITY
-    #
-    # Everyone gets WhatsApp Community.
-    # ======================================================
-
-    add_whatsapp_link(
-        links
-    )
-
-
-    # ======================================================
-    # CHECK LINKS
-    # ======================================================
-
-    print(
-        "=================================================="
-    )
-
-    print(
-        "STUDENT LINKS PREPARED"
-    )
-
-    print(
-        f"FACULTY={faculty}"
-    )
-
-    print(
-        f"TOTAL LINKS={len(links)}"
-    )
-
-    for title, link in links:
-
-        print(
-            f"LINK: {title}"
-        )
-
-    print(
-        "=================================================="
-    )
-
-
-    # ======================================================
-    # NO LINKS
-    # ======================================================
-
-    if not links:
-
-        raise RuntimeError(
-            "No student links were created."
-        )
-
-
-    # ======================================================
-    # BUILD MESSAGE
+    # MESSAGE
     # ======================================================
 
     text = (
@@ -762,11 +586,10 @@ async def send_student_links(
 
         "Welcome to ALHIKAM Learning Center.\n\n"
 
-        "✅ Your registration has been successfully "
-        "connected to your Telegram account.\n\n"
+        f"🎓 Faculty: {faculty_name}\n\n"
 
-        "📚 Please join all your classes using the "
-        "links below:\n\n"
+        "Click each link below to join your "
+        "classes and community:\n\n"
 
     )
 
@@ -776,14 +599,26 @@ async def send_student_links(
         text += (
 
             f"{title}\n"
-
             f"{link}\n\n"
 
         )
 
 
+    text += (
+
+        "⚠️ Important:\n"
+        "Telegram invitation links are limited to "
+        "one student and expire after "
+        f"{INVITE_LINK_EXPIRE_MINUTES} minutes.\n\n"
+
+        "💬 Please make sure you join the WhatsApp "
+        "Community as well."
+
+    )
+
+
     # ======================================================
-    # SEND MESSAGE TO STUDENT
+    # SEND
     # ======================================================
 
     await send_message(
@@ -795,40 +630,11 @@ async def send_student_links(
     )
 
 
-    # ======================================================
-    # RETURN RESULT
-    #
-    # This structure is compatible with bot.py
-    # ======================================================
-
-    successful_links = [
-
-        {
-            "title": title,
-            "link": link
-        }
-
-        for title, link in links
-
-    ]
-
-
-    return {
-
-        "successful_links":
-            successful_links,
-
-        "failed_links":
-            [],
-
-        "total_links":
-            len(links)
-
-    }
+    return links
 
 
 # ==========================================================
-# WELCOME MESSAGE
+# WELCOME
 # ==========================================================
 
 async def send_welcome_message(
@@ -838,7 +644,7 @@ async def send_welcome_message(
 
     text = (
 
-        f"🎉 Welcome to ALHIKAM Learning Center\n\n"
+        "🎉 Welcome to ALHIKAM Learning Center\n\n"
 
         f"Hello {full_name},\n\n"
 
