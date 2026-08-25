@@ -1,4 +1,4 @@
-GA main.py
+
 # ==========================================================
 # ALHIKAM LEARNING CENTER V2
 # main.py
