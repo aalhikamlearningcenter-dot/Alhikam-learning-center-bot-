@@ -1,4 +1,3 @@
-GA registration.py
 
 # ==========================================================
 # ALHIKAM LEARNING CENTER V2
