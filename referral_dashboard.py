@@ -6,13 +6,11 @@
 # REFERRAL WITHDRAWAL
 # ==========================================================
 
-from flask import (
-    request,
-    render_template_string,
-)
+from flask import request, render_template_string
 
 from database import (
     get_promoter_by_id,
+    get_promoter_by_referral_code,
     create_withdrawal,
     get_promoter_withdrawals,
 )
@@ -22,9 +20,40 @@ from database import (
 # APP URL
 # ==========================================================
 
-APP_URL = (
-    "https://precious-trust-production-956b.up.railway.app"
-)
+APP_URL = "https://precious-trust-production-956b.up.railway.app"
+
+
+# ==========================================================
+# SETTINGS
+# ==========================================================
+
+MIN_WITHDRAWAL = 5000
+
+
+# ==========================================================
+# HELPERS
+# ==========================================================
+
+def _clean_referral_code(referral_code):
+    return str(referral_code or "").strip()
+
+
+def _get_promoter_from_code(referral_code):
+
+    referral_code = _clean_referral_code(referral_code)
+
+    if not referral_code:
+        return None
+
+    return get_promoter_by_referral_code(referral_code)
+
+
+def _money(value):
+
+    try:
+        return f"{float(value or 0):,.0f}"
+    except Exception:
+        return "0"
 
 
 # ==========================================================
@@ -46,10 +75,14 @@ content="width=device-width, initial-scale=1">
 
 <style>
 
+*{
+    box-sizing:border-box;
+}
+
 body{
     font-family:Arial,sans-serif;
     background:#f5f7f9;
-    padding:20px;
+    padding:15px;
     margin:0;
 }
 
@@ -61,9 +94,9 @@ body{
 .header{
     background:#087f5b;
     color:white;
-    padding:25px;
+    padding:25px 20px;
     border-radius:15px;
-    margin-bottom:20px;
+    margin-bottom:15px;
 }
 
 .header h2{
@@ -81,11 +114,11 @@ body{
 .label{
     color:#666;
     font-size:14px;
-    margin-bottom:6px;
+    margin-bottom:7px;
 }
 
 .value{
-    font-size:24px;
+    font-size:23px;
     font-weight:bold;
 }
 
@@ -104,12 +137,14 @@ body{
     border-radius:10px;
     word-break:break-all;
     font-size:14px;
+    line-height:1.5;
 }
 
 .grid{
     display:grid;
     grid-template-columns:1fr 1fr;
     gap:12px;
+    margin-bottom:15px;
 }
 
 .stat{
@@ -117,6 +152,18 @@ body{
     padding:18px;
     border-radius:12px;
     box-shadow:0 2px 8px rgba(0,0,0,.06);
+}
+
+.copy{
+    margin-top:10px;
+    width:100%;
+    padding:12px;
+    border:none;
+    background:#229ED9;
+    color:white;
+    border-radius:8px;
+    font-size:15px;
+    cursor:pointer;
 }
 
 .withdraw{
@@ -130,7 +177,6 @@ body{
     border-radius:10px;
     font-size:18px;
     font-weight:bold;
-    box-sizing:border-box;
 }
 
 .withdraw-disabled{
@@ -141,26 +187,14 @@ body{
     color:white;
     text-align:center;
     border-radius:10px;
-    font-size:17px;
+    font-size:16px;
     font-weight:bold;
-    box-sizing:border-box;
-}
-
-.copy{
-    margin-top:10px;
-    width:100%;
-    padding:12px;
-    border:none;
-    background:#229ED9;
-    color:white;
-    border-radius:8px;
-    font-size:15px;
 }
 
 .small{
     color:#666;
     font-size:13px;
-    line-height:1.5;
+    line-height:1.6;
 }
 
 .withdraw-item{
@@ -168,6 +202,7 @@ body{
     padding:14px;
     border-radius:10px;
     margin-top:10px;
+    line-height:1.5;
 }
 
 .pending{
@@ -203,7 +238,6 @@ body{
 
 <div class="container">
 
-
 <div class="header">
 
 <h2>
@@ -234,7 +268,7 @@ Welcome,
 
 <button
 class="copy"
-onclick="copyText('{{ referral_code }}')"
+onclick='copyText({{ referral_code|tojson }})'
 >
 📋 Copy Referral Code
 </button>
@@ -258,7 +292,7 @@ onclick="copyText('{{ referral_code }}')"
 
 <button
 class="copy"
-onclick="copyText('{{ referral_link }}')"
+onclick='copyText({{ referral_link|tojson }})'
 >
 📋 Copy Referral Link
 </button>
@@ -271,7 +305,6 @@ onclick="copyText('{{ referral_link }}')"
 ====================================================== -->
 
 <div class="grid">
-
 
 <div class="stat">
 
@@ -324,7 +357,6 @@ onclick="copyText('{{ referral_link }}')"
 
 </div>
 
-
 </div>
 
 
@@ -341,7 +373,7 @@ onclick="copyText('{{ referral_link }}')"
 <p class="small">
 
 Minimum withdrawal:
-<b>₦5,000</b>
+<b>₦{{ min_withdrawal }}</b>
 
 <br><br>
 
@@ -351,11 +383,11 @@ Available balance:
 </p>
 
 
-{% if available_balance_number >= 5000 %}
+{% if available_balance_number >= min_withdrawal_number %}
 
 <a
 class="withdraw"
-href="/referral/withdraw?promoter_id={{ promoter_id }}"
+href="/referral/withdraw?ref={{ referral_code|urlencode }}"
 >
 💸 WITHDRAW MONEY
 </a>
@@ -363,7 +395,7 @@ href="/referral/withdraw?promoter_id={{ promoter_id }}"
 {% else %}
 
 <div class="withdraw-disabled">
-🔒 Minimum ₦5,000 Required
+🔒 Minimum ₦{{ min_withdrawal }} Required
 </div>
 
 {% endif %}
@@ -380,7 +412,6 @@ href="/referral/withdraw?promoter_id={{ promoter_id }}"
 <h3>
 📋 Withdrawal History
 </h3>
-
 
 {% if withdrawals %}
 
@@ -400,7 +431,7 @@ Request #{{ withdrawal["id"] }}
 Amount:
 <b>
 ₦{{ "{:,.0f}".format(
-    float(withdrawal["amount"] or 0)
+float(withdrawal["amount"] or 0)
 ) }}
 </b>
 </div>
@@ -410,6 +441,11 @@ Amount:
 <div>
 Bank:
 {{ withdrawal["bank_name"] }}
+</div>
+
+<div>
+Account Name:
+{{ withdrawal["account_name"] }}
 </div>
 
 <div>
@@ -423,7 +459,7 @@ Account:
 
 Status:
 
-<span class="{{ withdrawal['status'] }}">
+<span class="{{ withdrawal['status']|lower }}">
 
 {{ withdrawal["status"]|capitalize }}
 
@@ -434,9 +470,7 @@ Status:
 <br>
 
 <div class="small">
-
 {{ withdrawal["created_at"] }}
-
 </div>
 
 </div>
@@ -455,7 +489,7 @@ No withdrawal request yet.
 
 
 <!-- =====================================================
-     REFERRAL INFORMATION
+     INFORMATION
 ====================================================== -->
 
 <div class="card">
@@ -475,7 +509,6 @@ will automatically be added to your balance.
 </p>
 
 </div>
-
 
 </div>
 
@@ -497,15 +530,47 @@ function copyText(text){
         })
         .catch(function(){
 
-            alert("Unable to copy.");
+            fallbackCopy(text);
 
         });
 
     }else{
 
-        alert("Copy is not supported on this browser.");
+        fallbackCopy(text);
 
     }
+
+}
+
+
+function fallbackCopy(text){
+
+    var textarea =
+        document.createElement("textarea");
+
+    textarea.value = text;
+
+    textarea.style.position = "fixed";
+    textarea.style.left = "-9999px";
+
+    document.body.appendChild(textarea);
+
+    textarea.focus();
+    textarea.select();
+
+    try{
+
+        document.execCommand("copy");
+
+        alert("Copied successfully!");
+
+    }catch(error){
+
+        alert("Unable to copy.");
+
+    }
+
+    document.body.removeChild(textarea);
 
 }
 
@@ -519,61 +584,43 @@ function copyText(text){
 
 
 # ==========================================================
-# REFERRAL DASHBOARD
-# ==========================================================
-#
-# main.py zai kira:
-#
-# referral_dashboard(promoter_id)
-#
+# REFERRAL DASHBOARD BY PROMOTER ID
 # ==========================================================
 
 def referral_dashboard(promoter_id):
 
-    # ------------------------------------------------------
-    # Validate promoter ID
-    # ------------------------------------------------------
-
     if not promoter_id:
-
-        return (
-            "Promoter ID is required.",
-            400
-        )
+        return "Promoter ID is required.", 400
 
     try:
 
-        promoter_id = int(
-            promoter_id
-        )
+        promoter_id = int(promoter_id)
 
     except (TypeError, ValueError):
 
-        return (
-            "Invalid promoter ID.",
-            400
-        )
+        return "Invalid promoter ID.", 400
+
 
     # ------------------------------------------------------
-    # Get promoter
+    # GET PROMOTER
     # ------------------------------------------------------
 
     try:
 
-        promoter = get_promoter_by_id(
-            promoter_id
-        )
+        promoter = get_promoter_by_id(promoter_id)
 
-    except Exception:
+    except Exception as e:
+
+        print(
+            "Referral dashboard error:",
+            repr(e)
+        )
 
         return (
             "Unable to load referral account.",
             500
         )
 
-    # ------------------------------------------------------
-    # Check promoter
-    # ------------------------------------------------------
 
     if not promoter:
 
@@ -582,52 +629,118 @@ def referral_dashboard(promoter_id):
             404
         )
 
+
     # ------------------------------------------------------
-    # Check active status
+    # ACTIVE CHECK
     # ------------------------------------------------------
 
-    if promoter["status"] != "active":
+    if str(
+        promoter["status"]
+    ).lower() != "active":
 
         return (
             "This referral account is not active.",
             403
         )
 
+
     # ------------------------------------------------------
-    # Get withdrawal history
+    # WITHDRAWALS
     # ------------------------------------------------------
 
     try:
 
-        withdrawals = (
-            get_promoter_withdrawals(
-                promoter_id
-            )
+        withdrawals = get_promoter_withdrawals(
+            promoter_id
+        )
+
+    except Exception as e:
+
+        print(
+            "Withdrawal history error:",
+            repr(e)
+        )
+
+        withdrawals = []
+
+
+    # ------------------------------------------------------
+    # BALANCE
+    # ------------------------------------------------------
+
+    try:
+
+        available_balance_number = float(
+            promoter["available_balance"] or 0
         )
 
     except Exception:
 
-        withdrawals = []
+        available_balance_number = 0
+
+
+    try:
+
+        total_earned_number = float(
+            promoter["total_earned"] or 0
+        )
+
+    except Exception:
+
+        total_earned_number = 0
+
+
+    try:
+
+        withdrawn_amount_number = float(
+            promoter["withdrawn_amount"] or 0
+        )
+
+    except Exception:
+
+        withdrawn_amount_number = 0
+
+
+    try:
+
+        total_sales = int(
+            promoter["total_sales"] or 0
+        )
+
+    except Exception:
+
+        total_sales = 0
+
 
     # ------------------------------------------------------
-    # Balance
+    # REFERRAL CODE
     # ------------------------------------------------------
 
-    available_balance_number = float(
-        promoter["available_balance"] or 0
-    )
+    referral_code = str(
+        promoter["referral_code"] or ""
+    ).strip()
+
+
+    if not referral_code:
+
+        return (
+            "Referral code is missing.",
+            500
+        )
+
 
     # ------------------------------------------------------
-    # Referral link
+    # REFERRAL LINK
     # ------------------------------------------------------
 
     referral_link = (
         f"{APP_URL}/payment"
-        f"?ref={promoter['referral_code']}"
+        f"?ref={referral_code}"
     )
 
+
     # ------------------------------------------------------
-    # Render dashboard
+    # RENDER
     # ------------------------------------------------------
 
     return render_template_string(
@@ -636,55 +749,57 @@ def referral_dashboard(promoter_id):
 
         promoter_id=promoter["id"],
 
-        promoter_name=promoter["full_name"],
+        promoter_name=(
+            promoter["full_name"]
+            or "Promoter"
+        ),
 
-        referral_code=promoter["referral_code"],
+        referral_code=referral_code,
 
         referral_link=referral_link,
 
-        total_sales=int(
-            promoter["total_sales"] or 0
+        total_sales=total_sales,
+
+        total_earned=(
+            f"{total_earned_number:,.0f}"
         ),
 
-        total_earned=f"{float(
-            promoter['total_earned'] or 0
-        ):,.0f}",
-
-        available_balance=f"{available_balance_number:,.0f}",
+        available_balance=(
+            f"{available_balance_number:,.0f}"
+        ),
 
         available_balance_number=(
             available_balance_number
         ),
 
-        withdrawn_amount=f"{float(
-            promoter['withdrawn_amount'] or 0
-        ):,.0f}",
+        withdrawn_amount=(
+            f"{withdrawn_amount_number:,.0f}"
+        ),
 
-        withdrawals=withdrawals
+        withdrawals=withdrawals,
+
+        min_withdrawal=(
+            f"{MIN_WITHDRAWAL:,.0f}"
+        ),
+
+        min_withdrawal_number=(
+            MIN_WITHDRAWAL
+        )
 
     )
 
 
 # ==========================================================
-# DASHBOARD BY REFERRAL CODE
-# ==========================================================
-#
-# Wannan function tana taimakawa idan wani code ya kira
-# dashboard directly.
-#
+# REFERRAL DASHBOARD BY CODE
 # ==========================================================
 
 def referral_dashboard_by_code(
     referral_code
 ):
 
-    from database import (
-        get_promoter_by_referral_code
+    referral_code = _clean_referral_code(
+        referral_code
     )
-
-    referral_code = (
-        referral_code or ""
-    ).strip()
 
     if not referral_code:
 
@@ -693,11 +808,25 @@ def referral_dashboard_by_code(
             400
         )
 
-    promoter = (
-        get_promoter_by_referral_code(
+
+    try:
+
+        promoter = _get_promoter_from_code(
             referral_code
         )
-    )
+
+    except Exception as e:
+
+        print(
+            "Referral code lookup error:",
+            repr(e)
+        )
+
+        return (
+            "Unable to load referral account.",
+            500
+        )
+
 
     if not promoter:
 
@@ -705,6 +834,7 @@ def referral_dashboard_by_code(
             "Invalid referral code.",
             404
         )
+
 
     return referral_dashboard(
         promoter["id"]
@@ -730,10 +860,14 @@ content="width=device-width, initial-scale=1">
 
 <style>
 
+*{
+    box-sizing:border-box;
+}
+
 body{
     font-family:Arial,sans-serif;
     background:#f5f7f9;
-    padding:20px;
+    padding:15px;
     margin:0;
 }
 
@@ -743,6 +877,7 @@ body{
     background:white;
     padding:25px;
     border-radius:15px;
+    box-shadow:0 3px 12px rgba(0,0,0,.08);
 }
 
 input,
@@ -751,7 +886,6 @@ select{
     padding:14px;
     margin-top:8px;
     margin-bottom:18px;
-    box-sizing:border-box;
     border:1px solid #ccc;
     border-radius:8px;
     font-size:16px;
@@ -775,12 +909,18 @@ button{
     margin-bottom:20px;
 }
 
-.error{
-    background:#fee2e2;
-    color:#991b1b;
-    padding:15px;
-    border-radius:10px;
-    margin-bottom:20px;
+.back{
+    display:block;
+    margin-top:18px;
+    text-align:center;
+    color:#087f5b;
+    text-decoration:none;
+}
+
+.note{
+    color:#666;
+    font-size:13px;
+    line-height:1.5;
 }
 
 </style>
@@ -808,12 +948,20 @@ Available Balance:
 </div>
 
 
+<p class="note">
+
+Minimum withdrawal:
+<b>₦{{ min_withdrawal }}</b>
+
+</p>
+
+
 <form method="POST">
 
 <input
 type="hidden"
-name="promoter_id"
-value="{{ promoter_id }}"
+name="referral_code"
+value="{{ referral_code }}"
 >
 
 
@@ -824,7 +972,7 @@ value="{{ promoter_id }}"
 <input
 type="number"
 name="amount"
-min="5000"
+min="{{ min_withdrawal_number }}"
 max="{{ balance_number }}"
 step="1"
 placeholder="Enter withdrawal amount"
@@ -868,6 +1016,7 @@ Select Bank
 type="text"
 name="account_name"
 autocomplete="name"
+maxlength="100"
 required
 >
 
@@ -882,6 +1031,7 @@ name="account_number"
 maxlength="10"
 inputmode="numeric"
 pattern="[0-9]{10}"
+placeholder="10 digit account number"
 required
 >
 
@@ -891,6 +1041,15 @@ required
 </button>
 
 </form>
+
+
+<a
+class="back"
+href="/referral/dashboard?ref={{ referral_code|urlencode }}"
+>
+← Back to Referral Dashboard
+</a>
+
 
 </div>
 
@@ -904,72 +1063,83 @@ required
 # ==========================================================
 # WITHDRAWAL PAGE
 # ==========================================================
-#
-# main.py zai kira:
-#
-# withdrawal_page(promoter_id)
-#
-# ==========================================================
 
-def withdrawal_page(promoter_id):
+def withdrawal_page(
+    referral_code
+):
 
-    # ------------------------------------------------------
-    # Validate promoter ID
-    # ------------------------------------------------------
+    referral_code = _clean_referral_code(
+        referral_code
+    )
 
-    if not promoter_id:
+
+    if not referral_code:
 
         return (
-            "Promoter ID is required.",
+            "Referral code is required.",
             400
         )
+
+
+    # ------------------------------------------------------
+    # GET PROMOTER
+    # ------------------------------------------------------
 
     try:
 
-        promoter_id = int(
-            promoter_id
+        promoter = _get_promoter_from_code(
+            referral_code
         )
 
-    except (TypeError, ValueError):
+    except Exception as e:
+
+        print(
+            "Promoter lookup error:",
+            repr(e)
+        )
 
         return (
-            "Invalid promoter ID.",
-            400
+            "Unable to load promoter.",
+            500
         )
 
-    # ------------------------------------------------------
-    # Get promoter
-    # ------------------------------------------------------
-
-    promoter = get_promoter_by_id(
-        promoter_id
-    )
 
     if not promoter:
 
         return (
-            "Promoter account not found.",
+            "Invalid promoter/referral code.",
             404
         )
 
+
     # ------------------------------------------------------
-    # Check active
+    # ACTIVE CHECK
     # ------------------------------------------------------
 
-    if promoter["status"] != "active":
+    if str(
+        promoter["status"]
+    ).lower() != "active":
 
         return (
             "This referral account is not active.",
             403
         )
 
+
     # ------------------------------------------------------
-    # Current balance
+    # BALANCE
     # ------------------------------------------------------
 
-    balance = float(
-        promoter["available_balance"] or 0
-    )
+    try:
+
+        balance = float(
+            promoter["available_balance"] or 0
+        )
+
+    except Exception:
+
+        balance = 0
+
 
     # ======================================================
     # GET
@@ -981,37 +1151,51 @@ def withdrawal_page(promoter_id):
 
             WITHDRAWAL_HTML,
 
-            promoter_id=promoter_id,
+            promoter_id=promoter["id"],
+
+            referral_code=referral_code,
 
             balance=f"{balance:,.0f}",
 
-            balance_number=balance
+            balance_number=balance,
+
+            min_withdrawal=(
+                f"{MIN_WITHDRAWAL:,.0f}"
+            ),
+
+            min_withdrawal_number=(
+                MIN_WITHDRAWAL
+            )
 
         )
+
 
     # ======================================================
     # POST
     # ======================================================
 
-    # ------------------------------------------------------
-    # Amount
-    # ------------------------------------------------------
+    amount_raw = (
+        request.form.get(
+            "amount",
+            ""
+        )
+        or ""
+    ).strip()
+
 
     try:
 
         amount = float(
-            request.form.get(
-                "amount",
-                0
-            )
+            amount_raw
         )
 
     except Exception:
 
         amount = 0
 
+
     # ------------------------------------------------------
-    # Bank
+    # FORM DATA
     # ------------------------------------------------------
 
     bank_name = (
@@ -1022,9 +1206,6 @@ def withdrawal_page(promoter_id):
         or ""
     ).strip()
 
-    # ------------------------------------------------------
-    # Account name
-    # ------------------------------------------------------
 
     account_name = (
         request.form.get(
@@ -1034,9 +1215,6 @@ def withdrawal_page(promoter_id):
         or ""
     ).strip()
 
-    # ------------------------------------------------------
-    # Account number
-    # ------------------------------------------------------
 
     account_number = (
         request.form.get(
@@ -1046,16 +1224,18 @@ def withdrawal_page(promoter_id):
         or ""
     ).strip()
 
-    # ------------------------------------------------------
-    # Basic validation
-    # ------------------------------------------------------
 
-    if amount < 5000:
+    # ======================================================
+    # VALIDATION
+    # ======================================================
+
+    if amount < MIN_WITHDRAWAL:
 
         return (
-            "Minimum withdrawal is ₦5,000.",
+            f"Minimum withdrawal is ₦{MIN_WITHDRAWAL:,.0f}.",
             400
         )
+
 
     if amount > balance:
 
@@ -1064,12 +1244,14 @@ def withdrawal_page(promoter_id):
             400
         )
 
+
     if not bank_name:
 
         return (
             "Bank name is required.",
             400
         )
+
 
     if not account_name:
 
@@ -1078,6 +1260,7 @@ def withdrawal_page(promoter_id):
             400
         )
 
+
     if len(account_number) != 10:
 
         return (
@@ -1085,12 +1268,14 @@ def withdrawal_page(promoter_id):
             400
         )
 
+
     if not account_number.isdigit():
 
         return (
             "Account number must contain digits only.",
             400
         )
+
 
     # ======================================================
     # CREATE WITHDRAWAL
@@ -1100,7 +1285,7 @@ def withdrawal_page(promoter_id):
 
         withdrawal_id = create_withdrawal(
 
-            promoter_id=promoter_id,
+            promoter_id=promoter["id"],
 
             amount=amount,
 
@@ -1111,6 +1296,7 @@ def withdrawal_page(promoter_id):
             account_number=account_number
 
         )
+
 
     except ValueError as e:
 
@@ -1133,7 +1319,7 @@ def withdrawal_page(promoter_id):
 
             <br>
 
-            <a href="/referral/dashboard?promoter_id={promoter_id}">
+            <a href="/referral/dashboard?ref={referral_code}">
             ← Back to Dashboard
             </a>
 
@@ -1143,6 +1329,7 @@ def withdrawal_page(promoter_id):
             400
 
         )
+
 
     except Exception as e:
 
@@ -1168,12 +1355,21 @@ def withdrawal_page(promoter_id):
             Please try again later.
             </p>
 
+            <br>
+
+            <a href="/referral/dashboard?ref={0}">
+            ← Back to Dashboard
+            </a>
+
             </div>
-            """,
+            """.format(
+                referral_code
+            ),
 
             500
 
         )
+
 
     # ======================================================
     # SUCCESS
@@ -1185,6 +1381,7 @@ def withdrawal_page(promoter_id):
         font-family:Arial;
         text-align:center;
         padding:40px;
+        font-family:Arial,sans-serif;
     ">
 
     <h2>
@@ -1207,7 +1404,9 @@ def withdrawal_page(promoter_id):
 
     <p>
     Status:
-    <b>Pending</b>
+    <b style="color:#d97706;">
+    Pending
+    </b>
     </p>
 
     <p style="
@@ -1220,7 +1419,7 @@ def withdrawal_page(promoter_id):
 
     <br>
 
-    <a href="/referral/dashboard?promoter_id={2}">
+    <a href="/referral/dashboard?ref={2}">
     ← Back to Dashboard
     </a>
 
@@ -1232,6 +1431,6 @@ def withdrawal_page(promoter_id):
 
         withdrawal_id,
 
-        promoter_id
+        referral_code
 
     )
