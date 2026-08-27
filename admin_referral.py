@@ -6,6 +6,8 @@
 # ADMIN PROMOTER CREATION
 # ADMIN PROMOTER LIST
 # ADMIN WITHDRAWAL MANAGEMENT
+# REFERRAL LINK + DASHBOARD LINK
+# COPY BUTTONS
 # ==========================================================
 
 import secrets
@@ -115,7 +117,6 @@ h2{
 input{
     width:100%;
     padding:14px;
-    box-sizing:border-box;
     border:1px solid #ccc;
     border-radius:8px;
     font-size:16px;
@@ -225,7 +226,7 @@ body{
 }
 
 .container{
-    max-width:1000px;
+    max-width:1050px;
     margin:auto;
 }
 
@@ -299,6 +300,7 @@ button{
     padding:15px;
     border-radius:10px;
     margin-bottom:15px;
+    word-break:break-word;
 }
 
 .code{
@@ -309,13 +311,24 @@ button{
     font-weight:bold;
 }
 
-.link{
+.link-box{
     background:#f4f4f4;
-    padding:12px;
+    padding:10px;
     border-radius:8px;
     word-break:break-all;
     font-size:13px;
-    margin-top:5px;
+    margin-top:6px;
+}
+
+.copy-button{
+    background:#2563eb;
+    margin-top:7px;
+    padding:8px 12px;
+    font-size:13px;
+}
+
+.copy-button.copied{
+    background:#087f5b;
 }
 
 .table-wrap{
@@ -325,7 +338,7 @@ button{
 table{
     width:100%;
     border-collapse:collapse;
-    min-width:750px;
+    min-width:850px;
 }
 
 th,
@@ -402,10 +415,20 @@ th{
     margin-top:15px;
 }
 
+.link-title{
+    margin-top:8px;
+    font-weight:bold;
+    font-size:13px;
+}
+
 @media(max-width:700px){
 
     .stat-grid{
         grid-template-columns:1fr 1fr;
+    }
+
+    .card{
+        padding:15px;
     }
 
 }
@@ -459,7 +482,7 @@ href="/admin/referral/logout"
 {% if success %}
 
 <div class="success">
-{{ success }}
+{{ success|replace('\n', '<br>')|safe }}
 </div>
 
 {% endif %}
@@ -660,47 +683,81 @@ Pending Amount
 
 </td>
 
+
 <td>
 
 <div class="code">
 {{ promoter["referral_code"] }}
 </div>
 
-<br>
 
-<a
-href="/referral/dashboard?ref={{ promoter['referral_code'] }}"
-target="_blank"
+<div class="link-title">
+💳 Payment Link
+</div>
+
+<div
+class="link-box"
+id="payment-link-{{ promoter['id'] }}"
 >
-Open Dashboard
-</a>
+{{ app_url }}/payment?ref={{ promoter['referral_code'] }}
+</div>
 
-<br><br>
-
-<a
-href="/payment?ref={{ promoter['referral_code'] }}"
-target="_blank"
+<button
+type="button"
+class="copy-button"
+onclick="copyText(
+'payment-link-{{ promoter['id'] }}',
+this
+)"
 >
-Open Payment Link
-</a>
+📋 COPY PAYMENT LINK
+</button>
+
+
+<div class="link-title">
+📊 Dashboard Link
+</div>
+
+<div
+class="link-box"
+id="dashboard-link-{{ promoter['id'] }}"
+>
+{{ app_url }}/referral/dashboard?ref={{ promoter['referral_code'] }}
+</div>
+
+<button
+type="button"
+class="copy-button"
+onclick="copyText(
+'dashboard-link-{{ promoter['id'] }}',
+this
+)"
+>
+📋 COPY DASHBOARD LINK
+</button>
 
 </td>
+
 
 <td>
 {{ promoter["total_sales"] or 0 }}
 </td>
 
+
 <td>
 ₦{{ "{:,.0f}".format(promoter["total_earned"] or 0) }}
 </td>
+
 
 <td>
 ₦{{ "{:,.0f}".format(promoter["available_balance"] or 0) }}
 </td>
 
+
 <td>
 ₦{{ "{:,.0f}".format(promoter["withdrawn_amount"] or 0) }}
 </td>
+
 
 <td>
 {{ promoter["status"]|capitalize }}
@@ -783,6 +840,7 @@ No promoters yet.
 
 </td>
 
+
 <td>
 
 <b>
@@ -790,6 +848,7 @@ No promoters yet.
 </b>
 
 </td>
+
 
 <td>
 
@@ -807,6 +866,7 @@ No promoters yet.
 
 </td>
 
+
 <td>
 
 <span class="status {{ withdrawal['status']|lower }}">
@@ -816,6 +876,7 @@ No promoters yet.
 </span>
 
 </td>
+
 
 <td>
 
@@ -870,6 +931,7 @@ Final
 
 </td>
 
+
 <td>
 {{ withdrawal["created_at"] }}
 </td>
@@ -896,6 +958,121 @@ No withdrawal request yet.
 
 
 </div>
+
+
+<!-- =====================================================
+     COPY JAVASCRIPT
+====================================================== -->
+
+<script>
+
+function copyText(elementId, button){
+
+    const element =
+        document.getElementById(elementId);
+
+    if(!element){
+        return;
+    }
+
+    const text =
+        element.innerText.trim();
+
+    if(
+        navigator.clipboard &&
+        window.isSecureContext
+    ){
+
+        navigator.clipboard
+        .writeText(text)
+        .then(function(){
+
+            showCopied(button);
+
+        })
+        .catch(function(){
+
+            fallbackCopy(text, button);
+
+        });
+
+    }else{
+
+        fallbackCopy(text, button);
+
+    }
+}
+
+
+function fallbackCopy(text, button){
+
+    const textarea =
+        document.createElement("textarea");
+
+    textarea.value = text;
+
+    textarea.style.position =
+        "fixed";
+
+    textarea.style.left =
+        "-9999px";
+
+    document.body.appendChild(
+        textarea
+    );
+
+    textarea.focus();
+
+    textarea.select();
+
+    try{
+
+        document.execCommand(
+            "copy"
+        );
+
+        showCopied(button);
+
+    }catch(error){
+
+        alert(
+            "Copy failed. Please copy the link manually."
+        );
+
+    }
+
+    document.body.removeChild(
+        textarea
+    );
+}
+
+
+function showCopied(button){
+
+    const oldText =
+        button.innerText;
+
+    button.innerText =
+        "✅ COPIED!";
+
+    button.classList.add(
+        "copied"
+    );
+
+    setTimeout(function(){
+
+        button.innerText =
+            oldText;
+
+        button.classList.remove(
+            "copied"
+        );
+
+    }, 1800);
+}
+
+</script>
+
 
 </body>
 
@@ -1146,6 +1323,8 @@ def admin_referral_page(
             f"{pending_amount:,.0f}"
         ),
 
+        app_url=APP_URL,
+
         error=error,
 
         success=success
@@ -1226,9 +1405,7 @@ def create_promoter_admin():
     except Exception:
 
         return admin_referral_page(
-            error=(
-                "Invalid commission rate."
-            )
+            error="Invalid commission rate."
         )
 
 
@@ -1284,13 +1461,13 @@ def create_promoter_admin():
 
 
         success_message = (
-            "✅ Promoter created successfully.\n\n"
+            "✅ PROMOTER CREATED SUCCESSFULLY\n\n"
             f"Promoter ID: {promoter_id}\n"
             f"Name: {full_name}\n"
             f"Commission: {commission_rate:g}%\n"
-            f"Referral Code: {referral_code}\n"
-            f"Payment Link: {referral_link}\n"
-            f"Dashboard Link: {dashboard_link}"
+            f"Referral Code: {referral_code}\n\n"
+            f"Payment Link:\n{referral_link}\n\n"
+            f"Dashboard Link:\n{dashboard_link}"
         )
 
 
