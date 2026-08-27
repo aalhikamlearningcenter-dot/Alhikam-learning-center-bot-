@@ -1080,9 +1080,7 @@ def referral_withdraw():
 
     return withdrawal_page(
         referral_code=referral_code
-    )
-
-
+  )
 # ==========================================================
 # ADMIN REFERRAL
 # ==========================================================
@@ -1095,7 +1093,7 @@ def admin_referral():
 
     from admin_referral import (
         admin_referral_page,
-        ADMIN_LOGIN_HTML,
+        admin_login,
     )
 
     if not ADMIN_PASSWORD:
@@ -1105,34 +1103,110 @@ def admin_referral():
             500
         )
 
+    # ------------------------------------------------------
+    # ALREADY LOGGED IN / PANEL
+    # ------------------------------------------------------
+
+    from admin_referral import admin_logged_in
+
+    if admin_logged_in():
+
+        return admin_referral_page()
+
+    # ------------------------------------------------------
+    # LOGIN
+    # ------------------------------------------------------
+
     if request.method == "GET":
 
-        return render_template_string(
-            ADMIN_LOGIN_HTML,
-            error=""
+        from admin_referral import (
+            admin_login_page
         )
 
+        return admin_login_page()
+
     password = (
-        request.form.get("password", "")
+        request.form.get(
+            "password",
+            ""
+        )
         or ""
     )
 
-    if password != ADMIN_PASSWORD:
+    if not admin_login(
+        password,
+        ADMIN_PASSWORD
+    ):
+
+        from admin_referral import (
+            admin_login_page
+        )
 
         logger.warning(
             "Invalid admin referral login attempt."
         )
 
         return (
-            render_template_string(
-                ADMIN_LOGIN_HTML,
-                error="Invalid admin password."
+            admin_login_page(
+                "Invalid admin password."
             ),
             401
         )
 
-    return admin_referral_page()
+    return redirect(
+        "/admin/referral"
+    )
 
+
+# ==========================================================
+# ADMIN LOGOUT
+# ==========================================================
+
+@web_app.route(
+    "/admin/referral/logout",
+    methods=["GET"]
+)
+def admin_referral_logout():
+
+    from admin_referral import (
+        admin_logout
+    )
+
+    return admin_logout()
+
+
+# ==========================================================
+# ADMIN CREATE PROMOTER
+# ==========================================================
+
+@web_app.route(
+    "/admin/referral/create-promoter",
+    methods=["POST"]
+)
+def admin_create_promoter():
+
+    from admin_referral import (
+        create_promoter_admin
+    )
+
+    return create_promoter_admin()
+
+
+# ==========================================================
+# ADMIN UPDATE WITHDRAWAL
+# ==========================================================
+
+@web_app.route(
+    "/admin/referral/withdrawal-status",
+    methods=["POST"]
+)
+def admin_update_withdrawal():
+
+    from admin_referral import (
+        admin_update_withdrawal
+    )
+
+    return admin_update_withdrawal()
 
 # ==========================================================
 # HEALTH CHECK
