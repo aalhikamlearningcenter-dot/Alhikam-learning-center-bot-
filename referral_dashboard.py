@@ -15,12 +15,10 @@ from database import (
     get_promoter_withdrawals,
 )
 
-
-# ==========================================================
-# APP URL
-# ==========================================================
-
-APP_URL = "https://precious-trust-production-956b.up.railway.app"
+try:
+    from config import APP_URL
+except Exception:
+    APP_URL = "https://precious-trust-production-956b.up.railway.app"
 
 
 # ==========================================================
@@ -35,23 +33,31 @@ MIN_WITHDRAWAL = 5000
 # ==========================================================
 
 def _clean_referral_code(referral_code):
-    return str(referral_code or "").strip()
+
+    return str(
+        referral_code or ""
+    ).strip()
 
 
 def _get_promoter_from_code(referral_code):
 
-    referral_code = _clean_referral_code(referral_code)
+    referral_code = _clean_referral_code(
+        referral_code
+    )
 
     if not referral_code:
         return None
 
-    return get_promoter_by_referral_code(referral_code)
+    return get_promoter_by_referral_code(
+        referral_code
+    )
 
 
 def _money(value):
 
     try:
         return f"{float(value or 0):,.0f}"
+
     except Exception:
         return "0"
 
@@ -215,11 +221,7 @@ body{
     font-weight:bold;
 }
 
-.failed{
-    color:#dc2626;
-    font-weight:bold;
-}
-
+.failed,
 .cancelled{
     color:#dc2626;
     font-weight:bold;
@@ -590,24 +592,36 @@ function fallbackCopy(text){
 def referral_dashboard(promoter_id):
 
     if not promoter_id:
-        return "Promoter ID is required.", 400
+
+        return (
+            "Promoter ID is required.",
+            400
+        )
+
 
     try:
 
-        promoter_id = int(promoter_id)
+        promoter_id = int(
+            promoter_id
+        )
 
     except (TypeError, ValueError):
 
-        return "Invalid promoter ID.", 400
+        return (
+            "Invalid promoter ID.",
+            400
+        )
 
 
-    # ------------------------------------------------------
+    # ======================================================
     # GET PROMOTER
-    # ------------------------------------------------------
+    # ======================================================
 
     try:
 
-        promoter = get_promoter_by_id(promoter_id)
+        promoter = get_promoter_by_id(
+            promoter_id
+        )
 
     except Exception as e:
 
@@ -630,9 +644,9 @@ def referral_dashboard(promoter_id):
         )
 
 
-    # ------------------------------------------------------
+    # ======================================================
     # ACTIVE CHECK
-    # ------------------------------------------------------
+    # ======================================================
 
     if str(
         promoter["status"]
@@ -644,9 +658,9 @@ def referral_dashboard(promoter_id):
         )
 
 
-    # ------------------------------------------------------
+    # ======================================================
     # WITHDRAWALS
-    # ------------------------------------------------------
+    # ======================================================
 
     try:
 
@@ -664,9 +678,9 @@ def referral_dashboard(promoter_id):
         withdrawals = []
 
 
-    # ------------------------------------------------------
+    # ======================================================
     # BALANCE
-    # ------------------------------------------------------
+    # ======================================================
 
     try:
 
@@ -712,9 +726,9 @@ def referral_dashboard(promoter_id):
         total_sales = 0
 
 
-    # ------------------------------------------------------
+    # ======================================================
     # REFERRAL CODE
-    # ------------------------------------------------------
+    # ======================================================
 
     referral_code = str(
         promoter["referral_code"] or ""
@@ -729,19 +743,24 @@ def referral_dashboard(promoter_id):
         )
 
 
-    # ------------------------------------------------------
+    # ======================================================
     # REFERRAL LINK
-    # ------------------------------------------------------
+    # ======================================================
+
+    base_url = (
+        APP_URL or ""
+    ).rstrip("/")
+
 
     referral_link = (
-        f"{APP_URL}/payment"
+        f"{base_url}/payment"
         f"?ref={referral_code}"
     )
 
 
-    # ------------------------------------------------------
+    # ======================================================
     # RENDER
-    # ------------------------------------------------------
+    # ======================================================
 
     return render_template_string(
 
@@ -900,6 +919,11 @@ button{
     border-radius:10px;
     font-size:18px;
     font-weight:bold;
+    cursor:pointer;
+}
+
+button:active{
+    opacity:.8;
 }
 
 .balance{
@@ -907,6 +931,12 @@ button{
     padding:15px;
     border-radius:10px;
     margin-bottom:20px;
+}
+
+.note{
+    color:#666;
+    font-size:13px;
+    line-height:1.5;
 }
 
 .back{
@@ -917,10 +947,14 @@ button{
     text-decoration:none;
 }
 
-.note{
-    color:#666;
+.warning{
+    background:#fff8e1;
+    padding:12px;
+    border-radius:8px;
+    color:#7a5b00;
     font-size:13px;
     line-height:1.5;
+    margin-bottom:18px;
 }
 
 </style>
@@ -935,6 +969,7 @@ button{
 💸 Withdraw Referral Commission
 </h2>
 
+
 <div class="balance">
 
 Available Balance:
@@ -944,6 +979,15 @@ Available Balance:
 <b>
 ₦{{ balance }}
 </b>
+
+</div>
+
+
+<div class="warning">
+
+⚠️ Please make sure the bank account name
+and account number are correct before submitting
+your withdrawal request.
 
 </div>
 
@@ -993,17 +1037,32 @@ required
 Select Bank
 </option>
 
+<option>Access Bank</option>
+<option>Citibank Nigeria</option>
+<option>Ecobank</option>
+<option>Fidelity Bank</option>
+<option>First Bank</option>
+<option>FCMB</option>
+<option>Globus Bank</option>
+<option>GTBank</option>
+<option>Heritage Bank</option>
+<option>Jaiz Bank</option>
+<option>Keystone Bank</option>
+<option>Kuda</option>
+<option>Moniepoint</option>
 <option>Opay</option>
 <option>Palmpay</option>
-<option>Moniepoint</option>
-<option>Access Bank</option>
-<option>GTBank</option>
+<option>Polaris Bank</option>
+<option>Premium Trust Bank</option>
+<option>Stanbic IBTC</option>
+<option>Standard Chartered</option>
+<option>Sterling Bank</option>
+<option>SunTrust Bank</option>
 <option>UBA</option>
-<option>Zenith Bank</option>
-<option>First Bank</option>
 <option>Union Bank</option>
-<option>Jaiz Bank</option>
-<option>Kuda</option>
+<option>Unity Bank</option>
+<option>Wema Bank</option>
+<option>Zenith Bank</option>
 
 </select>
 
@@ -1017,6 +1076,7 @@ type="text"
 name="account_name"
 autocomplete="name"
 maxlength="100"
+placeholder="Enter account name"
 required
 >
 
@@ -1081,9 +1141,9 @@ def withdrawal_page(
         )
 
 
-    # ------------------------------------------------------
+    # ======================================================
     # GET PROMOTER
-    # ------------------------------------------------------
+    # ======================================================
 
     try:
 
@@ -1112,9 +1172,9 @@ def withdrawal_page(
         )
 
 
-    # ------------------------------------------------------
+    # ======================================================
     # ACTIVE CHECK
-    # ------------------------------------------------------
+    # ======================================================
 
     if str(
         promoter["status"]
@@ -1126,9 +1186,9 @@ def withdrawal_page(
         )
 
 
-    # ------------------------------------------------------
+    # ======================================================
     # BALANCE
-    # ------------------------------------------------------
+    # ======================================================
 
     try:
 
@@ -1194,9 +1254,9 @@ def withdrawal_page(
         amount = 0
 
 
-    # ------------------------------------------------------
+    # ======================================================
     # FORM DATA
-    # ------------------------------------------------------
+    # ======================================================
 
     bank_name = (
         request.form.get(
@@ -1264,7 +1324,7 @@ def withdrawal_page(
     if len(account_number) != 10:
 
         return (
-            "Account number must contain 10 digits.",
+            "Account number must contain exactly 10 digits.",
             400
         )
 
@@ -1340,7 +1400,7 @@ def withdrawal_page(
 
         return (
 
-            """
+            f"""
             <div style="
                 font-family:Arial;
                 text-align:center;
@@ -1357,14 +1417,12 @@ def withdrawal_page(
 
             <br>
 
-            <a href="/referral/dashboard?ref={0}">
+            <a href="/referral/dashboard?ref={referral_code}">
             ← Back to Dashboard
             </a>
 
             </div>
-            """.format(
-                referral_code
-            ),
+            """,
 
             500
 
@@ -1375,7 +1433,7 @@ def withdrawal_page(
     # SUCCESS
     # ======================================================
 
-    return """
+    return f"""
 
     <div style="
         font-family:Arial;
@@ -1394,12 +1452,12 @@ def withdrawal_page(
 
     <p>
     Amount:
-    <b>₦{0:,.0f}</b>
+    <b>₦{amount:,.0f}</b>
     </p>
 
     <p>
     Request ID:
-    <b>#{1}</b>
+    <b>#{withdrawal_id}</b>
     </p>
 
     <p>
@@ -1419,18 +1477,10 @@ def withdrawal_page(
 
     <br>
 
-    <a href="/referral/dashboard?ref={2}">
+    <a href="/referral/dashboard?ref={referral_code}">
     ← Back to Dashboard
     </a>
 
     </div>
 
-    """.format(
-
-        amount,
-
-        withdrawal_id,
-
-        referral_code
-
-    )
+    """
