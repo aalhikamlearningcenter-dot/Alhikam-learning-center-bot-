@@ -2,7 +2,10 @@
 # ALHIKAM LEARNING CENTER V2
 # admin_referral.py
 #
+# ADMIN LOGIN
 # ADMIN PROMOTER CREATION
+# ADMIN PROMOTER LIST
+# ADMIN WITHDRAWAL MANAGEMENT
 # ==========================================================
 
 import secrets
@@ -11,14 +14,26 @@ import string
 from flask import (
     request,
     render_template_string,
+    session,
+    redirect,
+    url_for,
 )
 
 from database import (
+    get_connection,
     add_promoter,
     get_promoter_by_referral_code,
+    update_withdrawal_status,
 )
 
 from config import APP_URL
+
+
+# ==========================================================
+# ADMIN SESSION
+# ==========================================================
+
+ADMIN_SESSION_KEY = "alhikam_admin_logged_in"
 
 
 # ==========================================================
@@ -26,13 +41,6 @@ from config import APP_URL
 # ==========================================================
 
 def generate_referral_code():
-
-    """
-    Generate a unique referral code.
-
-    Example:
-    ALHIKAM-X7K92P
-    """
 
     characters = (
         string.ascii_uppercase
@@ -50,14 +58,11 @@ def generate_referral_code():
             f"ALHIKAM-{random_part}"
         )
 
-        existing = (
-            get_promoter_by_referral_code(
-                referral_code
-            )
+        existing = get_promoter_by_referral_code(
+            referral_code
         )
 
         if not existing:
-
             return referral_code
 
 
@@ -187,10 +192,10 @@ required
 
 
 # ==========================================================
-# CREATE PROMOTER HTML
+# ADMIN PANEL HTML
 # ==========================================================
 
-ADMIN_REFERRAL_HTML = """
+ADMIN_PANEL_HTML = """
 
 <!DOCTYPE html>
 
@@ -201,87 +206,153 @@ ADMIN_REFERRAL_HTML = """
 <meta name="viewport"
 content="width=device-width, initial-scale=1">
 
-<title>
-ALHIKAM Admin - Create Promoter
-</title>
+<title>ALHIKAM Admin Referral</title>
 
 <style>
+
+*{
+    box-sizing:border-box;
+}
 
 body{
     font-family:Arial,sans-serif;
     background:#f5f7f9;
-    padding:20px;
+    padding:15px;
     margin:0;
 }
 
 .container{
-    max-width:550px;
+    max-width:1000px;
     margin:auto;
+}
+
+.header{
+    background:#087f5b;
+    color:white;
+    padding:22px;
+    border-radius:15px;
+    margin-bottom:15px;
+}
+
+.header h2{
+    margin:0 0 8px 0;
 }
 
 .card{
     background:white;
-    padding:25px;
+    padding:20px;
     border-radius:15px;
-    box-shadow:0 3px 12px rgba(0,0,0,.08);
-}
-
-h2{
-    margin-top:0;
-    color:#087f5b;
-}
-
-label{
-    display:block;
-    margin-top:15px;
-    margin-bottom:6px;
-    font-weight:bold;
+    margin-bottom:15px;
+    box-shadow:0 3px 10px rgba(0,0,0,.07);
 }
 
 input{
     width:100%;
-    padding:14px;
-    box-sizing:border-box;
+    padding:13px;
     border:1px solid #ccc;
     border-radius:8px;
     font-size:16px;
 }
 
+label{
+    display:block;
+    font-weight:bold;
+    margin-top:12px;
+    margin-bottom:6px;
+}
+
 button{
-    width:100%;
-    padding:15px;
-    margin-top:20px;
+    padding:12px 16px;
     background:#087f5b;
     color:white;
     border:none;
-    border-radius:10px;
-    font-size:17px;
+    border-radius:8px;
     font-weight:bold;
+    cursor:pointer;
+}
+
+.logout{
+    display:inline-block;
+    background:#dc2626;
+    color:white;
+    text-decoration:none;
+    padding:10px 15px;
+    border-radius:8px;
+    margin-top:10px;
 }
 
 .success{
     background:#e8f7ef;
-    padding:18px;
+    padding:15px;
     border-radius:10px;
-    margin-top:20px;
+    margin-bottom:15px;
+}
+
+.error{
+    background:#ffe8e8;
+    color:#a00000;
+    padding:15px;
+    border-radius:10px;
+    margin-bottom:15px;
 }
 
 .code{
     background:#eef8f4;
-    padding:14px;
+    padding:12px;
     border-radius:8px;
-    font-size:20px;
-    font-weight:bold;
     word-break:break-all;
+    font-weight:bold;
 }
 
 .link{
     background:#f4f4f4;
-    padding:14px;
+    padding:12px;
     border-radius:8px;
-    font-size:14px;
     word-break:break-all;
-    margin-top:8px;
+    font-size:13px;
+}
+
+.table-wrap{
+    overflow-x:auto;
+}
+
+table{
+    width:100%;
+    border-collapse:collapse;
+    min-width:750px;
+}
+
+th,
+td{
+    padding:11px;
+    border-bottom:1px solid #eee;
+    text-align:left;
+    vertical-align:top;
+}
+
+th{
+    background:#f7f7f7;
+}
+
+.status{
+    font-weight:bold;
+}
+
+.pending{
+    color:#d97706;
+}
+
+.processing{
+    color:#2563eb;
+}
+
+.successful{
+    color:#087f5b;
+}
+
+.failed,
+.cancelled{
+    color:#dc2626;
 }
 
 .small{
@@ -290,20 +361,45 @@ button{
     line-height:1.5;
 }
 
-.error{
-    background:#ffe8e8;
-    color:#a00000;
-    padding:15px;
-    border-radius:8px;
-    margin-bottom:15px;
+.stat-grid{
+    display:grid;
+    grid-template-columns:
+        repeat(4, 1fr);
+    gap:12px;
 }
 
-.logout{
-    display:block;
-    text-align:center;
-    margin-top:20px;
-    color:#087f5b;
-    text-decoration:none;
+.stat{
+    background:#f8faf9;
+    padding:15px;
+    border-radius:10px;
+}
+
+.stat-number{
+    font-size:22px;
+    font-weight:bold;
+}
+
+.withdraw-form{
+    display:inline-block;
+}
+
+.withdraw-form select{
+    padding:8px;
+    border:1px solid #ccc;
+    border-radius:7px;
+}
+
+.withdraw-form button{
+    padding:8px 10px;
+}
+
+@media(max-width:700px){
+
+    .stat-grid{
+        grid-template-columns:
+            1fr 1fr;
+    }
+
 }
 
 </style>
@@ -314,35 +410,57 @@ button{
 
 <div class="container">
 
-<div class="card">
+
+<div class="header">
 
 <h2>
-🎯 Create Referral Promoter
+🎯 ALHIKAM Referral Admin
 </h2>
 
-<p class="small">
+<div>
+Promoter & Withdrawal Management
+</div>
 
-Create a new promoter account.
+<a
+class="logout"
+href="/admin/referral/logout"
+>
+🚪 Logout
+</a>
 
-The system will automatically generate
-a unique referral code.
-
-</p>
+</div>
 
 
 {% if error %}
 
 <div class="error">
-
 {{ error }}
-
 </div>
 
 {% endif %}
 
 
-<form method="POST">
+{% if success %}
 
+<div class="success">
+{{ success }}
+</div>
+
+{% endif %}
+
+
+<!-- =====================================================
+     CREATE PROMOTER
+====================================================== -->
+
+<div class="card">
+
+<h3>
+➕ Create New Promoter
+</h3>
+
+<form method="POST"
+action="/admin/referral/create-promoter">
 
 <label>
 Full Name
@@ -351,11 +469,9 @@ Full Name
 <input
 type="text"
 name="full_name"
-placeholder="Enter promoter full name"
-value="{{ full_name }}"
+placeholder="Promoter full name"
 required
 >
-
 
 <label>
 Phone Number
@@ -365,9 +481,7 @@ Phone Number
 type="text"
 name="phone"
 placeholder="08012345678"
-value="{{ phone }}"
 >
-
 
 <label>
 Email
@@ -377,9 +491,7 @@ Email
 type="email"
 name="email"
 placeholder="example@gmail.com"
-value="{{ email }}"
 >
-
 
 <label>
 Commission Rate (%)
@@ -388,96 +500,379 @@ Commission Rate (%)
 <input
 type="number"
 name="commission_rate"
-value="{{ commission_rate }}"
+value="20"
 min="0"
 max="100"
 step="0.01"
 required
 >
 
+<br>
 
 <button type="submit">
-
 ➕ CREATE PROMOTER
-
 </button>
 
 </form>
 
+</div>
 
-{% if promoter %}
 
-<div class="success">
+<!-- =====================================================
+     SUMMARY
+====================================================== -->
+
+<div class="card">
 
 <h3>
-✅ Promoter Created Successfully
+📊 Summary
 </h3>
 
+<div class="stat-grid">
 
-<p>
-<b>Promoter ID:</b>
-{{ promoter_id }}
-</p>
+<div class="stat">
 
+<div class="small">
+Promoters
+</div>
 
-<p>
-<b>Name:</b>
-{{ promoter_name }}
-</p>
+<div class="stat-number">
+{{ promoters|length }}
+</div>
 
-
-<p>
-<b>Commission:</b>
-{{ promoter_rate }}%
-</p>
+</div>
 
 
-<p>
-<b>Referral Code:</b>
-</p>
+<div class="stat">
+
+<div class="small">
+Withdrawal Requests
+</div>
+
+<div class="stat-number">
+{{ withdrawals|length }}
+</div>
+
+</div>
+
+
+<div class="stat">
+
+<div class="small">
+Pending Withdrawals
+</div>
+
+<div class="stat-number">
+{{ pending_count }}
+</div>
+
+</div>
+
+
+<div class="stat">
+
+<div class="small">
+Pending Amount
+</div>
+
+<div class="stat-number">
+₦{{ pending_amount }}
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+
+<!-- =====================================================
+     PROMOTERS
+====================================================== -->
+
+<div class="card">
+
+<h3>
+👥 Promoters
+</h3>
+
+{% if promoters %}
+
+<div class="table-wrap">
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>ID</th>
+<th>Name</th>
+<th>Referral Code</th>
+<th>Sales</th>
+<th>Earned</th>
+<th>Balance</th>
+<th>Withdrawn</th>
+<th>Status</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+{% for promoter in promoters %}
+
+<tr>
+
+<td>
+{{ promoter["id"] }}
+</td>
+
+<td>
+<b>{{ promoter["full_name"] }}</b>
+
+<br>
+
+<span class="small">
+{{ promoter["phone"] or "" }}
+</span>
+
+</td>
+
+<td>
 
 <div class="code">
+{{ promoter["referral_code"] }}
+</div>
 
-{{ referral_code }}
+<br>
+
+<a
+href="/referral/dashboard?ref={{ promoter['referral_code'] }}"
+target="_blank"
+>
+Open Dashboard
+</a>
+
+</td>
+
+<td>
+{{ promoter["total_sales"] or 0 }}
+</td>
+
+<td>
+₦{{ "{:,.0f}".format(
+float(promoter["total_earned"] or 0)
+) }}
+</td>
+
+<td>
+₦{{ "{:,.0f}".format(
+float(promoter["available_balance"] or 0)
+) }}
+</td>
+
+<td>
+₦{{ "{:,.0f}".format(
+float(promoter["withdrawn_amount"] or 0)
+) }}
+</td>
+
+<td>
+{{ promoter["status"]|capitalize }}
+</td>
+
+</tr>
+
+{% endfor %}
+
+</tbody>
+
+</table>
 
 </div>
 
+{% else %}
 
-<p>
-<b>Referral Link:</b>
+<p class="small">
+No promoters yet.
 </p>
-
-<div class="link">
-
-{{ referral_link }}
-
-</div>
-
-
-<p>
-<b>Dashboard Link:</b>
-</p>
-
-<div class="link">
-
-{{ dashboard_link }}
-
-</div>
-
-</div>
 
 {% endif %}
 
+</div>
 
-<a
-class="logout"
-href="/admin/referral"
+
+<!-- =====================================================
+     WITHDRAWALS
+====================================================== -->
+
+<div class="card">
+
+<h3>
+💸 Withdrawal Requests
+</h3>
+
+{% if withdrawals %}
+
+<div class="table-wrap">
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>ID</th>
+<th>Promoter</th>
+<th>Amount</th>
+<th>Bank Details</th>
+<th>Status</th>
+<th>Action</th>
+<th>Date</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+{% for withdrawal in withdrawals %}
+
+<tr>
+
+<td>
+#{{ withdrawal["id"] }}
+</td>
+
+<td>
+
+<b>
+{{ withdrawal["promoter_name"] }}
+</b>
+
+<br>
+
+<span class="small">
+{{ withdrawal["referral_code"] }}
+</span>
+
+</td>
+
+<td>
+
+<b>
+₦{{ "{:,.0f}".format(
+float(withdrawal["amount"] or 0)
+) }}
+</b>
+
+</td>
+
+<td>
+
+{{ withdrawal["bank_name"] }}
+
+<br>
+
+{{ withdrawal["account_name"] }}
+
+<br>
+
+<b>
+{{ withdrawal["account_number"] }}
+</b>
+
+</td>
+
+<td>
+
+<span class="status {{ withdrawal['status']|lower }}">
+
+{{ withdrawal["status"]|capitalize }}
+
+</span>
+
+</td>
+
+<td>
+
+{% if withdrawal["status"] not in
+["successful", "failed", "cancelled"] %}
+
+<form
+class="withdraw-form"
+method="POST"
+action="/admin/referral/withdrawal-status"
 >
-← Back to Admin
-</a>
 
+<input
+type="hidden"
+name="withdrawal_id"
+value="{{ withdrawal['id'] }}"
+>
+
+<select name="status">
+
+<option value="processing">
+Processing
+</option>
+
+<option value="successful">
+Successful
+</option>
+
+<option value="failed">
+Failed
+</option>
+
+<option value="cancelled">
+Cancelled
+</option>
+
+</select>
+
+<button type="submit">
+UPDATE
+</button>
+
+</form>
+
+{% else %}
+
+<span class="small">
+Final
+</span>
+
+{% endif %}
+
+</td>
+
+<td>
+{{ withdrawal["created_at"] }}
+</td>
+
+</tr>
+
+{% endfor %}
+
+</tbody>
+
+</table>
 
 </div>
+
+{% else %}
+
+<p class="small">
+No withdrawal request yet.
+</p>
+
+{% endif %}
+
+</div>
+
 
 </div>
 
@@ -489,212 +884,488 @@ href="/admin/referral"
 
 
 # ==========================================================
-# ADMIN REFERRAL PAGE
+# ADMIN LOGIN CHECK
+# ==========================================================
+
+def admin_logged_in():
+
+    return bool(
+        session.get(
+            ADMIN_SESSION_KEY,
+            False
+        )
+    )
+
+
+# ==========================================================
+# LOGIN PAGE
+# ==========================================================
+
+def admin_login_page(
+    error=""
+):
+
+    return render_template_string(
+        ADMIN_LOGIN_HTML,
+        error=error
+    )
+
+
+# ==========================================================
+# LOGIN
+# ==========================================================
+
+def admin_login(password, correct_password):
+
+    if not password:
+        return False
+
+    if password != correct_password:
+        return False
+
+    session[
+        ADMIN_SESSION_KEY
+    ] = True
+
+    return True
+
+
+# ==========================================================
+# LOGOUT
+# ==========================================================
+
+def admin_logout():
+
+    session.pop(
+        ADMIN_SESSION_KEY,
+        None
+    )
+
+    return redirect(
+        "/admin/referral"
+    )
+
+
+# ==========================================================
+# GET PROMOTERS
+# ==========================================================
+
+def get_all_promoters():
+
+    conn = get_connection()
+
+    try:
+
+        cursor = conn.cursor()
+
+        cursor.execute("""
+        SELECT *
+        FROM promoters
+        ORDER BY id DESC
+        """)
+
+        return cursor.fetchall()
+
+    finally:
+
+        conn.close()
+
+
+# ==========================================================
+# GET ALL WITHDRAWALS
+# ==========================================================
+
+def get_all_withdrawals():
+
+    conn = get_connection()
+
+    try:
+
+        cursor = conn.cursor()
+
+        cursor.execute("""
+        SELECT
+
+            withdrawals.*,
+
+            promoters.full_name
+                AS promoter_name,
+
+            promoters.referral_code
+                AS referral_code
+
+        FROM withdrawals
+
+        INNER JOIN promoters
+            ON promoters.id =
+               withdrawals.promoter_id
+
+        ORDER BY withdrawals.id DESC
+        """)
+
+        return cursor.fetchall()
+
+    finally:
+
+        conn.close()
+
+
+# ==========================================================
+# ADMIN PANEL
 # ==========================================================
 
 def admin_referral_page():
 
+    if not admin_logged_in():
+
+        return admin_login_page()
+
+
     error = ""
-
-    promoter = False
-
-    promoter_id = ""
-
-    promoter_name = ""
-
-    promoter_rate = ""
-
-    referral_code = ""
-
-    referral_link = ""
-
-    dashboard_link = ""
-
-    full_name = ""
-
-    phone = ""
-
-    email = ""
-
-    commission_rate = "20"
+    success = ""
 
 
-    # ======================================================
-    # POST
-    # ======================================================
+    try:
 
-    if request.method == "POST":
+        promoters = get_all_promoters()
 
-        full_name = (
-            request.form.get(
-                "full_name",
-                ""
-            )
-            or ""
-        ).strip()
+    except Exception as e:
 
+        print(
+            "ADMIN PROMOTER LIST ERROR:",
+            repr(e)
+        )
 
-        phone = (
-            request.form.get(
-                "phone",
-                ""
-            )
-            or ""
-        ).strip()
+        promoters = []
+
+        error = (
+            "Unable to load promoters."
+        )
 
 
-        email = (
-            request.form.get(
-                "email",
-                ""
-            )
-            or ""
-        ).strip()
+    try:
 
+        withdrawals = get_all_withdrawals()
 
-        commission_rate = (
-            request.form.get(
-                "commission_rate",
-                "20"
-            )
-            or "20"
-        ).strip()
+    except Exception as e:
 
+        print(
+            "ADMIN WITHDRAWAL LIST ERROR:",
+            repr(e)
+        )
 
-        # --------------------------------------------------
-        # Validate name
-        # --------------------------------------------------
+        withdrawals = []
 
-        if not full_name:
-
+        if not error:
             error = (
-                "Full name is required."
+                "Unable to load withdrawals."
             )
 
 
-        # --------------------------------------------------
-        # Validate commission
-        # --------------------------------------------------
-
-        commission_value = 20
-
-        if not error:
-
-            try:
-
-                commission_value = float(
-                    commission_rate
-                )
-
-            except Exception:
-
-                error = (
-                    "Invalid commission rate."
-                )
+    pending_count = 0
+    pending_amount = 0
 
 
-        if not error:
+    for withdrawal in withdrawals:
 
-            if (
-                commission_value < 0
-                or commission_value > 100
-            ):
+        status = str(
+            withdrawal["status"] or ""
+        ).lower()
 
-                error = (
-                    "Commission rate must be "
-                    "between 0 and 100."
-                )
+        if status in {
+            "pending",
+            "processing"
+        }:
 
+            pending_count += 1
 
-        # ==================================================
-        # CREATE PROMOTER
-        # ==================================================
+            pending_amount += float(
+                withdrawal["amount"] or 0
+            )
 
-        if not error:
-
-            try:
-
-                referral_code = (
-                    generate_referral_code()
-                )
-
-
-                promoter_id = add_promoter(
-
-                    full_name=full_name,
-
-                    phone=phone,
-
-                    email=email,
-
-                    referral_code=referral_code,
-
-                    commission_rate=commission_value,
-
-                )
-
-
-                promoter = True
-
-                promoter_name = full_name
-
-                promoter_rate = commission_value
-
-
-                referral_link = (
-                    f"{APP_URL}/payment"
-                    f"?ref={referral_code}"
-                )
-
-
-                dashboard_link = (
-                    f"{APP_URL}/referral-dashboard"
-                    f"?ref={referral_code}"
-                )
-
-
-            except Exception as e:
-
-                print(
-                    "ADMIN PROMOTER ERROR:",
-                    repr(e)
-                )
-
-                error = (
-                    "Unable to create promoter."
-                )
-
-
-    # ======================================================
-    # RENDER
-    # ======================================================
 
     return render_template_string(
 
-        ADMIN_REFERRAL_HTML,
+        ADMIN_PANEL_HTML,
+
+        promoters=promoters,
+
+        withdrawals=withdrawals,
+
+        pending_count=pending_count,
+
+        pending_amount=(
+            f"{pending_amount:,.0f}"
+        ),
 
         error=error,
 
-        promoter=promoter,
+        success=success
 
-        promoter_id=promoter_id,
+    )
 
-        promoter_name=promoter_name,
 
-        promoter_rate=promoter_rate,
+# ==========================================================
+# CREATE PROMOTER
+# ==========================================================
 
-        referral_code=referral_code,
+def create_promoter_admin():
 
-        referral_link=referral_link,
+    if not admin_logged_in():
 
-        dashboard_link=dashboard_link,
+        return redirect(
+            "/admin/referral"
+        )
 
-        full_name=full_name,
 
-        phone=phone,
+    full_name = (
+        request.form.get(
+            "full_name",
+            ""
+        )
+        or ""
+    ).strip()
 
-        email=email,
 
-        commission_rate=commission_rate,
+    phone = (
+        request.form.get(
+            "phone",
+            ""
+        )
+        or ""
+    ).strip()
 
+
+    email = (
+        request.form.get(
+            "email",
+            ""
+        )
+        or ""
+    ).strip()
+
+
+    commission_rate_raw = (
+        request.form.get(
+            "commission_rate",
+            "20"
+        )
+        or "20"
+    ).strip()
+
+
+    if not full_name:
+
+        return render_template_string(
+            ADMIN_PANEL_HTML,
+            promoters=get_all_promoters(),
+            withdrawals=get_all_withdrawals(),
+            pending_count=0,
+            pending_amount="0",
+            error="Full name is required.",
+            success=""
+        )
+
+
+    try:
+
+        commission_rate = float(
+            commission_rate_raw
+        )
+
+    except Exception:
+
+        commission_rate = -1
+
+
+    if (
+        commission_rate < 0
+        or commission_rate > 100
+    ):
+
+        return render_template_string(
+            ADMIN_PANEL_HTML,
+            promoters=get_all_promoters(),
+            withdrawals=get_all_withdrawals(),
+            pending_count=0,
+            pending_amount="0",
+            error=(
+                "Commission rate must be "
+                "between 0 and 100."
+            ),
+            success=""
+        )
+
+
+    try:
+
+        referral_code = (
+            generate_referral_code()
+        )
+
+
+        promoter_id = add_promoter(
+
+            full_name=full_name,
+
+            phone=phone,
+
+            email=email,
+
+            referral_code=referral_code,
+
+            commission_rate=commission_rate
+
+        )
+
+
+        referral_link = (
+            f"{APP_URL}/payment"
+            f"?ref={referral_code}"
+        )
+
+
+        dashboard_link = (
+            f"{APP_URL}/referral/dashboard"
+            f"?ref={referral_code}"
+        )
+
+
+        promoters = get_all_promoters()
+        withdrawals = get_all_withdrawals()
+
+
+        return render_template_string(
+
+            ADMIN_PANEL_HTML,
+
+            promoters=promoters,
+
+            withdrawals=withdrawals,
+
+            pending_count=0,
+
+            pending_amount="0",
+
+            error="",
+
+            success=(
+                "Promoter created successfully. "
+                f"ID: {promoter_id} | "
+                f"Referral Code: {referral_code} | "
+                f"Dashboard: {dashboard_link}"
+            )
+
+        )
+
+
+    except Exception as e:
+
+        print(
+            "ADMIN CREATE PROMOTER ERROR:",
+            repr(e)
+        )
+
+        return render_template_string(
+
+            ADMIN_PANEL_HTML,
+
+            promoters=get_all_promoters(),
+
+            withdrawals=get_all_withdrawals(),
+
+            pending_count=0,
+
+            pending_amount="0",
+
+            error=(
+                "Unable to create promoter."
+            ),
+
+            success=""
+
+        )
+
+
+# ==========================================================
+# UPDATE WITHDRAWAL
+# ==========================================================
+
+def admin_update_withdrawal():
+
+    if not admin_logged_in():
+
+        return redirect(
+            "/admin/referral"
+        )
+
+
+    withdrawal_id_raw = (
+        request.form.get(
+            "withdrawal_id",
+            ""
+        )
+        or ""
+    ).strip()
+
+
+    status = (
+        request.form.get(
+            "status",
+            ""
+        )
+        or ""
+    ).strip().lower()
+
+
+    try:
+
+        withdrawal_id = int(
+            withdrawal_id_raw
+        )
+
+    except Exception:
+
+        return redirect(
+            "/admin/referral"
+        )
+
+
+    allowed_statuses = {
+
+        "processing",
+        "successful",
+        "failed",
+        "cancelled"
+
+    }
+
+
+    if status not in allowed_statuses:
+
+        return redirect(
+            "/admin/referral"
+        )
+
+
+    try:
+
+        update_withdrawal_status(
+
+            withdrawal_id,
+
+            status
+
+        )
+
+    except Exception as e:
+
+        print(
+            "ADMIN WITHDRAWAL UPDATE ERROR:",
+            repr(e)
+        )
+
+
+    return redirect(
+        "/admin/referral"
     )
