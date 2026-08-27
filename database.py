@@ -1,21 +1,17 @@
+# ==========================================================
+# ALHIKAM LEARNING CENTER V2
+# database.py
+#
+# PAYMENT
+# REFERRAL
+# COMMISSION
+# REGISTRATION
+# WITHDRAWAL
+# ==========================================================
 
-==========================================================
+import sqlite3
 
-ALHIKAM LEARNING CENTER V2
-
-database.py
-
-
-
-PAYMENT
-
-REFERRAL
-
-COMMISSION
-
-REGISTRATION
-
-WITHDRAWAL
+from config import DATABASE_NAME
 
 ==========================================================
 
