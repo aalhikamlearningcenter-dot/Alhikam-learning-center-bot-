@@ -16,7 +16,6 @@ from flask import (
     render_template_string,
     session,
     redirect,
-    url_for,
 )
 
 from database import (
@@ -84,6 +83,10 @@ content="width=device-width, initial-scale=1">
 <title>ALHIKAM Admin Login</title>
 
 <style>
+
+*{
+    box-sizing:border-box;
+}
 
 body{
     font-family:Arial,sans-serif;
@@ -283,9 +286,11 @@ button{
 
 .success{
     background:#e8f7ef;
+    color:#075c43;
     padding:15px;
     border-radius:10px;
     margin-bottom:15px;
+    word-break:break-word;
 }
 
 .error{
@@ -310,6 +315,7 @@ button{
     border-radius:8px;
     word-break:break-all;
     font-size:13px;
+    margin-top:5px;
 }
 
 .table-wrap{
@@ -363,8 +369,7 @@ th{
 
 .stat-grid{
     display:grid;
-    grid-template-columns:
-        repeat(4, 1fr);
+    grid-template-columns:repeat(4, 1fr);
     gap:12px;
 }
 
@@ -393,11 +398,14 @@ th{
     padding:8px 10px;
 }
 
+.create-button{
+    margin-top:15px;
+}
+
 @media(max-width:700px){
 
     .stat-grid{
-        grid-template-columns:
-            1fr 1fr;
+        grid-template-columns:1fr 1fr;
     }
 
 }
@@ -410,6 +418,10 @@ th{
 
 <div class="container">
 
+
+<!-- =====================================================
+     HEADER
+====================================================== -->
 
 <div class="header">
 
@@ -430,6 +442,10 @@ href="/admin/referral/logout"
 
 </div>
 
+
+<!-- =====================================================
+     MESSAGES
+====================================================== -->
 
 {% if error %}
 
@@ -507,9 +523,10 @@ step="0.01"
 required
 >
 
-<br>
-
-<button type="submit">
+<button
+class="create-button"
+type="submit"
+>
 ➕ CREATE PROMOTER
 </button>
 
@@ -630,7 +647,10 @@ Pending Amount
 </td>
 
 <td>
-<b>{{ promoter["full_name"] }}</b>
+
+<b>
+{{ promoter["full_name"] }}
+</b>
 
 <br>
 
@@ -655,6 +675,15 @@ target="_blank"
 Open Dashboard
 </a>
 
+<br><br>
+
+<a
+href="/payment?ref={{ promoter['referral_code'] }}"
+target="_blank"
+>
+Open Payment Link
+</a>
+
 </td>
 
 <td>
@@ -662,21 +691,15 @@ Open Dashboard
 </td>
 
 <td>
-₦{{ "{:,.0f}".format(
-float(promoter["total_earned"] or 0)
-) }}
+₦{{ "{:,.0f}".format(promoter["total_earned"] or 0) }}
 </td>
 
 <td>
-₦{{ "{:,.0f}".format(
-float(promoter["available_balance"] or 0)
-) }}
+₦{{ "{:,.0f}".format(promoter["available_balance"] or 0) }}
 </td>
 
 <td>
-₦{{ "{:,.0f}".format(
-float(promoter["withdrawn_amount"] or 0)
-) }}
+₦{{ "{:,.0f}".format(promoter["withdrawn_amount"] or 0) }}
 </td>
 
 <td>
@@ -763,9 +786,7 @@ No promoters yet.
 <td>
 
 <b>
-₦{{ "{:,.0f}".format(
-float(withdrawal["amount"] or 0)
-) }}
+₦{{ "{:,.0f}".format(withdrawal["amount"] or 0) }}
 </b>
 
 </td>
@@ -901,9 +922,7 @@ def admin_logged_in():
 # LOGIN PAGE
 # ==========================================================
 
-def admin_login_page(
-    error=""
-):
+def admin_login_page(error=""):
 
     return render_template_string(
         ADMIN_LOGIN_HTML,
@@ -918,6 +937,9 @@ def admin_login_page(
 def admin_login(password, correct_password):
 
     if not password:
+        return False
+
+    if not correct_password:
         return False
 
     if password != correct_password:
@@ -947,7 +969,7 @@ def admin_logout():
 
 
 # ==========================================================
-# GET PROMOTERS
+# GET ALL PROMOTERS
 # ==========================================================
 
 def get_all_promoters():
@@ -1011,18 +1033,55 @@ def get_all_withdrawals():
 
 
 # ==========================================================
+# CALCULATE WITHDRAWAL SUMMARY
+# ==========================================================
+
+def calculate_withdrawal_summary(withdrawals):
+
+    pending_count = 0
+    pending_amount = 0.0
+
+    for withdrawal in withdrawals:
+
+        status = str(
+            withdrawal["status"] or ""
+        ).lower().strip()
+
+        if status in {
+            "pending",
+            "processing"
+        }:
+
+            pending_count += 1
+
+            try:
+
+                pending_amount += float(
+                    withdrawal["amount"] or 0
+                )
+
+            except Exception:
+
+                pass
+
+    return (
+        pending_count,
+        pending_amount
+    )
+
+
+# ==========================================================
 # ADMIN PANEL
 # ==========================================================
 
-def admin_referral_page():
+def admin_referral_page(
+    error="",
+    success=""
+):
 
     if not admin_logged_in():
 
         return admin_login_page()
-
-
-    error = ""
-    success = ""
 
 
     try:
@@ -1038,9 +1097,11 @@ def admin_referral_page():
 
         promoters = []
 
-        error = (
-            "Unable to load promoters."
-        )
+        if not error:
+
+            error = (
+                "Unable to load promoters."
+            )
 
 
     try:
@@ -1057,31 +1118,18 @@ def admin_referral_page():
         withdrawals = []
 
         if not error:
+
             error = (
                 "Unable to load withdrawals."
             )
 
 
-    pending_count = 0
-    pending_amount = 0
-
-
-    for withdrawal in withdrawals:
-
-        status = str(
-            withdrawal["status"] or ""
-        ).lower()
-
-        if status in {
-            "pending",
-            "processing"
-        }:
-
-            pending_count += 1
-
-            pending_amount += float(
-                withdrawal["amount"] or 0
-            )
+    (
+        pending_count,
+        pending_amount
+    ) = calculate_withdrawal_summary(
+        withdrawals
+    )
 
 
     return render_template_string(
@@ -1154,18 +1202,20 @@ def create_promoter_admin():
     ).strip()
 
 
+    # ======================================================
+    # VALIDATE NAME
+    # ======================================================
+
     if not full_name:
 
-        return render_template_string(
-            ADMIN_PANEL_HTML,
-            promoters=get_all_promoters(),
-            withdrawals=get_all_withdrawals(),
-            pending_count=0,
-            pending_amount="0",
-            error="Full name is required.",
-            success=""
+        return admin_referral_page(
+            error="Full name is required."
         )
 
+
+    # ======================================================
+    # VALIDATE COMMISSION
+    # ======================================================
 
     try:
 
@@ -1175,7 +1225,11 @@ def create_promoter_admin():
 
     except Exception:
 
-        commission_rate = -1
+        return admin_referral_page(
+            error=(
+                "Invalid commission rate."
+            )
+        )
 
 
     if (
@@ -1183,19 +1237,17 @@ def create_promoter_admin():
         or commission_rate > 100
     ):
 
-        return render_template_string(
-            ADMIN_PANEL_HTML,
-            promoters=get_all_promoters(),
-            withdrawals=get_all_withdrawals(),
-            pending_count=0,
-            pending_amount="0",
+        return admin_referral_page(
             error=(
                 "Commission rate must be "
                 "between 0 and 100."
-            ),
-            success=""
+            )
         )
 
+
+    # ======================================================
+    # CREATE PROMOTER
+    # ======================================================
 
     try:
 
@@ -1231,31 +1283,19 @@ def create_promoter_admin():
         )
 
 
-        promoters = get_all_promoters()
-        withdrawals = get_all_withdrawals()
+        success_message = (
+            "✅ Promoter created successfully.\n\n"
+            f"Promoter ID: {promoter_id}\n"
+            f"Name: {full_name}\n"
+            f"Commission: {commission_rate:g}%\n"
+            f"Referral Code: {referral_code}\n"
+            f"Payment Link: {referral_link}\n"
+            f"Dashboard Link: {dashboard_link}"
+        )
 
 
-        return render_template_string(
-
-            ADMIN_PANEL_HTML,
-
-            promoters=promoters,
-
-            withdrawals=withdrawals,
-
-            pending_count=0,
-
-            pending_amount="0",
-
-            error="",
-
-            success=(
-                "Promoter created successfully. "
-                f"ID: {promoter_id} | "
-                f"Referral Code: {referral_code} | "
-                f"Dashboard: {dashboard_link}"
-            )
-
+        return admin_referral_page(
+            success=success_message
         )
 
 
@@ -1266,24 +1306,11 @@ def create_promoter_admin():
             repr(e)
         )
 
-        return render_template_string(
-
-            ADMIN_PANEL_HTML,
-
-            promoters=get_all_promoters(),
-
-            withdrawals=get_all_withdrawals(),
-
-            pending_count=0,
-
-            pending_amount="0",
-
+        return admin_referral_page(
             error=(
-                "Unable to create promoter."
-            ),
-
-            success=""
-
+                "Unable to create promoter. "
+                "Please check the Railway logs."
+            )
         )
 
 
