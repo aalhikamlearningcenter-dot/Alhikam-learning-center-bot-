@@ -80,6 +80,7 @@ MINIMUM_WITHDRAWAL = 5000
 # ADMIN
 # ==========================================================
 
+# Admin password loaded from Railway environment
 ADMIN_PASSWORD = os.getenv(
     "ADMIN_PASSWORD",
     ""
