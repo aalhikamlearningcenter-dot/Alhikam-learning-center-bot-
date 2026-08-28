@@ -23,6 +23,7 @@ from database import (
     create_withdrawal,
     mark_withdrawal_successful,
     refund_withdrawal,
+    update_withdrawal_transfer,
 )
 
 from transfer import (
@@ -139,9 +140,7 @@ REFERRAL_DASHBOARD_HTML = """
     content="width=device-width, initial-scale=1"
 >
 
-<title>
-    ALHIKAM Referral Dashboard
-</title>
+<title>ALHIKAM Referral Dashboard</title>
 
 <style>
 
@@ -151,9 +150,7 @@ REFERRAL_DASHBOARD_HTML = """
 
 body{
 
-    font-family:
-        Arial,
-        sans-serif;
+    font-family:Arial,sans-serif;
 
     background:#f5f7f9;
 
@@ -250,8 +247,7 @@ body{
 
     display:grid;
 
-    grid-template-columns:
-        1fr 1fr;
+    grid-template-columns:1fr 1fr;
 
     gap:12px;
 }
@@ -335,11 +331,9 @@ body{
 
 </head>
 
-
 <body>
 
 <div class="container">
-
 
 <div class="header">
 
@@ -353,7 +347,6 @@ body{
 </div>
 
 </div>
-
 
 <div class="card">
 
@@ -374,7 +367,6 @@ body{
 
 </div>
 
-
 <div class="card">
 
 <div class="label">
@@ -394,9 +386,7 @@ body{
 
 </div>
 
-
 <div class="grid">
-
 
 <div class="stat">
 
@@ -410,7 +400,6 @@ body{
 
 </div>
 
-
 <div class="stat">
 
 <div class="label">
@@ -422,7 +411,6 @@ body{
 </div>
 
 </div>
-
 
 <div class="stat">
 
@@ -436,7 +424,6 @@ body{
 
 </div>
 
-
 <div class="stat">
 
 <div class="label">
@@ -449,16 +436,13 @@ body{
 
 </div>
 
-
 </div>
-
 
 <div class="card">
 
 <h3>
     💳 Withdrawal
 </h3>
-
 
 {% if available_balance_number >= minimum_withdrawal %}
 
@@ -474,14 +458,16 @@ Your withdrawal will be sent automatically through Flutterwave.
 
 </p>
 
+<!-- IMPORTANT:
+     Send referral_code to main.py.
+-->
 
 <a
     class="withdraw"
-    href="/referral/withdraw?promoter_id={{ promoter_id }}"
+    href="/referral/withdraw?ref={{ referral_code|urlencode }}"
 >
     💸 WITHDRAW MONEY
 </a>
-
 
 {% else %}
 
@@ -497,7 +483,6 @@ to request a withdrawal.
 
 </p>
 
-
 <button
     class="withdraw withdraw-disabled"
     disabled
@@ -508,9 +493,7 @@ to request a withdrawal.
 
 {% endif %}
 
-
 </div>
-
 
 <div class="card">
 
@@ -539,9 +522,7 @@ and above.
 
 </div>
 
-
 </div>
-
 
 <script>
 
@@ -577,25 +558,18 @@ function copyText(text){
 
 }
 
-
 function fallbackCopy(text){
 
     const textarea =
-        document.createElement(
-            "textarea"
-        );
+        document.createElement("textarea");
 
     textarea.value = text;
 
-    textarea.style.position =
-        "fixed";
+    textarea.style.position = "fixed";
 
-    textarea.style.left =
-        "-9999px";
+    textarea.style.left = "-9999px";
 
-    document.body.appendChild(
-        textarea
-    );
+    document.body.appendChild(textarea);
 
     textarea.focus();
 
@@ -603,9 +577,7 @@ function fallbackCopy(text){
 
     try{
 
-        document.execCommand(
-            "copy"
-        );
+        document.execCommand("copy");
 
         alert(
             "Copied successfully!"
@@ -619,14 +591,11 @@ function fallbackCopy(text){
 
     }
 
-    document.body.removeChild(
-        textarea
-    );
+    document.body.removeChild(textarea);
 
 }
 
 </script>
-
 
 </body>
 
@@ -666,10 +635,17 @@ def referral_dashboard(promoter_id):
             404
         )
 
-    referral_code = (
+    referral_code = str(
         promoter["referral_code"]
         or ""
-    )
+    ).strip()
+
+    if not referral_code:
+
+        return (
+            "Promoter referral code is missing.",
+            500
+        )
 
     referral_link = (
         f"{APP_URL}/payment"
@@ -737,27 +713,18 @@ def referral_dashboard(promoter_id):
 
 
 # ==========================================================
-# IMPORTANT:
 # REFERRAL DASHBOARD BY CODE
 #
-# THIS FUNCTION FIXES YOUR CURRENT CRASH.
-# main.py IS EXPECTING THIS FUNCTION.
+# main.py imports this function.
 # ==========================================================
 
 def referral_dashboard_by_code(
     referral_code=None
 ):
 
-    # ------------------------------------------------------
-    # Get referral code from function argument first
-    # ------------------------------------------------------
-
     referral_code = (
         referral_code
-        or request.args.get(
-            "ref",
-            ""
-        )
+        or request.args.get("ref", "")
         or request.args.get(
             "referral_code",
             ""
@@ -767,31 +734,9 @@ def referral_dashboard_by_code(
     if not referral_code:
 
         return (
-            """
-            <div
-                style="
-                font-family:Arial;
-                text-align:center;
-                padding:40px;
-                "
-            >
-
-                <h2>
-                    ❌ Referral Code Missing
-                </h2>
-
-                <p>
-                    Please use a valid referral link.
-                </p>
-
-            </div>
-            """,
+            "Referral code is required.",
             400
         )
-
-    # ------------------------------------------------------
-    # Find promoter
-    # ------------------------------------------------------
 
     try:
 
@@ -814,32 +759,9 @@ def referral_dashboard_by_code(
     if not promoter:
 
         return (
-            """
-            <div
-                style="
-                font-family:Arial;
-                text-align:center;
-                padding:40px;
-                "
-            >
-
-                <h2>
-                    ❌ Invalid Referral Code
-                </h2>
-
-                <p>
-                    This referral code does not exist
-                    or is no longer active.
-                </p>
-
-            </div>
-            """,
+            "Invalid referral code.",
             404
         )
-
-    # ------------------------------------------------------
-    # Open dashboard
-    # ------------------------------------------------------
 
     return referral_dashboard(
         promoter["id"]
@@ -863,9 +785,7 @@ WITHDRAWAL_HTML = """
     content="width=device-width, initial-scale=1"
 >
 
-<title>
-    ALHIKAM Withdrawal
-</title>
+<title>ALHIKAM Withdrawal</title>
 
 <style>
 
@@ -875,9 +795,7 @@ WITHDRAWAL_HTML = """
 
 body{
 
-    font-family:
-        Arial,
-        sans-serif;
+    font-family:Arial,sans-serif;
 
     background:#f5f7f9;
 
@@ -979,17 +897,13 @@ button{
 
 </head>
 
-
 <body>
 
-
 <div class="container">
-
 
 <h2>
     💸 Withdraw Referral Commission
 </h2>
-
 
 <div class="balance">
 
@@ -1002,7 +916,6 @@ Available Balance:
 </b>
 
 </div>
-
 
 <div class="note">
 
@@ -1024,9 +937,14 @@ through Flutterwave.
 
 </div>
 
-
 <form method="POST">
 
+<!-- Keep referral code with the POST request -->
+<input
+    type="hidden"
+    name="referral_code"
+    value="{{ referral_code }}"
+>
 
 <label>
     <b>Amount</b>
@@ -1041,7 +959,6 @@ through Flutterwave.
     placeholder="Enter withdrawal amount"
     required
 >
-
 
 <label>
     <b>Bank</b>
@@ -1068,7 +985,6 @@ through Flutterwave.
 
 </select>
 
-
 <label>
     <b>Account Name</b>
 </label>
@@ -1079,7 +995,6 @@ through Flutterwave.
     placeholder="Account name"
     required
 >
-
 
 <label>
     <b>Account Number</b>
@@ -1094,25 +1009,20 @@ through Flutterwave.
     required
 >
 
-
 <button type="submit">
     💸 REQUEST WITHDRAWAL
 </button>
 
-
 </form>
-
 
 <a
     class="back"
-    href="/referral/dashboard?promoter_id={{ promoter_id }}"
+    href="/referral/dashboard?ref={{ referral_code|urlencode }}"
 >
     ← Back to Dashboard
 </a>
 
-
 </div>
-
 
 </body>
 
@@ -1123,33 +1033,83 @@ through Flutterwave.
 
 # ==========================================================
 # WITHDRAWAL PAGE
+#
+# IMPORTANT:
+# main.py calls:
+#
+#     withdrawal_page(
+#         referral_code=referral_code
+#     )
+#
+# So this function MUST accept referral_code.
 # ==========================================================
 
-def withdrawal_page(promoter_id):
+def withdrawal_page(
+    referral_code=None
+):
+
+    # ------------------------------------------------------
+    # GET REFERRAL CODE
+    # ------------------------------------------------------
+
+    referral_code = (
+        referral_code
+        or request.args.get("ref", "")
+        or request.args.get(
+            "referral_code",
+            ""
+        )
+        or request.form.get(
+            "referral_code",
+            ""
+        )
+    ).strip()
+
+    if not referral_code:
+
+        return (
+            "Referral code is required.",
+            400
+        )
+
+    # ------------------------------------------------------
+    # FIND PROMOTER
+    # ------------------------------------------------------
 
     try:
 
-        promoter = get_promoter_by_id(
-            promoter_id
+        promoter = get_promoter_by_referral_code(
+            referral_code
         )
 
     except Exception as e:
 
         print(
-            "Promoter lookup error:",
+            "Withdrawal promoter lookup error:",
             repr(e)
         )
 
         return (
-            "Unable to load promoter account.",
+            "Unable to load promoter.",
             500
         )
 
     if not promoter:
 
         return (
-            "Promoter not found.",
+            "Invalid promoter/referral code.",
             404
+        )
+
+    promoter_id = promoter["id"]
+
+    if str(
+        promoter["status"]
+    ).lower() != "active":
+
+        return (
+            "This referral account is not active.",
+            403
         )
 
     balance = float(
@@ -1193,7 +1153,7 @@ def withdrawal_page(promoter_id):
                     <br>
 
                     <a
-                        href="/referral/dashboard?promoter_id={promoter_id}"
+                        href="/referral/dashboard?ref={referral_code}"
                     >
                         ← Back to Dashboard
                     </a>
@@ -1222,6 +1182,8 @@ def withdrawal_page(promoter_id):
             balance_number=balance,
 
             promoter_id=promoter_id,
+
+            referral_code=referral_code,
 
             banks=banks,
 
@@ -1340,10 +1302,7 @@ def withdrawal_page(promoter_id):
 
         if (
             str(
-                bank.get(
-                    "code",
-                    ""
-                )
+                bank.get("code", "")
             ).strip()
             == bank_code
         ):
@@ -1492,7 +1451,7 @@ def withdrawal_page(promoter_id):
                 <br>
 
                 <a
-                    href="/referral/dashboard?promoter_id={promoter_id}"
+                    href="/referral/dashboard?ref={referral_code}"
                 >
                     ← Back to Dashboard
                 </a>
@@ -1503,7 +1462,7 @@ def withdrawal_page(promoter_id):
         )
 
     # ======================================================
-    # GET TRANSFER INFORMATION
+    # TRANSFER INFORMATION
     # ======================================================
 
     transfer_id = (
@@ -1530,6 +1489,41 @@ def withdrawal_page(promoter_id):
             "message"
         )
     )
+
+    # ======================================================
+    # SAVE TRANSFER INFORMATION
+    # ======================================================
+
+    try:
+
+        update_withdrawal_transfer(
+
+            withdrawal_id=withdrawal_id,
+
+            transfer_reference=(
+                transfer_reference
+            ),
+
+            transfer_id=(
+                transfer_id
+            ),
+
+            transfer_status=(
+                transfer_status
+            ),
+
+            transfer_message=(
+                transfer_message
+            ),
+
+        )
+
+    except Exception as e:
+
+        print(
+            "Transfer information update error:",
+            repr(e)
+        )
 
     # ======================================================
     # NORMALIZE STATUS
@@ -1577,9 +1571,12 @@ def withdrawal_page(promoter_id):
 
     else:
 
+        # Keep the withdrawal pending/processing.
+        # Do NOT refund simply because the initial API
+        # response is not "successful".
         print(
-            "Flutterwave transfer is not "
-            "confirmed successful yet:",
+            "Flutterwave transfer is not confirmed "
+            "successful yet:",
             transfer_status
         )
 
@@ -1638,7 +1635,7 @@ def withdrawal_page(promoter_id):
             <br>
 
             <a
-                href="/referral/dashboard?promoter_id={promoter_id}"
+                href="/referral/dashboard?ref={referral_code}"
             >
                 ← Back to Dashboard
             </a>
