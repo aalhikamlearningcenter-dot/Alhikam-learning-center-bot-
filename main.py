@@ -1225,6 +1225,41 @@ def health():
 
 
 # ==========================================================
+# CHECK OUTBOUND PUBLIC IP
+# TEMPORARY - FOR FLUTTERWAVE IP WHITELIST
+# ==========================================================
+
+@web_app.route(
+    "/check-ip",
+    methods=["GET"]
+)
+def check_ip():
+
+    import requests
+
+    try:
+
+        ip = requests.get(
+            "https://api.ipify.org",
+            timeout=10
+        ).text.strip()
+
+        return jsonify({
+            "outbound_ip": ip
+        })
+
+    except Exception as e:
+
+        logger.exception(
+            "Could not determine outbound IP."
+        )
+
+        return jsonify({
+            "error": str(e)
+        }), 500
+
+
+# ==========================================================
 # START TELEGRAM BOT
 # ==========================================================
 
