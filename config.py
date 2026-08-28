@@ -73,7 +73,7 @@ WHATSAPP_COMMUNITY_LINK = os.getenv(
 
 DEFAULT_COMMISSION_RATE = 20
 
-MINIMUM_WITHDRAWAL = 5000
+MINIMUM_WITHDRAWAL = 200
 
 
 # ==========================================================
