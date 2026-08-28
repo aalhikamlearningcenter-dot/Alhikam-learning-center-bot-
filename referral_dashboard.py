@@ -3,67 +3,125 @@
 # referral_dashboard.py
 #
 # REFERRAL DASHBOARD
-# REFERRAL WITHDRAWAL
+# AUTOMATIC WITHDRAWAL
+# FLUTTERWAVE TRANSFER
+#
+# MINIMUM WITHDRAWAL = ₦200
 # ==========================================================
 
-from flask import request, render_template_string
+import os
+import requests
+
+from flask import (
+    request,
+    render_template_string,
+)
 
 from database import (
     get_promoter_by_id,
     get_promoter_by_referral_code,
     create_withdrawal,
-    get_promoter_withdrawals,
+    mark_withdrawal_successful,
+    refund_withdrawal,
 )
 
-try:
-    from config import APP_URL
-except Exception:
-    APP_URL = "https://precious-trust-production-956b.up.railway.app"
+from transfer import create_flutterwave_transfer
 
 
 # ==========================================================
-# SETTINGS
+# CONFIG
 # ==========================================================
 
-MIN_WITHDRAWAL = 5000
+APP_URL = os.getenv(
+    "APP_URL",
+    "https://precious-trust-production-956b.up.railway.app"
+).rstrip("/")
+
+
+FLW_SECRET_KEY = os.getenv(
+    "FLW_SECRET_KEY"
+)
+
+
+FLUTTERWAVE_BANKS_URL = (
+    "https://api.flutterwave.com/v3/banks/NG"
+)
 
 
 # ==========================================================
-# HELPERS
+# MINIMUM WITHDRAWAL
 # ==========================================================
 
-def _clean_referral_code(referral_code):
-
-    return str(
-        referral_code or ""
-    ).strip()
+MINIMUM_WITHDRAWAL = 200
 
 
-def _get_promoter_from_code(referral_code):
+# ==========================================================
+# GET NIGERIAN BANKS
+# ==========================================================
 
-    referral_code = _clean_referral_code(
-        referral_code
-    )
+def get_nigerian_banks():
 
-    if not referral_code:
-        return None
+    if not FLW_SECRET_KEY:
 
-    return get_promoter_by_referral_code(
-        referral_code
-    )
+        print(
+            "ERROR: FLW_SECRET_KEY is missing."
+        )
 
+        return []
 
-def _money(value):
+    headers = {
+
+        "Authorization":
+            f"Bearer {FLW_SECRET_KEY}",
+
+        "Content-Type":
+            "application/json",
+
+    }
 
     try:
-        return f"{float(value or 0):,.0f}"
 
-    except Exception:
-        return "0"
+        response = requests.get(
+
+            FLUTTERWAVE_BANKS_URL,
+
+            headers=headers,
+
+            timeout=30,
+
+        )
+
+        print(
+            "Flutterwave banks response:",
+            response.text
+        )
+
+        if response.status_code != 200:
+
+            return []
+
+        result = response.json()
+
+        if result.get("status") != "success":
+
+            return []
+
+        return result.get(
+            "data"
+        ) or []
+
+    except Exception as e:
+
+        print(
+            "Bank lookup error:",
+            repr(e)
+        )
+
+        return []
 
 
 # ==========================================================
-# DASHBOARD HTML
+# REFERRAL DASHBOARD HTML
 # ==========================================================
 
 REFERRAL_DASHBOARD_HTML = """
@@ -74,10 +132,15 @@ REFERRAL_DASHBOARD_HTML = """
 
 <head>
 
-<meta name="viewport"
-content="width=device-width, initial-scale=1">
+<meta
+name="viewport"
+content="width=device-width, initial-scale=1"
+>
 
-<title>ALHIKAM Referral Dashboard</title>
+<title>
+ALHIKAM Referral Dashboard
+</title>
+
 
 <style>
 
@@ -88,7 +151,7 @@ content="width=device-width, initial-scale=1">
 body{
     font-family:Arial,sans-serif;
     background:#f5f7f9;
-    padding:15px;
+    padding:20px;
     margin:0;
 }
 
@@ -100,9 +163,9 @@ body{
 .header{
     background:#087f5b;
     color:white;
-    padding:25px 20px;
+    padding:25px;
     border-radius:15px;
-    margin-bottom:15px;
+    margin-bottom:20px;
 }
 
 .header h2{
@@ -120,11 +183,11 @@ body{
 .label{
     color:#666;
     font-size:14px;
-    margin-bottom:7px;
+    margin-bottom:6px;
 }
 
 .value{
-    font-size:23px;
+    font-size:24px;
     font-weight:bold;
 }
 
@@ -143,14 +206,12 @@ body{
     border-radius:10px;
     word-break:break-all;
     font-size:14px;
-    line-height:1.5;
 }
 
 .grid{
     display:grid;
     grid-template-columns:1fr 1fr;
     gap:12px;
-    margin-bottom:15px;
 }
 
 .stat{
@@ -158,18 +219,6 @@ body{
     padding:18px;
     border-radius:12px;
     box-shadow:0 2px 8px rgba(0,0,0,.06);
-}
-
-.copy{
-    margin-top:10px;
-    width:100%;
-    padding:12px;
-    border:none;
-    background:#229ED9;
-    color:white;
-    border-radius:8px;
-    font-size:15px;
-    cursor:pointer;
 }
 
 .withdraw{
@@ -183,62 +232,57 @@ body{
     border-radius:10px;
     font-size:18px;
     font-weight:bold;
+    border:none;
+    cursor:pointer;
 }
 
 .withdraw-disabled{
-    display:block;
-    width:100%;
-    padding:16px;
     background:#999;
+    cursor:not-allowed;
+}
+
+.copy{
+    margin-top:10px;
+    width:100%;
+    padding:12px;
+    border:none;
+    background:#229ED9;
     color:white;
-    text-align:center;
-    border-radius:10px;
-    font-size:16px;
-    font-weight:bold;
+    border-radius:8px;
+    font-size:15px;
 }
 
 .small{
     color:#666;
     font-size:13px;
-    line-height:1.6;
-}
-
-.withdraw-item{
-    border:1px solid #eee;
-    padding:14px;
-    border-radius:10px;
-    margin-top:10px;
     line-height:1.5;
 }
 
-.pending{
-    color:#d97706;
-    font-weight:bold;
+.success{
+    background:#e8f7ef;
+    color:#075c43;
+    padding:15px;
+    border-radius:10px;
+    margin-bottom:15px;
 }
 
-.successful{
-    color:#087f5b;
-    font-weight:bold;
-}
-
-.failed,
-.cancelled{
-    color:#dc2626;
-    font-weight:bold;
-}
-
-.processing{
-    color:#2563eb;
-    font-weight:bold;
+.warning{
+    background:#fff8e1;
+    color:#7a5a00;
+    padding:15px;
+    border-radius:10px;
+    margin-bottom:15px;
 }
 
 </style>
 
 </head>
 
+
 <body>
 
 <div class="container">
+
 
 <div class="header">
 
@@ -254,10 +298,6 @@ Welcome,
 </div>
 
 
-<!-- =====================================================
-     REFERRAL CODE
-====================================================== -->
-
 <div class="card">
 
 <div class="label">
@@ -270,17 +310,13 @@ Welcome,
 
 <button
 class="copy"
-onclick='copyText({{ referral_code|tojson }})'
+onclick="copyText({{ referral_code|tojson }})"
 >
 📋 Copy Referral Code
 </button>
 
 </div>
 
-
-<!-- =====================================================
-     REFERRAL LINK
-====================================================== -->
 
 <div class="card">
 
@@ -294,7 +330,7 @@ onclick='copyText({{ referral_code|tojson }})'
 
 <button
 class="copy"
-onclick='copyText({{ referral_link|tojson }})'
+onclick="copyText({{ referral_link|tojson }})"
 >
 📋 Copy Referral Link
 </button>
@@ -302,11 +338,8 @@ onclick='copyText({{ referral_link|tojson }})'
 </div>
 
 
-<!-- =====================================================
-     STATISTICS
-====================================================== -->
-
 <div class="grid">
+
 
 <div class="stat">
 
@@ -359,12 +392,9 @@ onclick='copyText({{ referral_link|tojson }})'
 
 </div>
 
+
 </div>
 
-
-<!-- =====================================================
-     WITHDRAWAL
-====================================================== -->
 
 <div class="card">
 
@@ -372,127 +402,57 @@ onclick='copyText({{ referral_link|tojson }})'
 💳 Withdrawal
 </h3>
 
+
+{% if available_balance_number >= 200 %}
+
 <p class="small">
 
-Minimum withdrawal:
-<b>₦{{ min_withdrawal }}</b>
+You can withdraw any amount from
+<b>₦200</b> up to your available balance.
 
 <br><br>
 
-Available balance:
-<b>₦{{ available_balance }}</b>
+Your withdrawal will be sent automatically
+through Flutterwave.
 
 </p>
 
 
-{% if available_balance_number >= min_withdrawal_number %}
-
 <a
 class="withdraw"
-href="/referral/withdraw?ref={{ referral_code|urlencode }}"
+href="/referral/withdraw?promoter_id={{ promoter_id }}"
 >
 💸 WITHDRAW MONEY
 </a>
 
-{% else %}
-
-<div class="withdraw-disabled">
-🔒 Minimum ₦{{ min_withdrawal }} Required
-</div>
-
-{% endif %}
-
-</div>
-
-
-<!-- =====================================================
-     WITHDRAWAL HISTORY
-====================================================== -->
-
-<div class="card">
-
-<h3>
-📋 Withdrawal History
-</h3>
-
-{% if withdrawals %}
-
-{% for withdrawal in withdrawals %}
-
-<div class="withdraw-item">
-
-<div>
-<b>
-Request #{{ withdrawal["id"] }}
-</b>
-</div>
-
-<br>
-
-<div>
-Amount:
-<b>
-₦{{ "{:,.0f}".format(
-float(withdrawal["amount"] or 0)
-) }}
-</b>
-</div>
-
-<br>
-
-<div>
-Bank:
-{{ withdrawal["bank_name"] }}
-</div>
-
-<div>
-Account Name:
-{{ withdrawal["account_name"] }}
-</div>
-
-<div>
-Account:
-{{ withdrawal["account_number"] }}
-</div>
-
-<br>
-
-<div>
-
-Status:
-
-<span class="{{ withdrawal['status']|lower }}">
-
-{{ withdrawal["status"]|capitalize }}
-
-</span>
-
-</div>
-
-<br>
-
-<div class="small">
-{{ withdrawal["created_at"] }}
-</div>
-
-</div>
-
-{% endfor %}
 
 {% else %}
 
 <p class="small">
-No withdrawal request yet.
+
+Minimum withdrawal is
+<b>₦200</b>.
+
+<br><br>
+
+Your current balance is not enough
+to request a withdrawal.
+
 </p>
+
+
+<button
+class="withdraw withdraw-disabled"
+disabled
+>
+🔒 ₦200 MINIMUM REQUIRED
+</button>
+
 
 {% endif %}
 
 </div>
 
-
-<!-- =====================================================
-     INFORMATION
-====================================================== -->
 
 <div class="card">
 
@@ -504,13 +464,22 @@ No withdrawal request yet.
 
 Share your referral link with students.
 
+<br><br>
+
 When a student registers and successfully
-pays through your referral link, your commission
-will automatically be added to your balance.
+pays through your referral link, your
+commission is automatically added to your
+available balance.
+
+<br><br>
+
+You can withdraw from
+<b>₦200</b> and above.
 
 </p>
 
 </div>
+
 
 </div>
 
@@ -521,15 +490,20 @@ function copyText(text){
 
     if(
         navigator.clipboard &&
-        navigator.clipboard.writeText
+        window.isSecureContext
     ){
 
-        navigator.clipboard.writeText(text)
+        navigator.clipboard
+        .writeText(text)
+
         .then(function(){
 
-            alert("Copied successfully!");
+            alert(
+                "Copied successfully!"
+            );
 
         })
+
         .catch(function(){
 
             fallbackCopy(text);
@@ -547,36 +521,53 @@ function copyText(text){
 
 function fallbackCopy(text){
 
-    var textarea =
-        document.createElement("textarea");
+    const textarea =
+        document.createElement(
+            "textarea"
+        );
 
     textarea.value = text;
 
-    textarea.style.position = "fixed";
-    textarea.style.left = "-9999px";
+    textarea.style.position =
+        "fixed";
 
-    document.body.appendChild(textarea);
+    textarea.style.left =
+        "-9999px";
+
+    document.body.appendChild(
+        textarea
+    );
 
     textarea.focus();
+
     textarea.select();
 
     try{
 
-        document.execCommand("copy");
+        document.execCommand(
+            "copy"
+        );
 
-        alert("Copied successfully!");
+        alert(
+            "Copied successfully!"
+        );
 
     }catch(error){
 
-        alert("Unable to copy.");
+        alert(
+            "Copy failed. Please copy manually."
+        );
 
     }
 
-    document.body.removeChild(textarea);
+    document.body.removeChild(
+        textarea
+    );
 
 }
 
 </script>
+
 
 </body>
 
@@ -586,36 +577,10 @@ function fallbackCopy(text){
 
 
 # ==========================================================
-# REFERRAL DASHBOARD BY PROMOTER ID
+# REFERRAL DASHBOARD
 # ==========================================================
 
 def referral_dashboard(promoter_id):
-
-    if not promoter_id:
-
-        return (
-            "Promoter ID is required.",
-            400
-        )
-
-
-    try:
-
-        promoter_id = int(
-            promoter_id
-        )
-
-    except (TypeError, ValueError):
-
-        return (
-            "Invalid promoter ID.",
-            400
-        )
-
-
-    # ======================================================
-    # GET PROMOTER
-    # ======================================================
 
     try:
 
@@ -626,12 +591,12 @@ def referral_dashboard(promoter_id):
     except Exception as e:
 
         print(
-            "Referral dashboard error:",
+            "Promoter lookup error:",
             repr(e)
         )
 
         return (
-            "Unable to load referral account.",
+            "Unable to load referral dashboard.",
             500
         )
 
@@ -644,123 +609,23 @@ def referral_dashboard(promoter_id):
         )
 
 
-    # ======================================================
-    # ACTIVE CHECK
-    # ======================================================
-
-    if str(
-        promoter["status"]
-    ).lower() != "active":
-
-        return (
-            "This referral account is not active.",
-            403
-        )
-
-
-    # ======================================================
-    # WITHDRAWALS
-    # ======================================================
-
-    try:
-
-        withdrawals = get_promoter_withdrawals(
-            promoter_id
-        )
-
-    except Exception as e:
-
-        print(
-            "Withdrawal history error:",
-            repr(e)
-        )
-
-        withdrawals = []
-
-
-    # ======================================================
-    # BALANCE
-    # ======================================================
-
-    try:
-
-        available_balance_number = float(
-            promoter["available_balance"] or 0
-        )
-
-    except Exception:
-
-        available_balance_number = 0
-
-
-    try:
-
-        total_earned_number = float(
-            promoter["total_earned"] or 0
-        )
-
-    except Exception:
-
-        total_earned_number = 0
-
-
-    try:
-
-        withdrawn_amount_number = float(
-            promoter["withdrawn_amount"] or 0
-        )
-
-    except Exception:
-
-        withdrawn_amount_number = 0
-
-
-    try:
-
-        total_sales = int(
-            promoter["total_sales"] or 0
-        )
-
-    except Exception:
-
-        total_sales = 0
-
-
-    # ======================================================
-    # REFERRAL CODE
-    # ======================================================
-
-    referral_code = str(
-        promoter["referral_code"] or ""
-    ).strip()
-
-
-    if not referral_code:
-
-        return (
-            "Referral code is missing.",
-            500
-        )
-
-
-    # ======================================================
-    # REFERRAL LINK
-    # ======================================================
-
-    base_url = (
-        APP_URL or ""
-    ).rstrip("/")
+    referral_code = (
+        promoter["referral_code"]
+        or ""
+    )
 
 
     referral_link = (
-        f"{base_url}/payment"
+        f"{APP_URL}/payment"
         f"?ref={referral_code}"
     )
 
 
-    # ======================================================
-    # RENDER
-    # ======================================================
+    balance = float(
+        promoter["available_balance"]
+        or 0
+    )
+
 
     return render_template_string(
 
@@ -770,40 +635,31 @@ def referral_dashboard(promoter_id):
 
         promoter_name=(
             promoter["full_name"]
-            or "Promoter"
+            or ""
         ),
 
         referral_code=referral_code,
 
         referral_link=referral_link,
 
-        total_sales=total_sales,
-
-        total_earned=(
-            f"{total_earned_number:,.0f}"
+        total_sales=int(
+            promoter["total_sales"]
+            or 0
         ),
 
-        available_balance=(
-            f"{available_balance_number:,.0f}"
-        ),
+        total_earned=f"{float(
+            promoter['total_earned']
+            or 0
+        ):,.0f}",
 
-        available_balance_number=(
-            available_balance_number
-        ),
+        available_balance=f"{balance:,.0f}",
 
-        withdrawn_amount=(
-            f"{withdrawn_amount_number:,.0f}"
-        ),
+        available_balance_number=balance,
 
-        withdrawals=withdrawals,
-
-        min_withdrawal=(
-            f"{MIN_WITHDRAWAL:,.0f}"
-        ),
-
-        min_withdrawal_number=(
-            MIN_WITHDRAWAL
-        )
+        withdrawn_amount=f"{float(
+            promoter['withdrawn_amount']
+            or 0
+        ):,.0f}",
 
     )
 
@@ -816,35 +672,9 @@ def referral_dashboard_by_code(
     referral_code
 ):
 
-    referral_code = _clean_referral_code(
+    promoter = get_promoter_by_referral_code(
         referral_code
     )
-
-    if not referral_code:
-
-        return (
-            "Referral code is required.",
-            400
-        )
-
-
-    try:
-
-        promoter = _get_promoter_from_code(
-            referral_code
-        )
-
-    except Exception as e:
-
-        print(
-            "Referral code lookup error:",
-            repr(e)
-        )
-
-        return (
-            "Unable to load referral account.",
-            500
-        )
 
 
     if not promoter:
@@ -872,10 +702,15 @@ WITHDRAWAL_HTML = """
 
 <head>
 
-<meta name="viewport"
-content="width=device-width, initial-scale=1">
+<meta
+name="viewport"
+content="width=device-width, initial-scale=1"
+>
 
-<title>ALHIKAM Withdrawal</title>
+<title>
+ALHIKAM Withdrawal
+</title>
+
 
 <style>
 
@@ -886,7 +721,7 @@ content="width=device-width, initial-scale=1">
 body{
     font-family:Arial,sans-serif;
     background:#f5f7f9;
-    padding:15px;
+    padding:20px;
     margin:0;
 }
 
@@ -896,74 +731,99 @@ body{
     background:white;
     padding:25px;
     border-radius:15px;
-    box-shadow:0 3px 12px rgba(0,0,0,.08);
 }
 
 input,
 select{
+
     width:100%;
+
     padding:14px;
+
     margin-top:8px;
+
     margin-bottom:18px;
+
     border:1px solid #ccc;
+
     border-radius:8px;
+
     font-size:16px;
+
 }
 
 button{
-    width:100%;
-    padding:15px;
-    background:#087f5b;
-    color:white;
-    border:none;
-    border-radius:10px;
-    font-size:18px;
-    font-weight:bold;
-    cursor:pointer;
-}
 
-button:active{
-    opacity:.8;
+    width:100%;
+
+    padding:15px;
+
+    background:#087f5b;
+
+    color:white;
+
+    border:none;
+
+    border-radius:10px;
+
+    font-size:18px;
+
+    font-weight:bold;
+
 }
 
 .balance{
+
     background:#e8f7ef;
+
     padding:15px;
+
     border-radius:10px;
+
     margin-bottom:20px;
+
 }
 
 .note{
-    color:#666;
+
+    background:#fff8e1;
+
+    padding:12px;
+
+    border-radius:8px;
+
+    margin-bottom:18px;
+
     font-size:13px;
+
     line-height:1.5;
+
 }
 
 .back{
-    display:block;
-    margin-top:18px;
-    text-align:center;
-    color:#087f5b;
-    text-decoration:none;
-}
 
-.warning{
-    background:#fff8e1;
-    padding:12px;
-    border-radius:8px;
-    color:#7a5b00;
-    font-size:13px;
-    line-height:1.5;
-    margin-bottom:18px;
+    display:block;
+
+    margin-top:20px;
+
+    text-decoration:none;
+
+    color:#087f5b;
+
+    font-weight:bold;
+
 }
 
 </style>
 
 </head>
 
+
 <body>
 
+
 <div class="container">
+
 
 <h2>
 💸 Withdraw Referral Commission
@@ -983,44 +843,48 @@ Available Balance:
 </div>
 
 
-<div class="warning">
+<div class="note">
 
-⚠️ Please make sure the bank account name
-and account number are correct before submitting
-your withdrawal request.
+<b>Minimum withdrawal: ₦200</b>
+
+<br><br>
+
+You can withdraw any amount from
+₦200 up to your available balance.
+
+<br><br>
+
+The money will be sent automatically
+through Flutterwave after your request
+is processed.
 
 </div>
 
 
-<p class="note">
-
-Minimum withdrawal:
-<b>₦{{ min_withdrawal }}</b>
-
-</p>
-
-
 <form method="POST">
-
-<input
-type="hidden"
-name="referral_code"
-value="{{ referral_code }}"
->
 
 
 <label>
 <b>Amount</b>
 </label>
 
+
 <input
+
 type="number"
+
 name="amount"
-min="{{ min_withdrawal_number }}"
+
+min="200"
+
 max="{{ balance_number }}"
+
 step="1"
+
 placeholder="Enter withdrawal amount"
+
 required
+
 >
 
 
@@ -1028,8 +892,9 @@ required
 <b>Bank</b>
 </label>
 
+
 <select
-name="bank_name"
+name="bank_code"
 required
 >
 
@@ -1037,32 +902,17 @@ required
 Select Bank
 </option>
 
-<option>Access Bank</option>
-<option>Citibank Nigeria</option>
-<option>Ecobank</option>
-<option>Fidelity Bank</option>
-<option>First Bank</option>
-<option>FCMB</option>
-<option>Globus Bank</option>
-<option>GTBank</option>
-<option>Heritage Bank</option>
-<option>Jaiz Bank</option>
-<option>Keystone Bank</option>
-<option>Kuda</option>
-<option>Moniepoint</option>
-<option>Opay</option>
-<option>Palmpay</option>
-<option>Polaris Bank</option>
-<option>Premium Trust Bank</option>
-<option>Stanbic IBTC</option>
-<option>Standard Chartered</option>
-<option>Sterling Bank</option>
-<option>SunTrust Bank</option>
-<option>UBA</option>
-<option>Union Bank</option>
-<option>Unity Bank</option>
-<option>Wema Bank</option>
-<option>Zenith Bank</option>
+
+{% for bank in banks %}
+
+<option
+value="{{ bank['code'] }}"
+>
+{{ bank['name'] }}
+</option>
+
+{% endfor %}
+
 
 </select>
 
@@ -1071,12 +921,11 @@ Select Bank
 <b>Account Name</b>
 </label>
 
+
 <input
 type="text"
 name="account_name"
-autocomplete="name"
-maxlength="100"
-placeholder="Enter account name"
+placeholder="Account name"
 required
 >
 
@@ -1085,33 +934,37 @@ required
 <b>Account Number</b>
 </label>
 
+
 <input
 type="text"
 name="account_number"
 maxlength="10"
 inputmode="numeric"
-pattern="[0-9]{10}"
 placeholder="10 digit account number"
 required
 >
 
 
-<button type="submit">
+<button
+type="submit"
+>
 💸 REQUEST WITHDRAWAL
 </button>
+
 
 </form>
 
 
 <a
 class="back"
-href="/referral/dashboard?ref={{ referral_code|urlencode }}"
+href="/referral/dashboard?promoter_id={{ promoter_id }}"
 >
-← Back to Referral Dashboard
+← Back to Dashboard
 </a>
 
 
 </div>
+
 
 </body>
 
@@ -1125,80 +978,26 @@ href="/referral/dashboard?ref={{ referral_code|urlencode }}"
 # ==========================================================
 
 def withdrawal_page(
-    referral_code
+    promoter_id
 ):
 
-    referral_code = _clean_referral_code(
-        referral_code
+    promoter = get_promoter_by_id(
+        promoter_id
     )
-
-
-    if not referral_code:
-
-        return (
-            "Referral code is required.",
-            400
-        )
-
-
-    # ======================================================
-    # GET PROMOTER
-    # ======================================================
-
-    try:
-
-        promoter = _get_promoter_from_code(
-            referral_code
-        )
-
-    except Exception as e:
-
-        print(
-            "Promoter lookup error:",
-            repr(e)
-        )
-
-        return (
-            "Unable to load promoter.",
-            500
-        )
 
 
     if not promoter:
 
         return (
-            "Invalid promoter/referral code.",
+            "Promoter not found.",
             404
         )
 
 
-    # ======================================================
-    # ACTIVE CHECK
-    # ======================================================
-
-    if str(
-        promoter["status"]
-    ).lower() != "active":
-
-        return (
-            "This referral account is not active.",
-            403
-        )
-
-
-    # ======================================================
-    # BALANCE
-    # ======================================================
-
-    try:
-
-        balance = float(
-            promoter["available_balance"] or 0
-        )
-
-    except Exception:
-
-        balance = 0
+    balance = float(
+        promoter["available_balance"]
+        or 0
+    )
 
 
     # ======================================================
@@ -1207,25 +1006,73 @@ def withdrawal_page(
 
     if request.method == "GET":
 
+        if balance < MINIMUM_WITHDRAWAL:
+
+            return (
+
+                f"""
+                <div
+                style="
+                font-family:Arial;
+                text-align:center;
+                padding:40px
+                "
+                >
+
+                <h2>
+                🔒 Withdrawal Unavailable
+                </h2>
+
+                <p>
+                Minimum withdrawal is
+                <b>₦200</b>.
+                </p>
+
+                <p>
+                Your available balance is
+                <b>₦{balance:,.0f}</b>.
+                </p>
+
+                <br>
+
+                <a
+                href="/referral/dashboard?promoter_id={promoter_id}"
+                >
+                ← Back to Dashboard
+                </a>
+
+                </div>
+                """
+
+            )
+
+
+        banks = get_nigerian_banks()
+
+
+        if not banks:
+
+            return (
+
+                "Unable to load Nigerian banks. "
+                "Please try again later.",
+
+                503
+
+            )
+
+
         return render_template_string(
 
             WITHDRAWAL_HTML,
-
-            promoter_id=promoter["id"],
-
-            referral_code=referral_code,
 
             balance=f"{balance:,.0f}",
 
             balance_number=balance,
 
-            min_withdrawal=(
-                f"{MIN_WITHDRAWAL:,.0f}"
-            ),
+            promoter_id=promoter_id,
 
-            min_withdrawal_number=(
-                MIN_WITHDRAWAL
-            )
+            banks=banks,
 
         )
 
@@ -1234,19 +1081,14 @@ def withdrawal_page(
     # POST
     # ======================================================
 
-    amount_raw = (
-        request.form.get(
-            "amount",
-            ""
-        )
-        or ""
-    ).strip()
-
-
     try:
 
         amount = float(
-            amount_raw
+            request.form.get(
+                "amount",
+                0
+            )
+            or 0
         )
 
     except Exception:
@@ -1254,13 +1096,9 @@ def withdrawal_page(
         amount = 0
 
 
-    # ======================================================
-    # FORM DATA
-    # ======================================================
-
-    bank_name = (
+    bank_code = (
         request.form.get(
-            "bank_name",
+            "bank_code",
             ""
         )
         or ""
@@ -1286,13 +1124,13 @@ def withdrawal_page(
 
 
     # ======================================================
-    # VALIDATION
+    # VALIDATE AMOUNT
     # ======================================================
 
-    if amount < MIN_WITHDRAWAL:
+    if amount < MINIMUM_WITHDRAWAL:
 
         return (
-            f"Minimum withdrawal is ₦{MIN_WITHDRAWAL:,.0f}.",
+            "Minimum withdrawal is ₦200.",
             400
         )
 
@@ -1305,23 +1143,14 @@ def withdrawal_page(
         )
 
 
-    if not bank_name:
+    # ======================================================
+    # VALIDATE ACCOUNT NUMBER
+    # ======================================================
 
-        return (
-            "Bank name is required.",
-            400
-        )
-
-
-    if not account_name:
-
-        return (
-            "Account name is required.",
-            400
-        )
-
-
-    if len(account_number) != 10:
+    if (
+        len(account_number) != 10
+        or not account_number.isdigit()
+    ):
 
         return (
             "Account number must contain exactly 10 digits.",
@@ -1329,158 +1158,323 @@ def withdrawal_page(
         )
 
 
-    if not account_number.isdigit():
+    # ======================================================
+    # VALIDATE BANK
+    # ======================================================
+
+    if not bank_code:
 
         return (
-            "Account number must contain digits only.",
+            "Please select a valid bank.",
             400
         )
 
 
     # ======================================================
+    # GET BANK NAME
+    # ======================================================
+
+    bank_name = bank_code
+
+
+    banks = get_nigerian_banks()
+
+
+    for bank in banks:
+
+        if (
+            str(
+                bank.get(
+                    "code",
+                    ""
+                )
+            ).strip()
+            == bank_code
+        ):
+
+            bank_name = (
+                bank.get(
+                    "name",
+                    bank_code
+                )
+            )
+
+            break
+
+
+    # ======================================================
     # CREATE WITHDRAWAL
+    #
+    # database.py will reserve the balance.
     # ======================================================
 
     try:
 
         withdrawal_id = create_withdrawal(
 
-            promoter_id=promoter["id"],
+            promoter_id=promoter_id,
 
             amount=amount,
 
             bank_name=bank_name,
 
+            bank_code=bank_code,
+
             account_name=account_name,
 
-            account_number=account_number
+            account_number=account_number,
 
         )
-
 
     except ValueError as e:
 
         return (
+            str(e),
+            400
+        )
+
+    except Exception as e:
+
+        print(
+            "Withdrawal creation error:",
+            repr(e)
+        )
+
+        return (
+            "Unable to create withdrawal.",
+            500
+        )
+
+
+    # ======================================================
+    # FLUTTERWAVE TRANSFER
+    # ======================================================
+
+    try:
+
+        transfer_result = (
+            create_flutterwave_transfer(
+
+                amount=amount,
+
+                account_number=account_number,
+
+                bank_code=bank_code,
+
+                account_name=account_name,
+
+                narration=(
+                    "ALHIKAM Referral Commission"
+                ),
+
+            )
+        )
+
+    except Exception as e:
+
+        print(
+            "Flutterwave transfer error:",
+            repr(e)
+        )
+
+        transfer_result = None
+
+
+    # ======================================================
+    # TRANSFER FAILED
+    # ======================================================
+
+    if not transfer_result:
+
+        try:
+
+            refund_withdrawal(
+
+                withdrawal_id=withdrawal_id,
+
+                transfer_status="failed",
+
+                transfer_message=(
+                    "Flutterwave transfer failed."
+                ),
+
+            )
+
+        except Exception as e:
+
+            print(
+                "Withdrawal refund error:",
+                repr(e)
+            )
+
+
+        return (
 
             f"""
-            <div style="
-                font-family:Arial;
-                text-align:center;
-                padding:40px;
-            ">
+            <div
+            style="
+            font-family:Arial;
+            text-align:center;
+            padding:40px
+            "
+            >
 
             <h2>
-            ❌ Withdrawal Failed
+            ❌ Transfer Failed
             </h2>
 
             <p>
-            {str(e)}
+            We could not send your
+            referral commission.
+            </p>
+
+            <p>
+            Your balance has been returned.
             </p>
 
             <br>
 
-            <a href="/referral/dashboard?ref={referral_code}">
+            <a
+            href="/referral/dashboard?promoter_id={promoter_id}"
+            >
             ← Back to Dashboard
             </a>
 
             </div>
-            """,
-
-            400
+            """
 
         )
+
+
+    # ======================================================
+    # GET TRANSFER INFORMATION
+    # ======================================================
+
+    transfer_id = (
+        transfer_result.get(
+            "transfer_id"
+        )
+    )
+
+
+    transfer_reference = (
+        transfer_result.get(
+            "reference"
+        )
+    )
+
+
+    transfer_status = (
+        transfer_result.get(
+            "status",
+            "processing"
+        )
+    )
+
+
+    # ======================================================
+    # MARK SUCCESSFUL
+    # ======================================================
+
+    try:
+
+        marked = mark_withdrawal_successful(
+
+            withdrawal_id=withdrawal_id,
+
+            transfer_id=transfer_id,
+
+            transfer_reference=(
+                transfer_reference
+            ),
+
+            transfer_message=(
+                transfer_result.get(
+                    "message"
+                )
+            ),
+
+        )
+
+
+        if not marked:
+
+            print(
+                "WARNING: Transfer sent but "
+                "withdrawal record could not "
+                "be marked successful."
+            )
 
 
     except Exception as e:
 
         print(
-            "Withdrawal error:",
+            "Withdrawal status update error:",
             repr(e)
         )
 
-        return (
-
-            f"""
-            <div style="
-                font-family:Arial;
-                text-align:center;
-                padding:40px;
-            ">
-
-            <h2>
-            ❌ Withdrawal Request Failed
-            </h2>
-
-            <p>
-            Please try again later.
-            </p>
-
-            <br>
-
-            <a href="/referral/dashboard?ref={referral_code}">
-            ← Back to Dashboard
-            </a>
-
-            </div>
-            """,
-
-            500
-
-        )
-
 
     # ======================================================
-    # SUCCESS
+    # SUCCESS PAGE
     # ======================================================
 
-    return f"""
+    return (
 
-    <div style="
+        f"""
+        <div
+        style="
         font-family:Arial;
         text-align:center;
-        padding:40px;
-        font-family:Arial,sans-serif;
-    ">
+        padding:40px
+        "
+        >
 
-    <h2>
-    ✅ Withdrawal Request Received
-    </h2>
+        <h2>
+        ✅ Withdrawal Submitted
+        </h2>
 
-    <p>
-    Your withdrawal request has been recorded successfully.
-    </p>
+        <p>
+        Your referral commission has been
+        sent to Flutterwave for processing.
+        </p>
 
-    <p>
-    Amount:
-    <b>₦{amount:,.0f}</b>
-    </p>
+        <p>
+        Amount:
+        <b>
+        ₦{amount:,.0f}
+        </b>
+        </p>
 
-    <p>
-    Request ID:
-    <b>#{withdrawal_id}</b>
-    </p>
+        <p>
+        Account:
+        <b>
+        ****{account_number[-4:]}
+        </b>
+        </p>
 
-    <p>
-    Status:
-    <b style="color:#d97706;">
-    Pending
-    </b>
-    </p>
+        <p>
+        Reference:
+        <b>
+        {transfer_reference or "N/A"}
+        </b>
+        </p>
 
-    <p style="
-        color:#666;
-        font-size:14px;
-    ">
-    Your balance has already been reserved for this
-    withdrawal request.
-    </p>
+        <p>
+        Status:
+        <b>
+        {transfer_status}
+        </b>
+        </p>
 
-    <br>
+        <br>
 
-    <a href="/referral/dashboard?ref={referral_code}">
-    ← Back to Dashboard
-    </a>
+        <a
+        href="/referral/dashboard?promoter_id={promoter_id}"
+        >
+        ← Back to Dashboard
+        </a>
 
-    </div>
+        </div>
+        """
 
-    """
+    )
