@@ -668,25 +668,96 @@ def referral_dashboard(promoter_id):
 # REFERRAL DASHBOARD BY CODE
 # ==========================================================
 
-def referral_dashboard_by_code(
-    referral_code
-):
+# ==========================================================
+# REFERRAL DASHBOARD
+# ==========================================================
 
-    promoter = get_promoter_by_referral_code(
-        referral_code
-    )
+def referral_dashboard(promoter_id):
 
+    try:
+
+        promoter = get_promoter_by_id(
+            promoter_id
+        )
+
+    except Exception as e:
+
+        print(
+            "Promoter lookup error:",
+            repr(e)
+        )
+
+        return (
+            "Unable to load referral dashboard.",
+            500
+        )
 
     if not promoter:
 
         return (
-            "Invalid referral code.",
+            "Promoter account not found.",
             404
         )
 
+    referral_code = (
+        promoter["referral_code"]
+        or ""
+    )
 
-    return referral_dashboard(
-        promoter["id"]
+    referral_link = (
+        f"{APP_URL}/payment"
+        f"?ref={referral_code}"
+    )
+
+    balance = float(
+        promoter["available_balance"]
+        or 0
+    )
+
+    total_earned = float(
+        promoter["total_earned"]
+        or 0
+    )
+
+    withdrawn_amount = float(
+        promoter["withdrawn_amount"]
+        or 0
+    )
+
+    return render_template_string(
+
+        REFERRAL_DASHBOARD_HTML,
+
+        promoter_id=promoter["id"],
+
+        promoter_name=(
+            promoter["full_name"]
+            or ""
+        ),
+
+        referral_code=referral_code,
+
+        referral_link=referral_link,
+
+        total_sales=int(
+            promoter["total_sales"]
+            or 0
+        ),
+
+        total_earned=(
+            f"{total_earned:,.0f}"
+        ),
+
+        available_balance=(
+            f"{balance:,.0f}"
+        ),
+
+        available_balance_number=balance,
+
+        withdrawn_amount=(
+            f"{withdrawn_amount:,.0f}"
+        ),
+
     )
 
 
