@@ -15,13 +15,23 @@ import requests
 # CONFIG
 # ==========================================================
 
-FLW_SECRET_KEY = os.getenv(
-    "FLW_SECRET_KEY"
-)
+FLW_SECRET_KEY = os.getenv("FLW_SECRET_KEY")
 
 FLUTTERWAVE_TRANSFER_URL = (
     "https://api.flutterwave.com/v3/transfers"
 )
+
+
+# ==========================================================
+# COMMON HEADERS
+# ==========================================================
+
+def _headers():
+
+    return {
+        "Authorization": f"Bearer {FLW_SECRET_KEY}",
+        "Content-Type": "application/json",
+    }
 
 
 # ==========================================================
@@ -36,10 +46,6 @@ def create_flutterwave_transfer(
     narration="ALHIKAM Referral Commission"
 ):
 
-    # ------------------------------------------------------
-    # CHECK SECRET KEY
-    # ------------------------------------------------------
-
     if not FLW_SECRET_KEY:
 
         print(
@@ -50,15 +56,13 @@ def create_flutterwave_transfer(
         return None
 
 
-    # ------------------------------------------------------
-    # VALIDATE AMOUNT
-    # ------------------------------------------------------
+    # ======================================================
+    # AMOUNT
+    # ======================================================
 
     try:
 
-        amount = float(
-            amount
-        )
+        amount = float(amount)
 
     except Exception:
 
@@ -80,9 +84,9 @@ def create_flutterwave_transfer(
         return None
 
 
-    # ------------------------------------------------------
-    # VALIDATE ACCOUNT NUMBER
-    # ------------------------------------------------------
+    # ======================================================
+    # ACCOUNT NUMBER
+    # ======================================================
 
     account_number = str(
         account_number or ""
@@ -102,9 +106,9 @@ def create_flutterwave_transfer(
         return None
 
 
-    # ------------------------------------------------------
-    # VALIDATE BANK CODE
-    # ------------------------------------------------------
+    # ======================================================
+    # BANK CODE
+    # ======================================================
 
     bank_code = str(
         bank_code or ""
@@ -121,9 +125,18 @@ def create_flutterwave_transfer(
         return None
 
 
-    # ------------------------------------------------------
-    # GENERATE UNIQUE REFERENCE
-    # ------------------------------------------------------
+    # ======================================================
+    # ACCOUNT NAME
+    # ======================================================
+
+    account_name = str(
+        account_name or ""
+    ).strip()
+
+
+    # ======================================================
+    # UNIQUE REFERENCE
+    # ======================================================
 
     reference = (
         "ALHIKAM-"
@@ -131,24 +144,9 @@ def create_flutterwave_transfer(
     )
 
 
-    # ------------------------------------------------------
-    # REQUEST HEADERS
-    # ------------------------------------------------------
-
-    headers = {
-
-        "Authorization":
-            f"Bearer {FLW_SECRET_KEY}",
-
-        "Content-Type":
-            "application/json",
-
-    }
-
-
-    # ------------------------------------------------------
-    # TRANSFER DATA
-    # ------------------------------------------------------
+    # ======================================================
+    # PAYLOAD
+    # ======================================================
 
     payload = {
 
@@ -168,14 +166,13 @@ def create_flutterwave_transfer(
             "NGN",
 
         "beneficiary_name":
-            account_name or "",
+            account_name,
 
         "narration":
             narration,
 
         "reference":
             reference,
-
     }
 
 
@@ -191,9 +188,9 @@ def create_flutterwave_transfer(
     )
 
 
-    # ------------------------------------------------------
-    # SEND TRANSFER
-    # ------------------------------------------------------
+    # ======================================================
+    # SEND REQUEST
+    # ======================================================
 
     try:
 
@@ -201,14 +198,13 @@ def create_flutterwave_transfer(
 
             FLUTTERWAVE_TRANSFER_URL,
 
-            headers=headers,
+            headers=_headers(),
 
             json=payload,
 
             timeout=60,
 
         )
-
 
     except requests.RequestException as e:
 
@@ -220,12 +216,8 @@ def create_flutterwave_transfer(
         return None
 
 
-    # ------------------------------------------------------
-    # RESPONSE
-    # ------------------------------------------------------
-
     print(
-        "FLUTTERWAVE TRANSFER STATUS:",
+        "FLUTTERWAVE TRANSFER HTTP STATUS:",
         response.status_code
     )
 
@@ -234,6 +226,10 @@ def create_flutterwave_transfer(
         response.text
     )
 
+
+    # ======================================================
+    # JSON
+    # ======================================================
 
     try:
 
@@ -249,9 +245,9 @@ def create_flutterwave_transfer(
         return None
 
 
-    # ------------------------------------------------------
-    # CHECK HTTP RESPONSE
-    # ------------------------------------------------------
+    # ======================================================
+    # HTTP CHECK
+    # ======================================================
 
     if response.status_code not in {
         200,
@@ -259,17 +255,16 @@ def create_flutterwave_transfer(
     }:
 
         print(
-            "FLUTTERWAVE TRANSFER FAILED:"
-            ,
+            "FLUTTERWAVE TRANSFER FAILED:",
             result
         )
 
         return None
 
 
-    # ------------------------------------------------------
-    # CHECK FLUTTERWAVE STATUS
-    # ------------------------------------------------------
+    # ======================================================
+    # API CHECK
+    # ======================================================
 
     if result.get("status") != "success":
 
@@ -281,9 +276,9 @@ def create_flutterwave_transfer(
         return None
 
 
-    # ------------------------------------------------------
-    # GET TRANSFER DATA
-    # ------------------------------------------------------
+    # ======================================================
+    # DATA
+    # ======================================================
 
     data = result.get(
         "data"
@@ -308,15 +303,12 @@ def create_flutterwave_transfer(
 
 
     transfer_message = (
-        result.get("message")
+        data.get("complete_message")
         or data.get("message")
+        or result.get("message")
         or ""
     )
 
-
-    # ------------------------------------------------------
-    # RETURN STANDARD RESULT
-    # ------------------------------------------------------
 
     return {
 
@@ -337,5 +329,143 @@ def create_flutterwave_transfer(
 
         "raw":
             result,
+    }
 
+
+# ==========================================================
+# GET TRANSFER STATUS
+# ==========================================================
+
+def get_flutterwave_transfer_status(
+    transfer_id
+):
+
+    if not FLW_SECRET_KEY:
+
+        print(
+            "FLUTTERWAVE STATUS ERROR: "
+            "FLW_SECRET_KEY is missing."
+        )
+
+        return None
+
+
+    if not transfer_id:
+
+        print(
+            "FLUTTERWAVE STATUS ERROR: "
+            "Transfer ID is missing."
+        )
+
+        return None
+
+
+    url = (
+        f"{FLUTTERWAVE_TRANSFER_URL}/"
+        f"{transfer_id}"
+    )
+
+
+    try:
+
+        response = requests.get(
+
+            url,
+
+            headers=_headers(),
+
+            timeout=60,
+
+        )
+
+    except requests.RequestException as e:
+
+        print(
+            "FLUTTERWAVE STATUS REQUEST ERROR:",
+            repr(e)
+        )
+
+        return None
+
+
+    print(
+        "FLUTTERWAVE STATUS HTTP:",
+        response.status_code
+    )
+
+    print(
+        "FLUTTERWAVE STATUS RESPONSE:",
+        response.text
+    )
+
+
+    try:
+
+        result = response.json()
+
+    except Exception:
+
+        print(
+            "FLUTTERWAVE STATUS ERROR: "
+            "Invalid JSON."
+        )
+
+        return None
+
+
+    if response.status_code != 200:
+
+        print(
+            "FLUTTERWAVE STATUS FAILED:",
+            result
+        )
+
+        return None
+
+
+    if result.get("status") != "success":
+
+        print(
+            "FLUTTERWAVE STATUS NOT SUCCESS:",
+            result
+        )
+
+        return None
+
+
+    data = result.get(
+        "data"
+    ) or {}
+
+
+    status = str(
+        data.get("status")
+        or ""
+    ).upper().strip()
+
+
+    return {
+
+        "success":
+            True,
+
+        "transfer_id":
+            data.get("id"),
+
+        "reference":
+            data.get("reference"),
+
+        "status":
+            status,
+
+        "message":
+            (
+                data.get("complete_message")
+                or data.get("message")
+                or result.get("message")
+                or ""
+            ),
+
+        "raw":
+            result,
     }
