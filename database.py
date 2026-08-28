@@ -44,7 +44,11 @@ def get_connection():
 # DATABASE MIGRATION HELPERS
 # ==========================================================
 
-def _column_exists(cursor, table_name, column_name):
+def _column_exists(
+    cursor,
+    table_name,
+    column_name
+):
 
     cursor.execute(
         f"PRAGMA table_info({table_name})"
@@ -1437,13 +1441,12 @@ def link_commission_to_student(
 #
 # MINIMUM WITHDRAWAL = ₦200
 #
-# IMPORTANT:
-# Balance is RESERVED immediately.
+# Balance is reserved immediately.
 #
-# If transfer succeeds:
+# SUCCESS:
 #     reserved money becomes withdrawn.
 #
-# If transfer fails:
+# FAILED/CANCELLED:
 #     reserved money returns to balance.
 #
 # ==========================================================
@@ -1476,7 +1479,7 @@ def create_withdrawal(
         )
 
     # ======================================================
-    # MINIMUM = ₦200
+    # MINIMUM WITHDRAWAL
     # ======================================================
 
     if amount < 200:
@@ -1484,6 +1487,10 @@ def create_withdrawal(
         raise ValueError(
             "Minimum withdrawal is ₦200."
         )
+
+    # ======================================================
+    # CLEAN INPUT
+    # ======================================================
 
     bank_name = (
         bank_name or ""
@@ -1500,6 +1507,10 @@ def create_withdrawal(
     account_number = (
         account_number or ""
     ).strip()
+
+    # ======================================================
+    # VALIDATION
+    # ======================================================
 
     if not bank_name:
 
@@ -1532,9 +1543,9 @@ def create_withdrawal(
             "BEGIN IMMEDIATE"
         )
 
-        # --------------------------------------------------
+        # ==================================================
         # GET PROMOTER
-        # --------------------------------------------------
+        # ==================================================
 
         cursor.execute("""
         SELECT
@@ -1578,9 +1589,9 @@ def create_withdrawal(
                 "Insufficient available balance."
             )
 
-        # --------------------------------------------------
+        # ==================================================
         # RESERVE BALANCE
-        # --------------------------------------------------
+        # ==================================================
 
         cursor.execute("""
         UPDATE promoters
@@ -1607,9 +1618,9 @@ def create_withdrawal(
                 "Unable to reserve withdrawal amount."
             )
 
-        # --------------------------------------------------
+        # ==================================================
         # CREATE WITHDRAWAL
-        # --------------------------------------------------
+        # ==================================================
 
         cursor.execute("""
         INSERT INTO withdrawals (
@@ -1817,11 +1828,8 @@ def update_withdrawal_transfer(
 # MARK WITHDRAWAL SUCCESSFUL
 # ==========================================================
 #
-# IMPORTANT:
-# This function is idempotent.
-#
-# Calling it twice will NOT add the amount to
-# withdrawn_amount twice.
+# Idempotent:
+# Calling twice will NOT double-count withdrawn_amount.
 #
 # ==========================================================
 
@@ -1848,9 +1856,9 @@ def mark_withdrawal_successful(
             "BEGIN IMMEDIATE"
         )
 
-        # --------------------------------------------------
+        # ==================================================
         # GET WITHDRAWAL
-        # --------------------------------------------------
+        # ==================================================
 
         cursor.execute("""
         SELECT *
@@ -1887,9 +1895,9 @@ def mark_withdrawal_successful(
             withdrawal["promoter_id"]
         )
 
-        # --------------------------------------------------
+        # ==================================================
         # ALREADY SUCCESSFUL
-        # --------------------------------------------------
+        # ==================================================
 
         if old_status == "successful":
 
@@ -1910,11 +1918,7 @@ def mark_withdrawal_successful(
                         transfer_reference
                     ),
 
-                transfer_status =
-                    COALESCE(
-                        ?,
-                        transfer_status
-                    ),
+                transfer_status='successful',
 
                 transfer_message =
                     COALESCE(
@@ -1927,7 +1931,6 @@ def mark_withdrawal_successful(
 
                 transfer_id,
                 transfer_reference,
-                "successful",
                 transfer_message,
                 withdrawal_id
 
@@ -1937,9 +1940,9 @@ def mark_withdrawal_successful(
 
             return True
 
-        # --------------------------------------------------
-        # FINAL OTHER STATUS
-        # --------------------------------------------------
+        # ==================================================
+        # ALREADY FAILED / CANCELLED
+        # ==================================================
 
         if old_status in {
             "failed",
@@ -1950,9 +1953,9 @@ def mark_withdrawal_successful(
                 "Withdrawal has already been finalized."
             )
 
-        # --------------------------------------------------
+        # ==================================================
         # UPDATE PROMOTER
-        # --------------------------------------------------
+        # ==================================================
 
         cursor.execute("""
         UPDATE promoters
@@ -1972,9 +1975,9 @@ def mark_withdrawal_successful(
                 "Could not update withdrawn amount."
             )
 
-        # --------------------------------------------------
+        # ==================================================
         # UPDATE WITHDRAWAL
-        # --------------------------------------------------
+        # ==================================================
 
         cursor.execute("""
         UPDATE withdrawals
@@ -2043,9 +2046,9 @@ def mark_withdrawal_successful(
 # REFUND WITHDRAWAL
 # ==========================================================
 #
-# Used when Flutterwave transfer fails.
+# Used when Flutterwave transfer fails/cancelled.
 #
-# The reserved amount is returned to available_balance.
+# Reserved amount returns to available_balance.
 #
 # ==========================================================
 
@@ -2061,6 +2064,17 @@ def refund_withdrawal(
             "Withdrawal ID is required."
         )
 
+    transfer_status = (
+        transfer_status or "failed"
+    ).strip().lower()
+
+    if transfer_status not in {
+        "failed",
+        "cancelled"
+    }:
+
+        transfer_status = "failed"
+
     conn = get_connection()
 
     try:
@@ -2071,9 +2085,9 @@ def refund_withdrawal(
             "BEGIN IMMEDIATE"
         )
 
-        # --------------------------------------------------
+        # ==================================================
         # GET WITHDRAWAL
-        # --------------------------------------------------
+        # ==================================================
 
         cursor.execute("""
         SELECT *
@@ -2110,22 +2124,44 @@ def refund_withdrawal(
             withdrawal["promoter_id"]
         )
 
-        # --------------------------------------------------
+        # ==================================================
         # ALREADY REFUNDED
-        # --------------------------------------------------
+        # ==================================================
 
         if old_status in {
             "failed",
             "cancelled"
         }:
 
+            cursor.execute("""
+            UPDATE withdrawals
+
+            SET
+
+                transfer_status=?,
+
+                transfer_message =
+                    COALESCE(
+                        ?,
+                        transfer_message
+                    )
+
+            WHERE id=?
+            """, (
+
+                transfer_status,
+                transfer_message,
+                withdrawal_id
+
+            ))
+
             conn.commit()
 
             return True
 
-        # --------------------------------------------------
+        # ==================================================
         # SUCCESSFUL CANNOT REFUND
-        # --------------------------------------------------
+        # ==================================================
 
         if old_status == "successful":
 
@@ -2133,9 +2169,9 @@ def refund_withdrawal(
                 "Successful withdrawal cannot be refunded."
             )
 
-        # --------------------------------------------------
+        # ==================================================
         # RETURN BALANCE
-        # --------------------------------------------------
+        # ==================================================
 
         cursor.execute("""
         UPDATE promoters
@@ -2155,16 +2191,16 @@ def refund_withdrawal(
                 "Could not restore promoter balance."
             )
 
-        # --------------------------------------------------
+        # ==================================================
         # UPDATE WITHDRAWAL
-        # --------------------------------------------------
+        # ==================================================
 
         cursor.execute("""
         UPDATE withdrawals
 
         SET
 
-            status='failed',
+            status=?,
 
             transfer_status=?,
 
@@ -2178,6 +2214,7 @@ def refund_withdrawal(
         )
         """, (
 
+            transfer_status,
             transfer_status,
             transfer_message,
             withdrawal_id
@@ -2240,9 +2277,9 @@ def update_withdrawal_status(
             "Invalid withdrawal status."
         )
 
-    # ------------------------------------------------------
+    # ======================================================
     # SUCCESSFUL
-    # ------------------------------------------------------
+    # ======================================================
 
     if status == "successful":
 
@@ -2250,9 +2287,9 @@ def update_withdrawal_status(
             withdrawal_id
         )
 
-    # ------------------------------------------------------
+    # ======================================================
     # FAILED / CANCELLED
-    # ------------------------------------------------------
+    # ======================================================
 
     if status in {
         "failed",
@@ -2264,9 +2301,9 @@ def update_withdrawal_status(
             transfer_status=status
         )
 
-    # ------------------------------------------------------
+    # ======================================================
     # PENDING / PROCESSING
-    # ------------------------------------------------------
+    # ======================================================
 
     conn = get_connection()
 
@@ -2304,6 +2341,10 @@ def update_withdrawal_status(
             .strip()
         )
 
+        # ==================================================
+        # FINAL STATUS CANNOT CHANGE
+        # ==================================================
+
         if old_status in {
             "successful",
             "failed",
@@ -2313,6 +2354,10 @@ def update_withdrawal_status(
             raise ValueError(
                 "Final withdrawal status cannot be changed."
             )
+
+        # ==================================================
+        # UPDATE
+        # ==================================================
 
         cursor.execute("""
         UPDATE withdrawals
