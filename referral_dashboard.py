@@ -1508,17 +1508,11 @@ def withdrawal_page(
 
                 amount=amount,
 
-                account_number=(
-                    account_number
-                ),
+                account_number=account_number,
 
-                bank_code=(
-                    bank_code
-                ),
+                bank_code=bank_code,
 
-                account_name=(
-                    account_name
-                ),
+                account_name=account_name,
 
                 narration=(
                     "ALHIKAM Referral Commission"
@@ -1547,16 +1541,13 @@ def withdrawal_page(
 
             refund_withdrawal(
 
-                withdrawal_id=(
-                    withdrawal_id
-                ),
+                withdrawal_id=withdrawal_id,
 
-                transfer_status=(
-                    "failed"
-                ),
+                transfer_status="failed",
 
                 transfer_message=(
-                    "Flutterwave transfer failed."
+                    "Flutterwave transfer "
+                    "request failed."
                 ),
 
             )
@@ -1570,17 +1561,13 @@ def withdrawal_page(
 
 
         return (
-
             f"""
-
             <div
-
             style="
             font-family:Arial;
             text-align:center;
             padding:40px
             "
-
             >
 
             <h2>
@@ -1588,111 +1575,207 @@ def withdrawal_page(
             </h2>
 
             <p>
-
             We could not send your
             referral commission.
-
             </p>
 
             <p>
-
             Your balance has been returned.
-
             </p>
 
             <br>
 
             <a
-            href="/referral/dashboard?ref={referral_code}"
+            href="/referral/dashboard?promoter_id={promoter_id}"
             >
-
             ← Back to Dashboard
-
             </a>
 
             </div>
-
             """
-
         )
 
 
     # ======================================================
-    # GET TRANSFER INFORMATION
+    # GET INITIAL TRANSFER DATA
     # ======================================================
 
     transfer_id = (
-
         transfer_result.get(
             "transfer_id"
         )
-
     )
 
 
     transfer_reference = (
-
         transfer_result.get(
             "reference"
         )
-
     )
 
 
-    transfer_status = (
-
+    transfer_status = str(
         transfer_result.get(
             "status",
-            "processing"
+            "NEW"
         )
-
-    )
+        or "NEW"
+    ).upper().strip()
 
 
     transfer_message = (
-
         transfer_result.get(
             "message"
         )
-
+        or ""
     )
 
 
     # ======================================================
-    # NORMALIZE STATUS
+    # SAVE TRANSFER INFORMATION
     # ======================================================
 
-    normalized_status = str(
+    try:
 
-        transfer_status
-        or ""
+        update_withdrawal_transfer(
 
-    ).lower().strip()
+            withdrawal_id=withdrawal_id,
+
+            transfer_reference=(
+                transfer_reference
+            ),
+
+            transfer_id=(
+                transfer_id
+            ),
+
+            transfer_status=(
+                transfer_status
+            ),
+
+            transfer_message=(
+                transfer_message
+            ),
+
+        )
+
+    except Exception as e:
+
+        print(
+            "Withdrawal transfer update error:",
+            repr(e)
+        )
 
 
     # ======================================================
-    # CONFIRMED SUCCESS
+    # IMPORTANT
+    #
+    # NEW / PENDING IS NOT SUCCESSFUL.
+    #
+    # Flutterwave can return NEW when the transfer
+    # has only been initiated.
     # ======================================================
 
-    if normalized_status in {
+    if transfer_id:
 
-        "successful",
-        "success",
-        "completed"
+        try:
 
-    }:
+            verified_transfer = (
+                get_flutterwave_transfer_status(
+                    transfer_id
+                )
+            )
+
+        except Exception as e:
+
+            print(
+                "Transfer verification error:",
+                repr(e)
+            )
+
+            verified_transfer = None
+
+
+        # ==================================================
+        # VERIFICATION SUCCESSFUL
+        # ==================================================
+
+        if verified_transfer:
+
+            transfer_status = str(
+                verified_transfer.get(
+                    "status",
+                    transfer_status
+                )
+                or transfer_status
+            ).upper().strip()
+
+
+            transfer_reference = (
+                verified_transfer.get(
+                    "reference"
+                )
+                or transfer_reference
+            )
+
+
+            transfer_message = (
+                verified_transfer.get(
+                    "message"
+                )
+                or transfer_message
+            )
+
+
+            # ==============================================
+            # UPDATE LATEST TRANSFER STATUS
+            # ==============================================
+
+            try:
+
+                update_withdrawal_transfer(
+
+                    withdrawal_id=withdrawal_id,
+
+                    transfer_reference=(
+                        transfer_reference
+                    ),
+
+                    transfer_id=(
+                        transfer_id
+                    ),
+
+                    transfer_status=(
+                        transfer_status
+                    ),
+
+                    transfer_message=(
+                        transfer_message
+                    ),
+
+                )
+
+            except Exception as e:
+
+                print(
+                    "Transfer status save error:",
+                    repr(e)
+                )
+
+
+    # ======================================================
+    # SUCCESSFUL
+    # ======================================================
+
+    if transfer_status == "SUCCESSFUL":
 
         try:
 
             mark_withdrawal_successful(
 
-                withdrawal_id=(
-                    withdrawal_id
-                ),
+                withdrawal_id=withdrawal_id,
 
-                transfer_id=(
-                    transfer_id
-                ),
+                transfer_id=transfer_id,
 
                 transfer_reference=(
                     transfer_reference
@@ -1711,32 +1794,97 @@ def withdrawal_page(
                 repr(e)
             )
 
+            return (
+                "Transfer was successful, "
+                "but withdrawal record could not "
+                "be finalized. Please contact admin.",
+                500
+            )
+
+
+        return (
+            f"""
+            <div
+            style="
+            font-family:Arial;
+            text-align:center;
+            padding:40px
+            "
+            >
+
+            <h2>
+            ✅ Withdrawal Successful
+            </h2>
+
+            <p>
+            Your referral commission has
+            been sent successfully.
+            </p>
+
+            <p>
+            Amount:
+            <b>
+            ₦{amount:,.0f}
+            </b>
+            </p>
+
+            <p>
+            Account:
+            <b>
+            ****{account_number[-4:]}
+            </b>
+            </p>
+
+            <p>
+            Reference:
+            <b>
+            {transfer_reference or "N/A"}
+            </b>
+            </p>
+
+            <p>
+            Status:
+            <b>
+            SUCCESSFUL
+            </b>
+            </p>
+
+            <br>
+
+            <a
+            href="/referral/dashboard?promoter_id={promoter_id}"
+            >
+            ← Back to Dashboard
+            </a>
+
+            </div>
+            """
+        )
+
 
     # ======================================================
-    # CONFIRMED FAILURE
+    # FAILED
     # ======================================================
 
-    elif normalized_status in {
-
-        "failed",
-        "cancelled"
-
+    if transfer_status in {
+        "FAILED",
+        "CANCELLED"
     }:
 
         try:
 
             refund_withdrawal(
 
-                withdrawal_id=(
-                    withdrawal_id
-                ),
+                withdrawal_id=withdrawal_id,
 
                 transfer_status=(
-                    normalized_status
+                    transfer_status.lower()
                 ),
 
                 transfer_message=(
                     transfer_message
+                    or
+                    "Flutterwave transfer failed."
                 ),
 
             )
@@ -1748,107 +1896,123 @@ def withdrawal_page(
                 repr(e)
             )
 
+            return (
+                "Transfer failed, but the balance "
+                "could not be automatically restored. "
+                "Please contact admin.",
+                500
+            )
 
-    # ======================================================
-    # PENDING / PROCESSING
-    #
-    # DO NOT mark successful yet.
-    # Balance remains reserved.
-    # ======================================================
 
-    else:
+        return (
+            f"""
+            <div
+            style="
+            font-family:Arial;
+            text-align:center;
+            padding:40px
+            "
+            >
 
-        print(
+            <h2>
+            ❌ Transfer Failed
+            </h2>
 
-            "Flutterwave transfer is not "
-            "confirmed successful yet:",
+            <p>
+            Flutterwave could not complete
+            your withdrawal.
+            </p>
 
-            transfer_status
+            <p>
+            Your balance has been returned.
+            </p>
 
+            <p>
+            Reason:
+            <b>
+            {transfer_message or "Transfer failed."}
+            </b>
+            </p>
+
+            <br>
+
+            <a
+            href="/referral/dashboard?promoter_id={promoter_id}"
+            >
+            ← Back to Dashboard
+            </a>
+
+            </div>
+            """
         )
 
 
     # ======================================================
-    # RESULT PAGE
+    # NEW / PENDING / PROCESSING
     # ======================================================
 
     return (
-
         f"""
-
         <div
-
         style="
         font-family:Arial;
         text-align:center;
         padding:40px
         "
-
         >
 
         <h2>
-        ✅ Withdrawal Submitted
+        ⏳ Withdrawal Processing
         </h2>
 
         <p>
-
-        Your withdrawal request has
-        been sent to Flutterwave.
-
+        Your withdrawal request has been
+        successfully submitted to Flutterwave.
         </p>
 
         <p>
-
         Amount:
-
         <b>
         ₦{amount:,.0f}
         </b>
-
         </p>
 
         <p>
-
         Account:
-
         <b>
         ****{account_number[-4:]}
         </b>
-
         </p>
 
         <p>
-
         Reference:
-
         <b>
         {transfer_reference or "N/A"}
         </b>
-
         </p>
 
         <p>
-
         Status:
-
         <b>
-        {transfer_status or "processing"}
+        {transfer_status}
         </b>
+        </p>
 
+        <p>
+        Please wait while Flutterwave
+        completes the transfer.
         </p>
 
         <br>
 
         <a
-        href="/referral/dashboard?ref={referral_code}"
+        href="/referral/dashboard?promoter_id={promoter_id}"
         >
-
         ← Back to Dashboard
-
         </a>
 
         </div>
-
         """
+    )
 
     )
