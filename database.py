@@ -2416,6 +2416,231 @@ def update_withdrawal_status(
 
         conn.close()
 
+# ==========================================================
+# FIND WITHDRAWAL BY TRANSFER ID
+# ==========================================================
+
+def get_withdrawal_by_transfer_id(
+    transfer_id
+):
+
+    if not transfer_id:
+        return None
+
+    conn = get_connection()
+
+    try:
+
+        cursor = conn.cursor()
+
+        cursor.execute("""
+        SELECT *
+        FROM withdrawals
+        WHERE transfer_id=?
+        LIMIT 1
+        """, (
+            str(transfer_id),
+        ))
+
+        return cursor.fetchone()
+
+    finally:
+
+        conn.close()
+
+
+# ==========================================================
+# FIND WITHDRAWAL BY TRANSFER REFERENCE
+# ==========================================================
+
+def get_withdrawal_by_transfer_reference(
+    transfer_reference
+):
+
+    if not transfer_reference:
+        return None
+
+    conn = get_connection()
+
+    try:
+
+        cursor = conn.cursor()
+
+        cursor.execute("""
+        SELECT *
+        FROM withdrawals
+        WHERE transfer_reference=?
+        LIMIT 1
+        """, (
+            transfer_reference,
+        ))
+
+        return cursor.fetchone()
+
+    finally:
+
+        conn.close()
+
+
+# ==========================================================
+# PROCESS FLUTTERWAVE TRANSFER RESULT
+#
+# This is IDEMPOTENT.
+#
+# SUCCESSFUL:
+#   reserved balance stays deducted
+#   withdrawn_amount increases ONCE
+#
+# FAILED/CANCELLED:
+#   reserved balance is returned ONCE
+#
+# NEW/PROCESSING:
+#   balance remains reserved
+# ==========================================================
+
+def process_transfer_result(
+    withdrawal_id,
+    transfer_status,
+    transfer_id=None,
+    transfer_reference=None,
+    transfer_message=None
+):
+
+    if not withdrawal_id:
+        raise ValueError(
+            "Withdrawal ID is required."
+        )
+
+    status = str(
+        transfer_status or ""
+    ).upper().strip()
+
+    if status in {
+        "SUCCESSFUL",
+        "SUCCESS",
+        "COMPLETED"
+    }:
+
+        return mark_withdrawal_successful(
+            withdrawal_id=withdrawal_id,
+            transfer_id=transfer_id,
+            transfer_reference=transfer_reference,
+            transfer_message=transfer_message,
+        )
+
+    if status in {
+        "FAILED",
+        "CANCELLED",
+        "CANCELED"
+    }:
+
+        return refund_withdrawal(
+            withdrawal_id=withdrawal_id,
+            transfer_status=(
+                "cancelled"
+                if status in {
+                    "CANCELLED",
+                    "CANCELED"
+                }
+                else "failed"
+            ),
+            transfer_message=transfer_message,
+        )
+
+    # ------------------------------------------------------
+    # STILL PROCESSING
+    # ------------------------------------------------------
+
+    conn = get_connection()
+
+    try:
+
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "BEGIN IMMEDIATE"
+        )
+
+        cursor.execute("""
+        SELECT status
+        FROM withdrawals
+        WHERE id=?
+        LIMIT 1
+        """, (
+            withdrawal_id,
+        ))
+
+        withdrawal = cursor.fetchone()
+
+        if not withdrawal:
+            raise ValueError(
+                "Withdrawal not found."
+            )
+
+        old_status = str(
+            withdrawal["status"]
+            or ""
+        ).lower().strip()
+
+        if old_status in {
+            "successful",
+            "failed",
+            "cancelled"
+        }:
+
+            conn.commit()
+            return True
+
+        cursor.execute("""
+        UPDATE withdrawals
+
+        SET
+
+            status='processing',
+
+            transfer_id =
+                COALESCE(
+                    ?,
+                    transfer_id
+                ),
+
+            transfer_reference =
+                COALESCE(
+                    ?,
+                    transfer_reference
+                ),
+
+            transfer_status=?,
+
+            transfer_message =
+                COALESCE(
+                    ?,
+                    transfer_message
+                )
+
+        WHERE id=?
+        """, (
+
+            transfer_id,
+            transfer_reference,
+            status or "NEW",
+            transfer_message,
+            withdrawal_id
+        ))
+
+        conn.commit()
+
+        return True
+
+    except Exception:
+
+        conn.rollback()
+        raise
+
+    finally:
+
+        conn.close()
+
 
 # ==========================================================
 # START DATABASE
