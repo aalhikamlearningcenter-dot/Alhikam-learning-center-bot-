@@ -55,11 +55,6 @@ def create_flutterwave_transfer(
 
         return None
 
-
-    # ======================================================
-    # AMOUNT
-    # ======================================================
-
     try:
 
         amount = float(amount)
@@ -73,7 +68,6 @@ def create_flutterwave_transfer(
 
         return None
 
-
     if amount <= 0:
 
         print(
@@ -83,15 +77,9 @@ def create_flutterwave_transfer(
 
         return None
 
-
-    # ======================================================
-    # ACCOUNT NUMBER
-    # ======================================================
-
     account_number = str(
         account_number or ""
     ).strip()
-
 
     if (
         len(account_number) != 10
@@ -105,15 +93,9 @@ def create_flutterwave_transfer(
 
         return None
 
-
-    # ======================================================
-    # BANK CODE
-    # ======================================================
-
     bank_code = str(
         bank_code or ""
     ).strip()
-
 
     if not bank_code:
 
@@ -124,57 +106,42 @@ def create_flutterwave_transfer(
 
         return None
 
-
-    # ======================================================
-    # ACCOUNT NAME
-    # ======================================================
-
     account_name = str(
         account_name or ""
     ).strip()
 
-
-    # ======================================================
+    # ------------------------------------------------------
     # UNIQUE REFERENCE
-    # ======================================================
+    # ------------------------------------------------------
 
     reference = (
         "ALHIKAM-"
         + uuid.uuid4().hex[:16].upper()
     )
 
-
-    # ======================================================
+    # ------------------------------------------------------
     # PAYLOAD
-    # ======================================================
+    # ------------------------------------------------------
 
     payload = {
 
-        "account_bank":
-            bank_code,
+        "account_bank": bank_code,
 
-        "account_number":
-            account_number,
+        "account_number": account_number,
 
-        "amount":
-            amount,
+        "amount": amount,
 
-        "currency":
-            "NGN",
+        "currency": "NGN",
 
-        "debit_currency":
-            "NGN",
+        "debit_currency": "NGN",
 
-        "beneficiary_name":
-            account_name,
+        "beneficiary_name": account_name,
 
-        "narration":
-            narration,
+        "narration": narration,
 
-        "reference":
-            reference,
+        "reference": reference,
+
     }
-
 
     print(
         "FLUTTERWAVE TRANSFER REQUEST:",
@@ -187,10 +154,9 @@ def create_flutterwave_transfer(
         }
     )
 
-
-    # ======================================================
+    # ------------------------------------------------------
     # SEND REQUEST
-    # ======================================================
+    # ------------------------------------------------------
 
     try:
 
@@ -215,7 +181,6 @@ def create_flutterwave_transfer(
 
         return None
 
-
     print(
         "FLUTTERWAVE TRANSFER HTTP STATUS:",
         response.status_code
@@ -225,11 +190,6 @@ def create_flutterwave_transfer(
         "FLUTTERWAVE TRANSFER RESPONSE:",
         response.text
     )
-
-
-    # ======================================================
-    # JSON
-    # ======================================================
 
     try:
 
@@ -244,11 +204,6 @@ def create_flutterwave_transfer(
 
         return None
 
-
-    # ======================================================
-    # HTTP CHECK
-    # ======================================================
-
     if response.status_code not in {
         200,
         201
@@ -261,11 +216,6 @@ def create_flutterwave_transfer(
 
         return None
 
-
-    # ======================================================
-    # API CHECK
-    # ======================================================
-
     if result.get("status") != "success":
 
         print(
@@ -275,32 +225,19 @@ def create_flutterwave_transfer(
 
         return None
 
+    data = result.get("data") or {}
 
-    # ======================================================
-    # DATA
-    # ======================================================
-
-    data = result.get(
-        "data"
-    ) or {}
-
-
-    transfer_id = data.get(
-        "id"
-    )
-
+    transfer_id = data.get("id")
 
     transfer_reference = (
         data.get("reference")
         or reference
     )
 
-
-    transfer_status = (
+    transfer_status = str(
         data.get("status")
         or "NEW"
-    )
-
+    ).upper().strip()
 
     transfer_message = (
         data.get("complete_message")
@@ -309,26 +246,20 @@ def create_flutterwave_transfer(
         or ""
     )
 
-
     return {
 
-        "success":
-            True,
+        "success": True,
 
-        "transfer_id":
-            transfer_id,
+        "transfer_id": transfer_id,
 
-        "reference":
-            transfer_reference,
+        "reference": transfer_reference,
 
-        "status":
-            transfer_status,
+        "status": transfer_status,
 
-        "message":
-            transfer_message,
+        "message": transfer_message,
 
-        "raw":
-            result,
+        "raw": result,
+
     }
 
 
@@ -349,7 +280,6 @@ def get_flutterwave_transfer_status(
 
         return None
 
-
     if not transfer_id:
 
         print(
@@ -359,12 +289,10 @@ def get_flutterwave_transfer_status(
 
         return None
 
-
     url = (
         f"{FLUTTERWAVE_TRANSFER_URL}/"
         f"{transfer_id}"
     )
-
 
     try:
 
@@ -387,7 +315,6 @@ def get_flutterwave_transfer_status(
 
         return None
 
-
     print(
         "FLUTTERWAVE STATUS HTTP:",
         response.status_code
@@ -397,7 +324,6 @@ def get_flutterwave_transfer_status(
         "FLUTTERWAVE STATUS RESPONSE:",
         response.text
     )
-
 
     try:
 
@@ -412,7 +338,6 @@ def get_flutterwave_transfer_status(
 
         return None
 
-
     if response.status_code != 200:
 
         print(
@@ -421,7 +346,6 @@ def get_flutterwave_transfer_status(
         )
 
         return None
-
 
     if result.get("status") != "success":
 
@@ -432,25 +356,19 @@ def get_flutterwave_transfer_status(
 
         return None
 
-
-    data = result.get(
-        "data"
-    ) or {}
-
+    data = result.get("data") or {}
 
     status = str(
         data.get("status")
         or ""
     ).upper().strip()
 
-
     return {
 
-        "success":
-            True,
+        "success": True,
 
         "transfer_id":
-            data.get("id"),
+            data.get("id") or transfer_id,
 
         "reference":
             data.get("reference"),
@@ -468,4 +386,5 @@ def get_flutterwave_transfer_status(
 
         "raw":
             result,
+
     }
