@@ -3,7 +3,8 @@
 # transfer.py
 #
 # FLUTTERWAVE TRANSFER
-# REFERRAL WITHDRAWAL
+# BANK ACCOUNT RESOLUTION
+# TRANSFER STATUS
 # ==========================================================
 
 import os
@@ -17,20 +18,216 @@ import requests
 
 FLW_SECRET_KEY = os.getenv("FLW_SECRET_KEY")
 
-FLUTTERWAVE_TRANSFER_URL = (
+TRANSFER_URL = (
     "https://api.flutterwave.com/v3/transfers"
+)
+
+RESOLVE_ACCOUNT_URL = (
+    "https://api.flutterwave.com/v3/accounts/resolve"
 )
 
 
 # ==========================================================
-# COMMON HEADERS
+# HEADERS
 # ==========================================================
 
 def _headers():
 
+    if not FLW_SECRET_KEY:
+        return {
+            "Content-Type": "application/json"
+        }
+
     return {
-        "Authorization": f"Bearer {FLW_SECRET_KEY}",
+        "Authorization": (
+            f"Bearer {FLW_SECRET_KEY}"
+        ),
         "Content-Type": "application/json",
+    }
+
+
+# ==========================================================
+# RESOLVE BANK ACCOUNT
+# ==========================================================
+
+def resolve_bank_account(
+    account_number,
+    bank_code
+):
+
+    if not FLW_SECRET_KEY:
+
+        print(
+            "FLW ERROR: FLW_SECRET_KEY missing."
+        )
+
+        return None
+
+    account_number = str(
+        account_number or ""
+    ).strip()
+
+    bank_code = str(
+        bank_code or ""
+    ).strip()
+
+    # ------------------------------------------------------
+    # VALIDATE ACCOUNT NUMBER
+    # ------------------------------------------------------
+
+    if (
+        len(account_number) != 10
+        or not account_number.isdigit()
+    ):
+
+        print(
+            "ACCOUNT RESOLVE: Invalid account number."
+        )
+
+        return None
+
+    # ------------------------------------------------------
+    # VALIDATE BANK CODE
+    # ------------------------------------------------------
+
+    if not bank_code:
+
+        print(
+            "ACCOUNT RESOLVE: Bank code missing."
+        )
+
+        return None
+
+    payload = {
+
+        "account_number":
+            account_number,
+
+        "account_bank":
+            bank_code,
+
+    }
+
+    print(
+        "ACCOUNT RESOLVE REQUEST:",
+        {
+            "bank_code": bank_code,
+            "account":
+                f"****{account_number[-4:]}",
+        }
+    )
+
+    try:
+
+        response = requests.post(
+
+            RESOLVE_ACCOUNT_URL,
+
+            headers=_headers(),
+
+            json=payload,
+
+            timeout=30,
+
+        )
+
+    except requests.RequestException as e:
+
+        print(
+            "ACCOUNT RESOLVE REQUEST ERROR:",
+            repr(e)
+        )
+
+        return None
+
+    print(
+        "ACCOUNT RESOLVE HTTP:",
+        response.status_code
+    )
+
+    try:
+
+        result = response.json()
+
+    except Exception:
+
+        print(
+            "ACCOUNT RESOLVE INVALID JSON."
+        )
+
+        return None
+
+    print(
+        "ACCOUNT RESOLVE RESPONSE:",
+        result
+    )
+
+    # ------------------------------------------------------
+    # HTTP CHECK
+    # ------------------------------------------------------
+
+    if response.status_code != 200:
+
+        print(
+            "ACCOUNT RESOLVE FAILED:",
+            result
+        )
+
+        return None
+
+    # ------------------------------------------------------
+    # FLUTTERWAVE STATUS CHECK
+    # ------------------------------------------------------
+
+    if result.get("status") != "success":
+
+        print(
+            "ACCOUNT RESOLVE NOT SUCCESS:",
+            result
+        )
+
+        return None
+
+    data = (
+        result.get("data")
+        or {}
+    )
+
+    resolved_account_number = str(
+        data.get(
+            "account_number",
+            account_number
+        )
+        or account_number
+    ).strip()
+
+    resolved_account_name = str(
+        data.get(
+            "account_name",
+            ""
+        )
+        or ""
+    ).strip()
+
+    if not resolved_account_name:
+
+        print(
+            "ACCOUNT RESOLVE: Account name missing."
+        )
+
+        return None
+
+    return {
+
+        "account_number":
+            resolved_account_number,
+
+        "account_name":
+            resolved_account_name,
+
+        "bank_code":
+            bank_code,
+
     }
 
 
@@ -43,17 +240,22 @@ def create_flutterwave_transfer(
     account_number,
     bank_code,
     account_name=None,
-    narration="ALHIKAM Referral Commission"
+    narration="ALHIKAM Referral Commission",
+    callback_url=None,
 ):
 
     if not FLW_SECRET_KEY:
 
         print(
-            "FLUTTERWAVE TRANSFER ERROR: "
-            "FLW_SECRET_KEY is missing."
+            "FLW TRANSFER ERROR: "
+            "FLW_SECRET_KEY missing."
         )
 
         return None
+
+    # ------------------------------------------------------
+    # AMOUNT
+    # ------------------------------------------------------
 
     try:
 
@@ -62,8 +264,7 @@ def create_flutterwave_transfer(
     except Exception:
 
         print(
-            "FLUTTERWAVE TRANSFER ERROR: "
-            "Invalid amount."
+            "FLW TRANSFER: Invalid amount."
         )
 
         return None
@@ -71,15 +272,30 @@ def create_flutterwave_transfer(
     if amount <= 0:
 
         print(
-            "FLUTTERWAVE TRANSFER ERROR: "
-            "Amount must be greater than zero."
+            "FLW TRANSFER: Amount must be greater than zero."
         )
 
         return None
 
+    # ------------------------------------------------------
+    # ACCOUNT DATA
+    # ------------------------------------------------------
+
     account_number = str(
         account_number or ""
     ).strip()
+
+    bank_code = str(
+        bank_code or ""
+    ).strip()
+
+    account_name = str(
+        account_name or ""
+    ).strip()
+
+    # ------------------------------------------------------
+    # ACCOUNT NUMBER VALIDATION
+    # ------------------------------------------------------
 
     if (
         len(account_number) != 10
@@ -87,28 +303,72 @@ def create_flutterwave_transfer(
     ):
 
         print(
-            "FLUTTERWAVE TRANSFER ERROR: "
-            "Invalid account number."
+            "FLW TRANSFER: Invalid account number."
         )
 
         return None
 
-    bank_code = str(
-        bank_code or ""
-    ).strip()
+    # ------------------------------------------------------
+    # BANK CODE VALIDATION
+    # ------------------------------------------------------
 
     if not bank_code:
 
         print(
-            "FLUTTERWAVE TRANSFER ERROR: "
-            "Bank code is missing."
+            "FLW TRANSFER: Bank code missing."
         )
 
         return None
 
-    account_name = str(
-        account_name or ""
+    # ------------------------------------------------------
+    # RESOLVE ACCOUNT
+    #
+    # This confirms the account exists before transfer.
+    # ------------------------------------------------------
+
+    resolved = resolve_bank_account(
+
+        account_number=account_number,
+
+        bank_code=bank_code,
+
+    )
+
+    if not resolved:
+
+        print(
+            "FLW TRANSFER: "
+            "Bank account could not be resolved."
+        )
+
+        return None
+
+    resolved_account_name = (
+        resolved.get(
+            "account_name",
+            ""
+        )
+        or ""
     ).strip()
+
+    if not resolved_account_name:
+
+        print(
+            "FLW TRANSFER: "
+            "Resolved account name is empty."
+        )
+
+        return None
+
+    # ------------------------------------------------------
+    # USE FLUTTERWAVE RESOLVED NAME
+    #
+    # This prevents a user from typing a fake name.
+    # ------------------------------------------------------
+
+    beneficiary_name = (
+        resolved_account_name
+    )
 
     # ------------------------------------------------------
     # UNIQUE REFERENCE
@@ -120,49 +380,70 @@ def create_flutterwave_transfer(
     )
 
     # ------------------------------------------------------
-    # PAYLOAD
+    # TRANSFER PAYLOAD
     # ------------------------------------------------------
 
     payload = {
 
-        "account_bank": bank_code,
+        "account_bank":
+            bank_code,
 
-        "account_number": account_number,
+        "account_number":
+            account_number,
 
-        "amount": amount,
+        "amount":
+            amount,
 
-        "currency": "NGN",
+        "currency":
+            "NGN",
 
-        "debit_currency": "NGN",
+        "debit_currency":
+            "NGN",
 
-        "beneficiary_name": account_name,
+        "beneficiary_name":
+            beneficiary_name,
 
-        "narration": narration,
+        "narration":
+            narration,
 
-        "reference": reference,
+        "reference":
+            reference,
 
     }
 
+    # ------------------------------------------------------
+    # CALLBACK
+    # ------------------------------------------------------
+
+    if callback_url:
+
+        payload[
+            "callback_url"
+        ] = callback_url
+
     print(
-        "FLUTTERWAVE TRANSFER REQUEST:",
+        "FLW TRANSFER REQUEST:",
         {
             "amount": amount,
             "bank_code": bank_code,
-            "account_number":
+            "account":
                 f"****{account_number[-4:]}",
-            "reference": reference,
+            "beneficiary":
+                beneficiary_name,
+            "reference":
+                reference,
         }
     )
 
     # ------------------------------------------------------
-    # SEND REQUEST
+    # SEND TRANSFER
     # ------------------------------------------------------
 
     try:
 
         response = requests.post(
 
-            FLUTTERWAVE_TRANSFER_URL,
+            TRANSFER_URL,
 
             headers=_headers(),
 
@@ -175,21 +456,25 @@ def create_flutterwave_transfer(
     except requests.RequestException as e:
 
         print(
-            "FLUTTERWAVE TRANSFER REQUEST ERROR:",
+            "FLW TRANSFER REQUEST ERROR:",
             repr(e)
         )
 
         return None
 
     print(
-        "FLUTTERWAVE TRANSFER HTTP STATUS:",
+        "FLW TRANSFER HTTP:",
         response.status_code
     )
 
     print(
-        "FLUTTERWAVE TRANSFER RESPONSE:",
+        "FLW TRANSFER RESPONSE:",
         response.text
     )
+
+    # ------------------------------------------------------
+    # JSON
+    # ------------------------------------------------------
 
     try:
 
@@ -198,11 +483,14 @@ def create_flutterwave_transfer(
     except Exception:
 
         print(
-            "FLUTTERWAVE TRANSFER ERROR: "
-            "Invalid JSON response."
+            "FLW TRANSFER: Invalid JSON response."
         )
 
         return None
+
+    # ------------------------------------------------------
+    # HTTP STATUS
+    # ------------------------------------------------------
 
     if response.status_code not in {
         200,
@@ -210,22 +498,29 @@ def create_flutterwave_transfer(
     }:
 
         print(
-            "FLUTTERWAVE TRANSFER FAILED:",
+            "FLW TRANSFER FAILED:",
             result
         )
 
         return None
+
+    # ------------------------------------------------------
+    # FLUTTERWAVE STATUS
+    # ------------------------------------------------------
 
     if result.get("status") != "success":
 
         print(
-            "FLUTTERWAVE TRANSFER NOT ACCEPTED:",
+            "FLW TRANSFER NOT ACCEPTED:",
             result
         )
 
         return None
 
-    data = result.get("data") or {}
+    data = (
+        result.get("data")
+        or {}
+    )
 
     transfer_id = data.get("id")
 
@@ -235,30 +530,54 @@ def create_flutterwave_transfer(
     )
 
     transfer_status = str(
-        data.get("status")
+        data.get(
+            "status",
+            "NEW"
+        )
         or "NEW"
     ).upper().strip()
 
     transfer_message = (
-        data.get("complete_message")
-        or data.get("message")
-        or result.get("message")
+        data.get(
+            "complete_message"
+        )
+        or data.get(
+            "message"
+        )
+        or result.get(
+            "message"
+        )
         or ""
     )
 
     return {
 
-        "success": True,
+        "success":
+            True,
 
-        "transfer_id": transfer_id,
+        "transfer_id":
+            transfer_id,
 
-        "reference": transfer_reference,
+        "reference":
+            transfer_reference,
 
-        "status": transfer_status,
+        "status":
+            transfer_status,
 
-        "message": transfer_message,
+        "message":
+            transfer_message,
 
-        "raw": result,
+        "account_name":
+            beneficiary_name,
+
+        "account_number":
+            account_number,
+
+        "bank_code":
+            bank_code,
+
+        "raw":
+            result,
 
     }
 
@@ -274,8 +593,8 @@ def get_flutterwave_transfer_status(
     if not FLW_SECRET_KEY:
 
         print(
-            "FLUTTERWAVE STATUS ERROR: "
-            "FLW_SECRET_KEY is missing."
+            "FLW STATUS ERROR: "
+            "FLW_SECRET_KEY missing."
         )
 
         return None
@@ -283,15 +602,23 @@ def get_flutterwave_transfer_status(
     if not transfer_id:
 
         print(
-            "FLUTTERWAVE STATUS ERROR: "
-            "Transfer ID is missing."
+            "FLW STATUS ERROR: "
+            "Transfer ID missing."
         )
 
         return None
 
+    transfer_id = str(
+        transfer_id
+    ).strip()
+
     url = (
-        f"{FLUTTERWAVE_TRANSFER_URL}/"
-        f"{transfer_id}"
+        f"{TRANSFER_URL}/{transfer_id}"
+    )
+
+    print(
+        "FLW STATUS REQUEST:",
+        transfer_id
     )
 
     try:
@@ -309,20 +636,15 @@ def get_flutterwave_transfer_status(
     except requests.RequestException as e:
 
         print(
-            "FLUTTERWAVE STATUS REQUEST ERROR:",
+            "FLW STATUS REQUEST ERROR:",
             repr(e)
         )
 
         return None
 
     print(
-        "FLUTTERWAVE STATUS HTTP:",
+        "FLW STATUS HTTP:",
         response.status_code
-    )
-
-    print(
-        "FLUTTERWAVE STATUS RESPONSE:",
-        response.text
     )
 
     try:
@@ -332,57 +654,76 @@ def get_flutterwave_transfer_status(
     except Exception:
 
         print(
-            "FLUTTERWAVE STATUS ERROR: "
-            "Invalid JSON."
+            "FLW STATUS INVALID JSON."
         )
 
         return None
 
-    if response.status_code != 200:
+    print(
+        "FLW STATUS RESPONSE:",
+        result
+    )
 
-        print(
-            "FLUTTERWAVE STATUS FAILED:",
-            result
-        )
+    if response.status_code != 200:
 
         return None
 
     if result.get("status") != "success":
 
-        print(
-            "FLUTTERWAVE STATUS NOT SUCCESS:",
-            result
-        )
-
         return None
 
-    data = result.get("data") or {}
+    data = (
+        result.get("data")
+        or {}
+    )
 
-    status = str(
-        data.get("status")
+    final_transfer_id = (
+        data.get("id")
+        or transfer_id
+    )
+
+    transfer_reference = (
+        data.get("reference")
+        or ""
+    )
+
+    transfer_status = str(
+        data.get(
+            "status",
+            ""
+        )
         or ""
     ).upper().strip()
 
+    transfer_message = (
+        data.get(
+            "complete_message"
+        )
+        or data.get(
+            "message"
+        )
+        or result.get(
+            "message"
+        )
+        or ""
+    )
+
     return {
 
-        "success": True,
+        "success":
+            True,
 
         "transfer_id":
-            data.get("id") or transfer_id,
+            final_transfer_id,
 
         "reference":
-            data.get("reference"),
+            transfer_reference,
 
         "status":
-            status,
+            transfer_status,
 
         "message":
-            (
-                data.get("complete_message")
-                or data.get("message")
-                or result.get("message")
-                or ""
-            ),
+            transfer_message,
 
         "raw":
             result,
