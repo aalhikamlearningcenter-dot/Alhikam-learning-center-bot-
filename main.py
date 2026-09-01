@@ -4,6 +4,7 @@
 #
 # PAYMENT + REFERRAL + COMMISSION + REGISTRATION
 # + TELEGRAM + DASHBOARD + WITHDRAWAL
+# + FLUTTERWAVE TRANSFER
 # ==========================================================
 
 import os
@@ -109,6 +110,7 @@ PAYMENT_SESSIONS = {}
 
 @web_app.route("/")
 def home():
+
     return redirect("/payment")
 
 
@@ -120,20 +122,26 @@ def home():
 def payment_page():
 
     telegram_id = (
-        request.args.get("telegram_id", "") or ""
+        request.args.get("telegram_id", "")
+        or ""
     ).strip()
 
     telegram_name = (
-        request.args.get("telegram_name", "") or ""
+        request.args.get("telegram_name", "")
+        or ""
     ).strip()
 
     telegram_username = (
-        request.args.get("telegram_username", "") or ""
+        request.args.get("telegram_username", "")
+        or ""
     ).strip()
 
     referral_code = (
         request.args.get("ref", "")
-        or request.args.get("referral_code", "")
+        or request.args.get(
+            "referral_code",
+            ""
+        )
         or ""
     ).strip()
 
@@ -142,13 +150,17 @@ def payment_page():
     if referral_code:
 
         try:
+
             promoter = get_promoter_by_referral_code(
                 referral_code
             )
+
         except Exception:
+
             logger.exception(
                 "Referral lookup error."
             )
+
             promoter = None
 
         if not promoter:
@@ -176,11 +188,17 @@ def payment_page():
     )
 
     return render_template_string(
+
         PAYMENT_HTML,
+
         telegram_id=telegram_id,
+
         telegram_name=telegram_name,
+
         telegram_username=telegram_username,
+
         referral_code=referral_code,
+
     )
 
 
@@ -188,27 +206,47 @@ def payment_page():
 # CREATE PAYMENT
 # ==========================================================
 
-@web_app.route("/create-payment", methods=["POST"])
+@web_app.route(
+    "/create-payment",
+    methods=["POST"]
+)
 def create_payment():
 
     plan_id = (
-        request.form.get("plan", "") or ""
+        request.form.get("plan", "")
+        or ""
     ).strip()
 
     referral_code = (
-        request.form.get("referral_code", "") or ""
+        request.form.get(
+            "referral_code",
+            ""
+        )
+        or ""
     ).strip()
 
     telegram_id = (
-        request.form.get("telegram_id", "") or ""
+        request.form.get(
+            "telegram_id",
+            ""
+        )
+        or ""
     ).strip()
 
     telegram_name = (
-        request.form.get("telegram_name", "") or ""
+        request.form.get(
+            "telegram_name",
+            ""
+        )
+        or ""
     ).strip()
 
     telegram_username = (
-        request.form.get("telegram_username", "") or ""
+        request.form.get(
+            "telegram_username",
+            ""
+        )
+        or ""
     ).strip()
 
     logger.info(
@@ -217,6 +255,7 @@ def create_payment():
         referral_code,
         telegram_id
     )
+
 
     # ======================================================
     # PLAN
@@ -229,6 +268,7 @@ def create_payment():
             400
         )
 
+
     # ======================================================
     # REFERRAL
     # ======================================================
@@ -238,9 +278,11 @@ def create_payment():
     if referral_code:
 
         try:
+
             promoter = get_promoter_by_referral_code(
                 referral_code
             )
+
         except Exception:
 
             logger.exception(
@@ -251,6 +293,11 @@ def create_payment():
 
         if not promoter:
 
+            logger.warning(
+                "Invalid referral code during payment: %s",
+                referral_code
+            )
+
             referral_code = ""
 
         elif str(
@@ -258,7 +305,9 @@ def create_payment():
         ).lower() != "active":
 
             promoter = None
+
             referral_code = ""
+
 
     # ======================================================
     # CREATE FLUTTERWAVE PAYMENT
@@ -267,12 +316,19 @@ def create_payment():
     try:
 
         payment = create_flutterwave_payment(
+
             plan_id=plan_id,
+
             app_url=APP_URL,
+
             referral_code=referral_code,
+
             telegram_id=telegram_id,
+
             telegram_name=telegram_name,
+
             telegram_username=telegram_username,
+
         )
 
     except Exception:
@@ -293,12 +349,14 @@ def create_payment():
             500
         )
 
+
     # ======================================================
     # TX REF
     # ======================================================
 
     tx_ref = (
-        payment.get("tx_ref", "") or ""
+        payment.get("tx_ref", "")
+        or ""
     ).strip()
 
     if not tx_ref:
@@ -308,6 +366,7 @@ def create_payment():
             500
         )
 
+
     # ======================================================
     # AMOUNT
     # ======================================================
@@ -315,7 +374,11 @@ def create_payment():
     try:
 
         amount = float(
-            payment.get("amount", 0) or 0
+            payment.get(
+                "amount",
+                0
+            )
+            or 0
         )
 
     except Exception:
@@ -329,10 +392,19 @@ def create_payment():
             500
         )
 
+
+    # ======================================================
+    # PAYMENT PLAN
+    # ======================================================
+
     payment_plan = (
-        payment.get("plan", plan_id)
+        payment.get(
+            "plan",
+            plan_id
+        )
         or plan_id
     ).strip()
+
 
     # ======================================================
     # PROMOTER
@@ -350,14 +422,18 @@ def create_payment():
         else ""
     )
 
+
     # ======================================================
     # COMMISSION
     # ======================================================
 
-    commission_amount = COMMISSION_BY_AMOUNT.get(
-        int(round(amount)),
-        0
+    commission_amount = (
+        COMMISSION_BY_AMOUNT.get(
+            int(round(amount)),
+            0
+        )
     )
+
 
     # ======================================================
     # SAVE PENDING PAYMENT
@@ -390,11 +466,14 @@ def create_payment():
         "telegram_name": telegram_name,
 
         "registration_completed": 0,
+
     }
 
     try:
 
-        save_payment(payment_data)
+        save_payment(
+            payment_data
+        )
 
     except Exception:
 
@@ -407,14 +486,22 @@ def create_payment():
             500
         )
 
-    PAYMENT_SESSIONS[tx_ref] = payment_data.copy()
+
+    PAYMENT_SESSIONS[
+        tx_ref
+    ] = payment_data.copy()
+
 
     # ======================================================
     # PAYMENT LINK
     # ======================================================
 
     payment_link = (
-        payment.get("payment_link", "") or ""
+        payment.get(
+            "payment_link",
+            ""
+        )
+        or ""
     ).strip()
 
     if not payment_link:
@@ -424,6 +511,7 @@ def create_payment():
             500
         )
 
+
     logger.info(
         "PAYMENT CREATED | TX=%s | AMOUNT=%s | REF=%s",
         tx_ref,
@@ -431,14 +519,19 @@ def create_payment():
         referral_code
     )
 
-    return redirect(payment_link)
+    return redirect(
+        payment_link
+    )
 
 
 # ==========================================================
 # REGISTRATION
 # ==========================================================
 
-@web_app.route("/register", methods=["GET", "POST"])
+@web_app.route(
+    "/register",
+    methods=["GET", "POST"]
+)
 def register():
 
     return registration_page(
@@ -450,24 +543,35 @@ def register():
 # PAYMENT CALLBACK
 # ==========================================================
 
-@web_app.route("/payment-callback", methods=["GET"])
+@web_app.route(
+    "/payment-callback",
+    methods=["GET"]
+)
 def payment_callback():
 
     transaction_id = (
-        request.args.get("transaction_id", "")
+        request.args.get(
+            "transaction_id",
+            ""
+        )
         or ""
     ).strip()
 
     callback_tx_ref = (
-        request.args.get("tx_ref", "")
+        request.args.get(
+            "tx_ref",
+            ""
+        )
         or ""
     ).strip()
+
 
     logger.info(
         "PAYMENT CALLBACK | TRANSACTION=%s | TX=%s",
         transaction_id,
         callback_tx_ref
     )
+
 
     # ======================================================
     # TRANSACTION ID
@@ -480,8 +584,9 @@ def payment_callback():
             400
         )
 
+
     # ======================================================
-    # VERIFY WITH FLUTTERWAVE
+    # VERIFY FLUTTERWAVE
     # ======================================================
 
     try:
@@ -508,12 +613,17 @@ def payment_callback():
             400
         )
 
+
     # ======================================================
     # STATUS
     # ======================================================
 
     payment_status = (
-        payment.get("status", "") or ""
+        payment.get(
+            "status",
+            ""
+        )
+        or ""
     ).lower().strip()
 
     if payment_status != "successful":
@@ -523,12 +633,17 @@ def payment_callback():
             400
         )
 
+
     # ======================================================
     # TX REF
     # ======================================================
 
     tx_ref = (
-        payment.get("tx_ref", "") or ""
+        payment.get(
+            "tx_ref",
+            ""
+        )
+        or ""
     ).strip()
 
     if not tx_ref:
@@ -542,14 +657,17 @@ def payment_callback():
             400
         )
 
+
     # ======================================================
     # ORIGINAL PAYMENT
     # ======================================================
 
     try:
 
-        original_payment = get_payment_by_tx_ref(
-            tx_ref
+        original_payment = (
+            get_payment_by_tx_ref(
+                tx_ref
+            )
         )
 
     except Exception:
@@ -570,11 +688,15 @@ def payment_callback():
             400
         )
 
+
     # ======================================================
-    # PROTECT AGAINST TX REF MISMATCH
+    # TX REF PROTECTION
     # ======================================================
 
-    if callback_tx_ref and callback_tx_ref != tx_ref:
+    if (
+        callback_tx_ref
+        and callback_tx_ref != tx_ref
+    ):
 
         logger.error(
             "TX REF MISMATCH | CALLBACK=%s | VERIFIED=%s",
@@ -587,12 +709,17 @@ def payment_callback():
             400
         )
 
+
     # ======================================================
     # CURRENCY
     # ======================================================
 
     currency = (
-        payment.get("currency", "") or ""
+        payment.get(
+            "currency",
+            ""
+        )
+        or ""
     ).upper().strip()
 
     if currency != "NGN":
@@ -602,6 +729,7 @@ def payment_callback():
             400
         )
 
+
     # ======================================================
     # VERIFIED AMOUNT
     # ======================================================
@@ -609,7 +737,11 @@ def payment_callback():
     try:
 
         amount = float(
-            payment.get("amount", 0) or 0
+            payment.get(
+                "amount",
+                0
+            )
+            or 0
         )
 
     except Exception:
@@ -623,6 +755,7 @@ def payment_callback():
             400
         )
 
+
     # ======================================================
     # EXPECTED AMOUNT
     # ======================================================
@@ -630,14 +763,18 @@ def payment_callback():
     try:
 
         expected_amount = float(
-            original_payment["amount"] or 0
+            original_payment["amount"]
+            or 0
         )
 
     except Exception:
 
         expected_amount = 0
 
-    if abs(amount - expected_amount) > 0.01:
+
+    if abs(
+        amount - expected_amount
+    ) > 0.01:
 
         logger.error(
             "AMOUNT MISMATCH | TX=%s | EXPECTED=%s | RECEIVED=%s",
@@ -651,46 +788,66 @@ def payment_callback():
             400
         )
 
+
     # ======================================================
     # ORIGINAL PAYMENT DATA
     # ======================================================
 
     payment_plan = (
-        original_payment["payment_plan"]
+        original_payment[
+            "payment_plan"
+        ]
         or ""
     )
 
     referral_code = (
-        original_payment["referral_code"]
+        original_payment[
+            "referral_code"
+        ]
         or ""
     ).strip()
 
-    promoter_id = original_payment["promoter_id"]
+    promoter_id = (
+        original_payment[
+            "promoter_id"
+        ]
+    )
 
     promoter_name = (
-        original_payment["promoter_name"]
+        original_payment[
+            "promoter_name"
+        ]
         or ""
     )
 
     commission_amount = float(
-        original_payment["commission"]
+        original_payment[
+            "commission"
+        ]
         or 0
     )
 
     telegram_id = str(
-        original_payment["telegram_id"]
+        original_payment[
+            "telegram_id"
+        ]
         or ""
     ).strip()
 
     telegram_name = str(
-        original_payment["telegram_name"]
+        original_payment[
+            "telegram_name"
+        ]
         or ""
     ).strip()
 
     telegram_username = str(
-        original_payment["telegram_username"]
+        original_payment[
+            "telegram_username"
+        ]
         or ""
     ).strip()
+
 
     # ======================================================
     # VERIFY PROMOTER AGAIN
@@ -702,8 +859,10 @@ def payment_callback():
 
         try:
 
-            promoter = get_promoter_by_referral_code(
-                referral_code
+            promoter = (
+                get_promoter_by_referral_code(
+                    referral_code
+                )
             )
 
         except Exception:
@@ -717,8 +876,11 @@ def payment_callback():
         if not promoter:
 
             referral_code = ""
+
             promoter_id = None
+
             promoter_name = ""
+
             commission_amount = 0
 
         else:
@@ -726,13 +888,17 @@ def payment_callback():
             promoter_id = promoter["id"]
 
             promoter_name = (
-                promoter["full_name"] or ""
+                promoter["full_name"]
+                or ""
             )
 
-            commission_amount = COMMISSION_BY_AMOUNT.get(
-                int(round(amount)),
-                0
+            commission_amount = (
+                COMMISSION_BY_AMOUNT.get(
+                    int(round(amount)),
+                    0
+                )
             )
+
 
     # ======================================================
     # SAVE SUCCESSFUL PAYMENT
@@ -767,13 +933,18 @@ def payment_callback():
         "registration_completed": int(
             original_payment[
                 "registration_completed"
-            ] or 0
+            ]
+            or 0
         ),
+
     }
+
 
     try:
 
-        save_payment(successful_payment)
+        save_payment(
+            successful_payment
+        )
 
     except Exception:
 
@@ -786,9 +957,11 @@ def payment_callback():
             500
         )
 
+
     PAYMENT_SESSIONS[
         tx_ref
     ] = successful_payment.copy()
+
 
     # ======================================================
     # COMMISSION
@@ -802,8 +975,10 @@ def payment_callback():
 
         try:
 
-            already_exists = commission_exists(
-                tx_ref
+            already_exists = (
+                commission_exists(
+                    tx_ref
+                )
             )
 
         except Exception:
@@ -813,6 +988,7 @@ def payment_callback():
             )
 
             already_exists = True
+
 
         if not already_exists:
 
@@ -837,7 +1013,9 @@ def payment_callback():
                     "PROMOTER=%s | TX=%s | AMOUNT=%s",
                     promoter_name,
                     tx_ref,
-                    result["commission_amount"]
+                    result[
+                        "commission_amount"
+                    ]
                 )
 
             except Exception:
@@ -845,6 +1023,7 @@ def payment_callback():
                 logger.exception(
                     "Commission creation error."
                 )
+
 
     # ======================================================
     # REGISTRATION URL
@@ -864,7 +1043,9 @@ def payment_callback():
         referral_code
     )
 
-    return redirect(registration_url)
+    return redirect(
+        registration_url
+    )
 
 
 # ==========================================================
@@ -878,10 +1059,17 @@ def payment_callback():
 def referral_dashboard_route():
 
     referral_code = (
-        request.args.get("ref", "")
-        or request.args.get("referral_code", "")
+        request.args.get(
+            "ref",
+            ""
+        )
+        or request.args.get(
+            "referral_code",
+            ""
+        )
         or ""
     ).strip()
+
 
     if not referral_code:
 
@@ -890,10 +1078,13 @@ def referral_dashboard_route():
             400
         )
 
+
     try:
 
-        promoter = get_promoter_by_referral_code(
-            referral_code
+        promoter = (
+            get_promoter_by_referral_code(
+                referral_code
+            )
         )
 
     except Exception:
@@ -907,12 +1098,24 @@ def referral_dashboard_route():
             500
         )
 
+
     if not promoter:
 
         return (
             "Invalid referral code.",
             404
         )
+
+
+    if str(
+        promoter["status"]
+    ).lower() != "active":
+
+        return (
+            "This referral account is not active.",
+            403
+        )
+
 
     return referral_dashboard_by_code(
         referral_code
@@ -927,11 +1130,14 @@ def referral_dashboard_route():
     "/referral/<referral_code>",
     methods=["GET"]
 )
-def referral_by_code(referral_code):
+def referral_by_code(
+    referral_code
+):
 
     referral_code = (
         referral_code or ""
     ).strip()
+
 
     if not referral_code:
 
@@ -940,10 +1146,13 @@ def referral_by_code(referral_code):
             400
         )
 
+
     try:
 
-        promoter = get_promoter_by_referral_code(
-            referral_code
+        promoter = (
+            get_promoter_by_referral_code(
+                referral_code
+            )
         )
 
     except Exception:
@@ -957,12 +1166,24 @@ def referral_by_code(referral_code):
             500
         )
 
+
     if not promoter:
 
         return (
             "Invalid referral code.",
             404
         )
+
+
+    if str(
+        promoter["status"]
+    ).lower() != "active":
+
+        return (
+            "This referral account is not active.",
+            403
+        )
+
 
     return referral_dashboard_by_code(
         referral_code
@@ -980,10 +1201,17 @@ def referral_by_code(referral_code):
 def referral_dashboard_old():
 
     referral_code = (
-        request.args.get("ref", "")
-        or request.args.get("referral_code", "")
+        request.args.get(
+            "ref",
+            ""
+        )
+        or request.args.get(
+            "referral_code",
+            ""
+        )
         or ""
     ).strip()
+
 
     if not referral_code:
 
@@ -992,10 +1220,13 @@ def referral_dashboard_old():
             400
         )
 
+
     try:
 
-        promoter = get_promoter_by_referral_code(
-            referral_code
+        promoter = (
+            get_promoter_by_referral_code(
+                referral_code
+            )
         )
 
     except Exception:
@@ -1009,12 +1240,14 @@ def referral_dashboard_old():
             500
         )
 
+
     if not promoter:
 
         return (
             "Invalid referral code.",
             404
         )
+
 
     return referral_dashboard_by_code(
         referral_code
@@ -1031,24 +1264,60 @@ def referral_dashboard_old():
 )
 def referral_withdraw():
 
+    # ======================================================
+    # GET REFERRAL CODE
+    # ======================================================
+
     referral_code = (
-        request.args.get("ref", "")
-        or request.form.get("referral_code", "")
-        or request.args.get("referral_code", "")
+        request.args.get(
+            "ref",
+            ""
+        )
+        or request.args.get(
+            "referral_code",
+            ""
+        )
+        or request.form.get(
+            "referral_code",
+            ""
+        )
         or ""
     ).strip()
 
+
+    logger.info(
+        "WITHDRAWAL REQUEST | REF=%s | METHOD=%s",
+        referral_code,
+        request.method
+    )
+
+
+    # ======================================================
+    # REQUIRE REFERRAL CODE
+    # ======================================================
+
     if not referral_code:
+
+        logger.warning(
+            "Withdrawal attempted without referral code."
+        )
 
         return (
             "Referral code is required.",
             400
         )
 
+
+    # ======================================================
+    # FIND PROMOTER
+    # ======================================================
+
     try:
 
-        promoter = get_promoter_by_referral_code(
-            referral_code
+        promoter = (
+            get_promoter_by_referral_code(
+                referral_code
+            )
         )
 
     except Exception:
@@ -1062,12 +1331,18 @@ def referral_withdraw():
             500
         )
 
+
     if not promoter:
 
         return (
             "Invalid promoter/referral code.",
             404
         )
+
+
+    # ======================================================
+    # CHECK ACTIVE
+    # ======================================================
 
     if str(
         promoter["status"]
@@ -1078,9 +1353,31 @@ def referral_withdraw():
             403
         )
 
-    return withdrawal_page(
-        referral_code=referral_code
-  )
+
+    # ======================================================
+    # CALL WITHDRAWAL PAGE
+    #
+    # referral_code is explicitly passed.
+    # ======================================================
+
+    try:
+
+        return withdrawal_page(
+            referral_code=referral_code
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Withdrawal page error."
+        )
+
+        return (
+            "Unable to open withdrawal page.",
+            500
+        )
+
+
 # ==========================================================
 # ADMIN REFERRAL
 # ==========================================================
@@ -1094,7 +1391,9 @@ def admin_referral():
     from admin_referral import (
         admin_referral_page,
         admin_login,
+        admin_logged_in,
     )
+
 
     if not ADMIN_PASSWORD:
 
@@ -1103,19 +1402,19 @@ def admin_referral():
             500
         )
 
-    # ------------------------------------------------------
-    # ALREADY LOGGED IN / PANEL
-    # ------------------------------------------------------
 
-    from admin_referral import admin_logged_in
+    # ======================================================
+    # ALREADY LOGGED IN
+    # ======================================================
 
     if admin_logged_in():
 
         return admin_referral_page()
 
-    # ------------------------------------------------------
-    # LOGIN
-    # ------------------------------------------------------
+
+    # ======================================================
+    # LOGIN PAGE
+    # ======================================================
 
     if request.method == "GET":
 
@@ -1125,6 +1424,11 @@ def admin_referral():
 
         return admin_login_page()
 
+
+    # ======================================================
+    # LOGIN
+    # ======================================================
+
     password = (
         request.form.get(
             "password",
@@ -1132,6 +1436,7 @@ def admin_referral():
         )
         or ""
     )
+
 
     if not admin_login(
         password,
@@ -1152,6 +1457,7 @@ def admin_referral():
             ),
             401
         )
+
 
     return redirect(
         "/admin/referral"
@@ -1208,6 +1514,7 @@ def admin_update_withdrawal():
 
     return admin_update_withdrawal()
 
+
 # ==========================================================
 # HEALTH CHECK
 # ==========================================================
@@ -1219,14 +1526,18 @@ def admin_update_withdrawal():
 def health():
 
     return jsonify({
+
         "status": "healthy",
+
         "app": "ALHIKAM V2",
+
     })
 
 
 # ==========================================================
 # CHECK OUTBOUND PUBLIC IP
-# TEMPORARY - FOR FLUTTERWAVE IP WHITELIST
+#
+# TEMPORARY
 # ==========================================================
 
 @web_app.route(
@@ -1245,7 +1556,9 @@ def check_ip():
         ).text.strip()
 
         return jsonify({
+
             "outbound_ip": ip
+
         })
 
     except Exception as e:
@@ -1255,7 +1568,9 @@ def check_ip():
         )
 
         return jsonify({
+
             "error": str(e)
+
         }), 500
 
 
@@ -1300,6 +1615,7 @@ if __name__ == "__main__":
         daemon=True
     ).start()
 
+
     PORT = int(
         os.getenv(
             "PORT",
@@ -1307,10 +1623,12 @@ if __name__ == "__main__":
         )
     )
 
+
     logger.info(
         "ALHIKAM WEB SERVER STARTING ON PORT %s",
         PORT
     )
+
 
     web_app.run(
         host="0.0.0.0",
