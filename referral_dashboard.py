@@ -1764,3 +1764,117 @@ def withdrawal_page(
         """
 
     )
+
+# ==========================================================
+# FLUTTERWAVE TRANSFER WEBHOOK
+# ==========================================================
+
+def flutterwave_transfer_webhook():
+
+    try:
+
+        payload = request.get_json(
+            silent=True
+        ) or {}
+
+        print(
+            "FLUTTERWAVE WEBHOOK:",
+            payload
+        )
+
+        event = str(
+            payload.get("event", "")
+        ).lower().strip()
+
+        if event != "transfer.completed":
+
+            return jsonify({
+                "status": "ignored"
+            }), 200
+
+        data = payload.get("data") or {}
+
+        transfer_id = data.get("id")
+
+        transfer_reference = (
+            data.get("reference")
+        )
+
+        transfer_status = str(
+            data.get("status", "")
+            or ""
+        ).upper().strip()
+
+        transfer_message = (
+            data.get("complete_message")
+            or data.get("message")
+            or ""
+        )
+
+        if not transfer_id and not transfer_reference:
+
+            return jsonify({
+                "status": "missing_transfer"
+            }), 400
+
+        withdrawal = None
+
+        if transfer_id:
+
+            withdrawal = (
+                get_withdrawal_by_transfer_id(
+                    transfer_id
+                )
+            )
+
+        if not withdrawal and transfer_reference:
+
+            withdrawal = (
+                get_withdrawal_by_transfer_reference(
+                    transfer_reference
+                )
+            )
+
+        if not withdrawal:
+
+            print(
+                "Webhook withdrawal not found:",
+                transfer_id,
+                transfer_reference
+            )
+
+            return jsonify({
+                "status": "withdrawal_not_found"
+            }), 200
+
+        process_transfer_result(
+
+            withdrawal_id=withdrawal["id"],
+
+            transfer_status=transfer_status,
+
+            transfer_id=transfer_id,
+
+            transfer_reference=(
+                transfer_reference
+            ),
+
+            transfer_message=(
+                transfer_message
+            ),
+        )
+
+        return jsonify({
+            "status": "processed"
+        }), 200
+
+    except Exception as e:
+
+        print(
+            "TRANSFER WEBHOOK ERROR:",
+            repr(e)
+        )
+
+        return jsonify({
+            "status": "error"
+        }), 500
