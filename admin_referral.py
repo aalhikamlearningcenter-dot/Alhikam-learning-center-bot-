@@ -1503,7 +1503,6 @@ def admin_update_withdrawal():
             "/admin/referral"
         )
 
-
     withdrawal_id_raw = (
         request.form.get(
             "withdrawal_id",
@@ -1512,15 +1511,13 @@ def admin_update_withdrawal():
         or ""
     ).strip()
 
-
-    status = (
+    action = (
         request.form.get(
             "status",
             ""
         )
         or ""
     ).strip().lower()
-
 
     try:
 
@@ -1534,41 +1531,177 @@ def admin_update_withdrawal():
             "/admin/referral"
         )
 
-
-    allowed_statuses = {
-
-        "processing",
-        "successful",
-        "failed",
-        "cancelled"
-
-    }
-
-
-    if status not in allowed_statuses:
-
-        return redirect(
-            "/admin/referral"
-        )
-
+    # ======================================================
+    # GET WITHDRAWAL
+    # ======================================================
 
     try:
 
-        update_withdrawal_status(
+        from database import (
+            get_withdrawal_by_id
+        )
 
-            withdrawal_id,
-
-            status
-
+        withdrawal = get_withdrawal_by_id(
+            withdrawal_id
         )
 
     except Exception as e:
 
         print(
-            "ADMIN WITHDRAWAL UPDATE ERROR:",
+            "GET WITHDRAWAL ERROR:",
             repr(e)
         )
 
+        return redirect(
+            "/admin/referral"
+        )
+
+    if not withdrawal:
+
+        print(
+            "WITHDRAWAL NOT FOUND:",
+            withdrawal_id
+        )
+
+        return redirect(
+            "/admin/referral"
+        )
+
+    # ======================================================
+    # DO NOT MANUALLY MARK SUCCESSFUL
+    #
+    # Flutterwave must confirm it.
+    # ======================================================
+
+    if action == "successful":
+
+        try:
+
+            from referral_dashboard import (
+                refresh_withdrawal_status
+            )
+
+            refreshed = (
+                refresh_withdrawal_status(
+                    withdrawal_id
+                )
+            )
+
+            final_status = str(
+                refreshed["status"]
+                if refreshed
+                else ""
+            ).lower().strip()
+
+            print(
+                "WITHDRAWAL REFRESH | ID=%s | STATUS=%s",
+                withdrawal_id,
+                final_status
+            )
+
+        except Exception as e:
+
+            print(
+                "WITHDRAWAL FLUTTERWAVE STATUS ERROR:",
+                repr(e)
+            )
+
+        return redirect(
+            "/admin/referral"
+        )
+
+    # ======================================================
+    # PROCESSING
+    # ======================================================
+
+    if action == "processing":
+
+        try:
+
+            update_withdrawal_status(
+                withdrawal_id,
+                "processing"
+            )
+
+        except Exception as e:
+
+            print(
+                "PROCESSING UPDATE ERROR:",
+                repr(e)
+            )
+
+        return redirect(
+            "/admin/referral"
+        )
+
+    # ======================================================
+    # FAILED
+    #
+    # We should NOT blindly mark it failed unless
+    # Flutterwave confirms failure.
+    # ======================================================
+
+    if action == "failed":
+
+        try:
+
+            from referral_dashboard import (
+                refresh_withdrawal_status
+            )
+
+            refreshed = (
+                refresh_withdrawal_status(
+                    withdrawal_id
+                )
+            )
+
+            final_status = str(
+                refreshed["status"]
+                if refreshed
+                else ""
+            ).lower().strip()
+
+            print(
+                "WITHDRAWAL CHECK BEFORE FAILED | "
+                "ID=%s | STATUS=%s",
+                withdrawal_id,
+                final_status
+            )
+
+        except Exception as e:
+
+            print(
+                "WITHDRAWAL FAILURE CHECK ERROR:",
+                repr(e)
+            )
+
+        return redirect(
+            "/admin/referral"
+        )
+
+    # ======================================================
+    # CANCELLED
+    # ======================================================
+
+    if action == "cancelled":
+
+        try:
+
+            update_withdrawal_status(
+                withdrawal_id,
+                "cancelled"
+            )
+
+        except Exception as e:
+
+            print(
+                "CANCEL UPDATE ERROR:",
+                repr(e)
+            )
+
+        return redirect(
+            "/admin/referral"
+        )
 
     return redirect(
         "/admin/referral"
