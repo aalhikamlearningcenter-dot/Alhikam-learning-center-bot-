@@ -5,6 +5,7 @@
 # PAYMENT + REFERRAL + COMMISSION + REGISTRATION
 # + TELEGRAM + DASHBOARD + WITHDRAWAL
 # + FLUTTERWAVE TRANSFER
+# + WITHDRAWAL STATUS
 # ==========================================================
 
 import os
@@ -118,26 +119,41 @@ def home():
 # PAYMENT PAGE
 # ==========================================================
 
-@web_app.route("/payment", methods=["GET"])
+@web_app.route(
+    "/payment",
+    methods=["GET"]
+)
 def payment_page():
 
     telegram_id = (
-        request.args.get("telegram_id", "")
+        request.args.get(
+            "telegram_id",
+            ""
+        )
         or ""
     ).strip()
 
     telegram_name = (
-        request.args.get("telegram_name", "")
+        request.args.get(
+            "telegram_name",
+            ""
+        )
         or ""
     ).strip()
 
     telegram_username = (
-        request.args.get("telegram_username", "")
+        request.args.get(
+            "telegram_username",
+            ""
+        )
         or ""
     ).strip()
 
     referral_code = (
-        request.args.get("ref", "")
+        request.args.get(
+            "ref",
+            ""
+        )
         or request.args.get(
             "referral_code",
             ""
@@ -213,7 +229,10 @@ def payment_page():
 def create_payment():
 
     plan_id = (
-        request.form.get("plan", "")
+        request.form.get(
+            "plan",
+            ""
+        )
         or ""
     ).strip()
 
@@ -355,7 +374,10 @@ def create_payment():
     # ======================================================
 
     tx_ref = (
-        payment.get("tx_ref", "")
+        payment.get(
+            "tx_ref",
+            ""
+        )
         or ""
     ).strip()
 
@@ -1264,10 +1286,6 @@ def referral_dashboard_old():
 )
 def referral_withdraw():
 
-    # ======================================================
-    # GET REFERRAL CODE
-    # ======================================================
-
     referral_code = (
         request.args.get(
             "ref",
@@ -1292,10 +1310,6 @@ def referral_withdraw():
     )
 
 
-    # ======================================================
-    # REQUIRE REFERRAL CODE
-    # ======================================================
-
     if not referral_code:
 
         logger.warning(
@@ -1307,10 +1321,6 @@ def referral_withdraw():
             400
         )
 
-
-    # ======================================================
-    # FIND PROMOTER
-    # ======================================================
 
     try:
 
@@ -1340,10 +1350,6 @@ def referral_withdraw():
         )
 
 
-    # ======================================================
-    # CHECK ACTIVE
-    # ======================================================
-
     if str(
         promoter["status"]
     ).lower() != "active":
@@ -1353,12 +1359,6 @@ def referral_withdraw():
             403
         )
 
-
-    # ======================================================
-    # CALL WITHDRAWAL PAGE
-    #
-    # referral_code is explicitly passed.
-    # ======================================================
 
     try:
 
@@ -1374,6 +1374,112 @@ def referral_withdraw():
 
         return (
             "Unable to open withdrawal page.",
+            500
+        )
+
+
+# ==========================================================
+# WITHDRAWAL STATUS
+#
+# THIS IS THE NEW ROUTE
+# ==========================================================
+
+@web_app.route(
+    "/referral/withdraw/status/<int:withdrawal_id>",
+    methods=["GET"]
+)
+def referral_withdrawal_status(
+    withdrawal_id
+):
+
+    from referral_dashboard import (
+        withdrawal_status_page
+    )
+
+    referral_code = (
+        request.args.get(
+            "ref",
+            ""
+        )
+        or request.args.get(
+            "referral_code",
+            ""
+        )
+        or ""
+    ).strip()
+
+
+    logger.info(
+        "WITHDRAWAL STATUS | ID=%s | REF=%s",
+        withdrawal_id,
+        referral_code
+    )
+
+
+    if not referral_code:
+
+        return (
+            "Referral code is required.",
+            400
+        )
+
+
+    try:
+
+        promoter = (
+            get_promoter_by_referral_code(
+                referral_code
+            )
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Withdrawal status promoter lookup error."
+        )
+
+        return (
+            "Unable to load referral account.",
+            500
+        )
+
+
+    if not promoter:
+
+        return (
+            "Invalid referral code.",
+            404
+        )
+
+
+    if str(
+        promoter["status"]
+    ).lower() != "active":
+
+        return (
+            "This referral account is not active.",
+            403
+        )
+
+
+    try:
+
+        return withdrawal_status_page(
+
+            withdrawal_id=withdrawal_id,
+
+            referral_code=referral_code,
+
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Withdrawal status page error."
+        )
+
+        return (
+            "Unable to load withdrawal status.",
             500
         )
 
