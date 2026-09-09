@@ -1028,6 +1028,498 @@ def _commission_for_amount(
 
 # ============================================================
 # PAYMENT RETURN PAGE
+# DIRECT FLUTTERWAVE VERIFICATION
+# ============================================================
+
+def _verify_and_finalize_payment(
+    payment_token,
+    transaction_id=None,
+):
+
+    payment = _payment_from_token(
+        payment_token
+    )
+
+    if not payment:
+        return None
+
+    # --------------------------------------------------------
+    # ALREADY SUCCESSFUL
+    # --------------------------------------------------------
+    if str(
+        payment.get("status") or ""
+    ).lower() == "successful":
+
+        return payment
+
+    transaction_id = str(
+        transaction_id or ""
+    ).strip()
+
+    if not transaction_id:
+
+        logger.warning(
+            "No Flutterwave transaction ID received "
+            "for payment token=%s",
+            payment_token,
+        )
+
+        return payment
+
+    # --------------------------------------------------------
+    # VERIFY DIRECTLY WITH FLUTTERWAVE
+    # --------------------------------------------------------
+    verified = verify_flutterwave_transaction(
+        transaction_id
+    )
+
+    if not verified:
+
+        logger.warning(
+            "Flutterwave verification unavailable "
+            "tx_ref=%s transaction_id=%s",
+            payment.get("tx_ref"),
+            transaction_id,
+        )
+
+        return payment
+
+    # --------------------------------------------------------
+    # VERIFIED DATA
+    # --------------------------------------------------------
+    verified_status = str(
+        verified.get("status") or ""
+    ).strip().lower()
+
+    verified_tx_ref = str(
+        verified.get("tx_ref") or ""
+    ).strip()
+
+    verified_currency = str(
+        verified.get("currency") or ""
+    ).strip().upper()
+
+    expected_tx_ref = str(
+        payment.get("tx_ref") or ""
+    ).strip()
+
+    # --------------------------------------------------------
+    # STATUS
+    # --------------------------------------------------------
+    if verified_status != "successful":
+
+        logger.warning(
+            "Payment is not successful "
+            "tx_ref=%s status=%s",
+            verified_tx_ref,
+            verified_status,
+        )
+
+        return payment
+
+    # --------------------------------------------------------
+    # TX REF
+    # --------------------------------------------------------
+    if (
+        not expected_tx_ref
+        or verified_tx_ref != expected_tx_ref
+    ):
+
+        logger.error(
+            "Payment tx_ref mismatch "
+            "expected=%s received=%s",
+            expected_tx_ref,
+            verified_tx_ref,
+        )
+
+        return payment
+
+    # --------------------------------------------------------
+    # CURRENCY
+    # --------------------------------------------------------
+    if verified_currency != "NGN":
+
+        logger.error(
+            "Payment currency mismatch "
+            "tx_ref=%s currency=%s",
+            verified_tx_ref,
+            verified_currency,
+        )
+
+        return payment
+
+    # --------------------------------------------------------
+    # AMOUNT
+    # --------------------------------------------------------
+    try:
+
+        verified_amount = Decimal(
+            str(
+                verified.get("amount")
+            )
+        )
+
+        expected_amount = Decimal(
+            str(
+                payment.get("amount")
+            )
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Unable to validate payment amount "
+            "tx_ref=%s",
+            verified_tx_ref,
+        )
+
+        return payment
+
+    if verified_amount != expected_amount:
+
+        logger.error(
+            "Payment amount mismatch "
+            "tx_ref=%s expected=%s received=%s",
+            verified_tx_ref,
+            expected_amount,
+            verified_amount,
+        )
+
+        return payment
+
+    # --------------------------------------------------------
+    # PAYMENT MUST BELONG TO ALHIKAM
+    # --------------------------------------------------------
+    if not verified_tx_ref.startswith(
+        "ALHIKAM_"
+    ):
+
+        logger.error(
+            "Invalid ALHIKAM transaction reference: %s",
+            verified_tx_ref,
+        )
+
+        return payment
+
+    # --------------------------------------------------------
+    # PROMOTER
+    # --------------------------------------------------------
+    promoter_id = payment.get(
+        "promoter_id"
+    )
+
+    referral_code = str(
+        payment.get("referral_code") or ""
+    ).strip().upper()
+
+    promoter = None
+
+    if promoter_id:
+
+        try:
+
+            promoter = get_promoter_by_id(
+                promoter_id
+            )
+
+        except Exception:
+
+            logger.exception(
+                "Could not load promoter id=%s",
+                promoter_id,
+            )
+
+            promoter = None
+
+    # --------------------------------------------------------
+    # VALIDATE PROMOTER
+    # --------------------------------------------------------
+    if promoter:
+
+        promoter_status = str(
+            promoter.get("status") or ""
+        ).strip().lower()
+
+        promoter_referral_code = str(
+            promoter.get("referral_code") or ""
+        ).strip().upper()
+
+        if promoter_status != "active":
+
+            promoter = None
+
+        elif (
+            referral_code
+            and promoter_referral_code != referral_code
+        ):
+
+            logger.error(
+                "Promoter referral mismatch "
+                "payment=%s promoter=%s",
+                referral_code,
+                promoter_referral_code,
+            )
+
+            promoter = None
+
+    # --------------------------------------------------------
+    # COMMISSION
+    # --------------------------------------------------------
+    commission_amount = 0
+
+    if promoter:
+
+        commission_amount = (
+            _commission_for_amount(
+                verified_amount
+            )
+        )
+
+    # --------------------------------------------------------
+    # UPDATE PAYMENT STATUS
+    # --------------------------------------------------------
+    try:
+
+        update_payment_status(
+
+            verified_tx_ref,
+
+            "Successful",
+
+            transaction_id=transaction_id,
+
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Failed to update payment status "
+            "tx_ref=%s",
+            verified_tx_ref,
+        )
+
+        return payment
+
+    # --------------------------------------------------------
+    # SAVE VERIFIED PAYMENT
+    # --------------------------------------------------------
+    try:
+
+        save_payment(
+
+            {
+
+                "tx_ref":
+                    verified_tx_ref,
+
+                "transaction_id":
+                    transaction_id,
+
+                "payment_plan":
+                    (
+                        payment.get(
+                            "plan_name"
+                        )
+
+                        or payment.get(
+                            "payment_plan",
+                            "",
+                        )
+                    ),
+
+                "amount":
+                    float(
+                        verified_amount
+                    ),
+
+                "payment_status":
+                    "Successful",
+
+                "referral_code":
+                    (
+                        referral_code
+                        if promoter
+                        else ""
+                    ),
+
+                "promoter_id":
+                    (
+                        promoter["id"]
+                        if promoter
+                        else None
+                    ),
+
+                "promoter_name":
+                    (
+                        promoter["full_name"]
+                        if promoter
+                        else ""
+                    ),
+
+                "commission":
+                    commission_amount,
+
+                "telegram_id":
+                    payment.get(
+                        "telegram_id",
+                        "",
+                    ),
+
+                "telegram_username":
+                    payment.get(
+                        "telegram_username",
+                        "",
+                    ),
+
+                "telegram_name":
+                    payment.get(
+                        "telegram_name",
+                        "",
+                    ),
+
+                "registration_completed":
+                    payment.get(
+                        "registration_completed",
+                        0,
+                    ),
+
+            }
+
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Failed to save verified payment "
+            "tx_ref=%s",
+            verified_tx_ref,
+        )
+
+        return payment
+
+    # --------------------------------------------------------
+    # UPDATE MEMORY
+    # --------------------------------------------------------
+    pending_payments[
+        payment_token
+    ] = {
+
+        **pending_payments.get(
+            payment_token,
+            {},
+        ),
+
+        **payment,
+
+        "status":
+            "successful",
+
+        "payment_status":
+            "Successful",
+
+        "transaction_id":
+            transaction_id,
+
+        "promoter_id":
+            (
+                promoter["id"]
+                if promoter
+                else None
+            ),
+
+        "promoter_name":
+            (
+                promoter["full_name"]
+                if promoter
+                else ""
+            ),
+
+        "commission":
+            commission_amount,
+
+    }
+
+    # --------------------------------------------------------
+    # CREATE COMMISSION ONLY ONCE
+    # --------------------------------------------------------
+    if (
+
+        promoter
+
+        and commission_amount > 0
+
+        and not commission_exists(
+            verified_tx_ref
+        )
+
+    ):
+
+        try:
+
+            create_commission(
+
+                promoter_id=
+                    promoter["id"],
+
+                student_id=
+                    None,
+
+                tx_ref=
+                    verified_tx_ref,
+
+                payment_amount=
+                    verified_amount,
+
+                commission_amount=
+                    commission_amount,
+
+            )
+
+            logger.info(
+
+                "Commission created "
+                "tx_ref=%s promoter=%s amount=%s",
+
+                verified_tx_ref,
+
+                promoter["id"],
+
+                commission_amount,
+
+            )
+
+        except Exception:
+
+            logger.exception(
+
+                "Commission creation failed "
+                "tx_ref=%s",
+
+                verified_tx_ref,
+
+            )
+
+    # --------------------------------------------------------
+    # SUCCESS LOG
+    # --------------------------------------------------------
+    logger.info(
+
+        "DIRECT FLUTTERWAVE PAYMENT VERIFIED "
+        "tx_ref=%s transaction_id=%s",
+
+        verified_tx_ref,
+
+        transaction_id,
+
+    )
+
+    return _payment_from_token(
+        payment_token
+    )
+
+
+# ============================================================
+# PAYMENT COMPLETE
 # ============================================================
 
 @web_app.route(
@@ -1042,80 +1534,424 @@ def payment_complete(
         payment_token
     )
 
-
+    # --------------------------------------------------------
+    # PAYMENT NOT FOUND
+    # --------------------------------------------------------
     if not payment:
 
         return (
+
             """
+
+            <!DOCTYPE html>
+
+            <html>
+
+            <head>
+
+            <meta name="viewport"
+                  content="width=device-width, initial-scale=1">
+
+            <title>
+            Payment Not Found
+            </title>
+
+            </head>
+
+            <body style="
+                font-family:Arial;
+                text-align:center;
+                padding:50px 20px;
+            ">
+
             <h2>
-            Payment Reference Not Found
+            ❌ Payment Reference Not Found
             </h2>
+
+            <p>
+            We could not find this payment reference.
+            </p>
+
+            <p>
+            Please contact ALHIKAM Learning Center
+            support if money was deducted.
+            </p>
+
+            </body>
+
+            </html>
+
+            """,
+
+            404,
+
+        )
+
+    # --------------------------------------------------------
+    # GET FLUTTERWAVE RETURN DATA
+    # --------------------------------------------------------
+    transaction_id = (
+
+        request.args.get(
+            "transaction_id"
+        )
+
+        or request.args.get(
+            "id"
+        )
+
+        or ""
+
+    ).strip()
+
+    flutterwave_status = str(
+
+        request.args.get(
+            "status"
+        )
+
+        or ""
+
+    ).strip().lower()
+
+    returned_tx_ref = str(
+
+        request.args.get(
+            "tx_ref"
+        )
+
+        or ""
+
+    ).strip()
+
+    expected_tx_ref = str(
+
+        payment.get(
+            "tx_ref"
+        )
+
+        or ""
+
+    ).strip()
+
+    # --------------------------------------------------------
+    # VERIFY RETURNED TX REF
+    # --------------------------------------------------------
+    if (
+
+        returned_tx_ref
+
+        and returned_tx_ref != expected_tx_ref
+
+    ):
+
+        logger.error(
+
+            "Flutterwave redirect tx_ref mismatch "
+            "expected=%s received=%s",
+
+            expected_tx_ref,
+
+            returned_tx_ref,
+
+        )
+
+        return (
+
+            """
+
+            <!DOCTYPE html>
+
+            <html>
+
+            <head>
+
+            <meta name="viewport"
+                  content="width=device-width, initial-scale=1">
+
+            <title>
+            Payment Verification Error
+            </title>
+
+            </head>
+
+            <body style="
+                font-family:Arial;
+                text-align:center;
+                padding:50px 20px;
+            ">
+
+            <h2>
+            ❌ Payment Verification Error
+            </h2>
+
+            <p>
+            The payment reference could not be verified.
+            </p>
 
             <p>
             Please contact ALHIKAM Learning Center.
             </p>
+
+            </body>
+
+            </html>
+
             """,
-            404,
+
+            400,
+
         )
 
+    # --------------------------------------------------------
+    # DIRECT SERVER-SIDE VERIFICATION
+    # --------------------------------------------------------
+    if (
 
-    if payment.get(
-        "status"
-    ) != "successful":
+        str(
+            payment.get("status") or ""
+        ).lower()
+        != "successful"
 
-        return f"""
+        and transaction_id
 
-        <html>
+    ):
 
-        <head>
+        payment = _verify_and_finalize_payment(
 
-        <meta name="viewport"
-              content="width=device-width, initial-scale=1">
+            payment_token,
 
-        <style>
+            transaction_id,
 
-        body{{
+        )
 
-            font-family:Arial;
+    # --------------------------------------------------------
+    # SUCCESS
+    # --------------------------------------------------------
+    if (
 
-            text-align:center;
+        payment
 
-            padding:50px 20px
+        and str(
+            payment.get("status") or ""
+        ).lower()
+        == "successful"
 
-        }}
+    ):
 
-        </style>
+        logger.info(
 
-        </head>
+            "Payment verified successfully. "
+            "Redirecting to Telegram login. "
+            "token=%s",
 
-        <body>
+            payment_token,
 
-        <h2>
-        ⏳ Payment Verification
-        </h2>
+        )
 
-        <p>
-        Your payment is being verified.
-        </p>
+        return redirect(
 
-        <p>
-        Please wait a moment and refresh this page.
-        </p>
+            f"/telegram-login/"
+            f"{payment_token}"
 
-        <a href="/payment-complete/{payment_token}">
-        🔄 Refresh
-        </a>
+        )
 
-        </body>
+    # --------------------------------------------------------
+    # FAILED / CANCELLED
+    # --------------------------------------------------------
+    if flutterwave_status in {
 
-        </html>
+        "cancelled",
 
-        """
+        "canceled",
 
+        "failed",
 
-    return redirect(
-        f"/telegram-login/{payment_token}"
-    )
+    }:
+
+        return (
+
+            """
+
+            <!DOCTYPE html>
+
+            <html>
+
+            <head>
+
+            <meta name="viewport"
+                  content="width=device-width, initial-scale=1">
+
+            <title>
+            Payment Not Completed
+            </title>
+
+            </head>
+
+            <body style="
+                font-family:Arial;
+                text-align:center;
+                padding:50px 20px;
+            ">
+
+            <h2>
+            ❌ Payment Not Completed
+            </h2>
+
+            <p>
+            Your payment was cancelled or failed.
+            </p>
+
+            <p>
+            If money was deducted, please wait for
+            Flutterwave to process the transaction.
+            </p>
+
+            <br>
+
+            <a href="/pay">
+            🔄 Try Payment Again
+            </a>
+
+            </body>
+
+            </html>
+
+            """
+
+        )
+
+    # --------------------------------------------------------
+    # STILL VERIFYING
+    # --------------------------------------------------------
+    return f"""
+
+    <!DOCTYPE html>
+
+    <html>
+
+    <head>
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>
+    Payment Verification
+    </title>
+
+    <meta
+        http-equiv="refresh"
+        content="5"
+    >
+
+    <style>
+
+    body{{
+
+        font-family:Arial,sans-serif;
+
+        background:#f4f7f6;
+
+        margin:0;
+
+        padding:30px 20px;
+
+        text-align:center;
+
+    }}
+
+    .container{{
+
+        max-width:520px;
+
+        margin:30px auto;
+
+        background:white;
+
+        padding:30px;
+
+        border-radius:16px;
+
+        box-shadow:
+            0 4px 18px rgba(0,0,0,.10);
+
+    }}
+
+    h2{{
+
+        color:#087f5b;
+
+    }}
+
+    .loader{{
+
+        font-size:42px;
+
+        margin:15px;
+
+    }}
+
+    .refresh{{
+
+        display:inline-block;
+
+        margin-top:15px;
+
+        padding:12px 20px;
+
+        background:#087f5b;
+
+        color:white;
+
+        text-decoration:none;
+
+        border-radius:8px;
+
+    }}
+
+    </style>
+
+    </head>
+
+    <body>
+
+    <div class="container">
+
+    <div class="loader">
+    ⏳
+    </div>
+
+    <h2>
+    Payment Verification
+    </h2>
+
+    <p>
+    Your payment is being verified securely
+    with Flutterwave.
+    </p>
+
+    <p>
+    Please wait a moment.
+    </p>
+
+    <p>
+    This page will automatically refresh.
+    </p>
+
+    <a
+        class="refresh"
+        href="/payment-complete/{payment_token}"
+    >
+    🔄 Refresh Now
+    </a>
+
+    </div>
+
+    </body>
+
+    </html>
+
+    """
 
 
 # ============================================================
