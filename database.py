@@ -9,24 +9,77 @@
 # WITHDRAWAL
 # FLUTTERWAVE TRANSFER SUPPORT
 #
+# SECURE VERSION
 # MINIMUM WITHDRAWAL = ₦200
 # ==========================================================
 
 import sqlite3
+import logging
+import secrets
+
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from datetime import datetime, timezone
+
+from werkzeug.security import generate_password_hash, check_password_hash
 
 from config import DATABASE_NAME
 
 
+logger = logging.getLogger(__name__)
+
+MINIMUM_WITHDRAWAL = Decimal("200.00")
+
+WITHDRAWAL_STATUSES = {
+    "pending",
+    "processing",
+    "successful",
+    "failed",
+    "cancelled",
+}
+
+
 # ==========================================================
-# CONNECTION
+# TIME
+# ==========================================================
+
+def utc_now():
+    return datetime.now(timezone.utc).isoformat()
+
+
+# ==========================================================
+# MONEY
+# ==========================================================
+
+def money(value):
+    """
+    Safely convert a value to Decimal with 2 decimal places.
+    """
+
+    try:
+        amount = Decimal(str(value))
+
+        if not amount.is_finite():
+            raise ValueError("Invalid money amount.")
+
+        return amount.quantize(
+            Decimal("0.01"),
+            rounding=ROUND_HALF_UP
+        )
+
+    except (InvalidOperation, ValueError, TypeError):
+        raise ValueError("Invalid money amount.")
+
+
+# ==========================================================
+# DATABASE CONNECTION
 # ==========================================================
 
 def get_connection():
 
     conn = sqlite3.connect(
         DATABASE_NAME,
-        check_same_thread=False,
-        timeout=30
+        timeout=30,
+        check_same_thread=False
     )
 
     conn.row_factory = sqlite3.Row
@@ -38,51 +91,7 @@ def get_connection():
 
 
 # ==========================================================
-# DATABASE MIGRATION HELPERS
-# ==========================================================
-
-def _column_exists(
-    cursor,
-    table_name,
-    column_name
-):
-
-    cursor.execute(
-        f"PRAGMA table_info({table_name})"
-    )
-
-    columns = cursor.fetchall()
-
-    return any(
-        column["name"] == column_name
-        for column in columns
-    )
-
-
-def _add_column_if_missing(
-    cursor,
-    table_name,
-    column_name,
-    column_definition
-):
-
-    if not _column_exists(
-        cursor,
-        table_name,
-        column_name
-    ):
-
-        cursor.execute(
-            f"""
-            ALTER TABLE {table_name}
-            ADD COLUMN {column_name}
-            {column_definition}
-            """
-        )
-
-
-# ==========================================================
-# INITIALIZE DATABASE
+# DATABASE INITIALIZATION
 # ==========================================================
 
 def initialize_database():
@@ -93,241 +102,231 @@ def initialize_database():
 
         cursor = conn.cursor()
 
-        # ==================================================
+        # --------------------------------------------------
         # PROMOTERS
-        # ==================================================
+        # --------------------------------------------------
 
         cursor.execute("""
-        CREATE TABLE IF NOT EXISTS promoters (
+            CREATE TABLE IF NOT EXISTS promoters (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                full_name TEXT NOT NULL,
+                phone TEXT,
+                email TEXT,
 
-            full_name TEXT NOT NULL,
+                referral_code TEXT NOT NULL UNIQUE,
 
-            phone TEXT,
+                password_hash TEXT,
 
-            email TEXT,
+                commission_rate REAL NOT NULL DEFAULT 0,
 
-            referral_code TEXT UNIQUE NOT NULL,
+                total_sales REAL NOT NULL DEFAULT 0,
+                total_earned REAL NOT NULL DEFAULT 0,
+                available_balance REAL NOT NULL DEFAULT 0,
+                withdrawn_amount REAL NOT NULL DEFAULT 0,
 
-            commission_rate REAL DEFAULT 20,
+                status TEXT NOT NULL DEFAULT 'active',
 
-            total_sales INTEGER DEFAULT 0,
-
-            total_earned REAL DEFAULT 0,
-
-            available_balance REAL DEFAULT 0,
-
-            withdrawn_amount REAL DEFAULT 0,
-
-            status TEXT DEFAULT 'active',
-
-            created_at
-                TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
+                created_at TEXT NOT NULL
+            )
         """)
 
-        # ==================================================
+        # --------------------------------------------------
         # STUDENTS
-        # ==================================================
+        # --------------------------------------------------
 
         cursor.execute("""
-        CREATE TABLE IF NOT EXISTS students (
+            CREATE TABLE IF NOT EXISTS students (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                payment_token TEXT,
 
-            payment_token TEXT,
+                tx_ref TEXT UNIQUE,
 
-            tx_ref TEXT UNIQUE,
+                full_name TEXT,
+                phone TEXT,
+                email TEXT,
 
-            full_name TEXT NOT NULL,
+                telegram_username TEXT,
+                telegram_id TEXT,
 
-            phone TEXT,
+                payment_plan TEXT,
+                amount_paid REAL NOT NULL DEFAULT 0,
 
-            email TEXT,
+                payment_status TEXT NOT NULL DEFAULT 'pending',
 
-            course TEXT,
+                registration_completed INTEGER NOT NULL DEFAULT 0,
 
-            telegram_id TEXT,
+                referral_code TEXT,
 
-            telegram_username TEXT,
+                promoter_id INTEGER,
 
-            telegram_name TEXT,
+                created_at TEXT NOT NULL,
 
-            payment_plan TEXT,
-
-            amount_paid REAL DEFAULT 0,
-
-            payment_status TEXT DEFAULT 'Pending',
-
-            registration_completed INTEGER DEFAULT 0,
-
-            referral_code TEXT,
-
-            promoter_id INTEGER,
-
-            created_at
-                TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-            FOREIGN KEY (promoter_id)
-                REFERENCES promoters(id)
-        )
+                FOREIGN KEY(promoter_id)
+                    REFERENCES promoters(id)
+                    ON DELETE SET NULL
+            )
         """)
 
-        # ==================================================
+        # --------------------------------------------------
         # PAYMENTS
-        # ==================================================
+        # --------------------------------------------------
 
         cursor.execute("""
-        CREATE TABLE IF NOT EXISTS payments (
+            CREATE TABLE IF NOT EXISTS payments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tx_ref TEXT NOT NULL UNIQUE,
 
-            tx_ref TEXT UNIQUE NOT NULL,
+                transaction_id TEXT,
 
-            transaction_id TEXT,
+                payment_plan TEXT,
 
-            payment_plan TEXT,
+                amount REAL NOT NULL DEFAULT 0,
 
-            amount REAL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'pending',
 
-            payment_status TEXT DEFAULT 'Pending',
+                referral_code TEXT,
 
-            referral_code TEXT,
+                promoter_id INTEGER,
 
-            promoter_id INTEGER,
+                commission REAL NOT NULL DEFAULT 0,
 
-            promoter_name TEXT,
+                telegram_username TEXT,
+                telegram_id TEXT,
 
-            commission REAL DEFAULT 0,
+                registration_completed INTEGER NOT NULL DEFAULT 0,
 
-            telegram_id TEXT,
+                created_at TEXT NOT NULL,
 
-            telegram_username TEXT,
-
-            telegram_name TEXT,
-
-            registration_completed INTEGER DEFAULT 0,
-
-            created_at
-                TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-            FOREIGN KEY (promoter_id)
-                REFERENCES promoters(id)
-        )
+                FOREIGN KEY(promoter_id)
+                    REFERENCES promoters(id)
+                    ON DELETE SET NULL
+            )
         """)
 
-        # ==================================================
+        # --------------------------------------------------
         # COMMISSIONS
-        # ==================================================
+        # --------------------------------------------------
 
         cursor.execute("""
-        CREATE TABLE IF NOT EXISTS commissions (
+            CREATE TABLE IF NOT EXISTS commissions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tx_ref TEXT NOT NULL UNIQUE,
 
-            promoter_id INTEGER NOT NULL,
+                promoter_id INTEGER,
 
-            student_id INTEGER,
+                student_id INTEGER,
 
-            tx_ref TEXT UNIQUE NOT NULL,
+                payment_amount REAL NOT NULL DEFAULT 0,
 
-            payment_amount REAL DEFAULT 0,
+                commission_rate REAL NOT NULL DEFAULT 0,
 
-            commission_rate REAL DEFAULT 0,
+                commission_amount REAL NOT NULL DEFAULT 0,
 
-            commission_amount REAL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'pending',
 
-            status TEXT DEFAULT 'available',
+                created_at TEXT NOT NULL,
 
-            created_at
-                TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(promoter_id)
+                    REFERENCES promoters(id)
+                    ON DELETE SET NULL,
 
-            FOREIGN KEY (promoter_id)
-                REFERENCES promoters(id),
-
-            FOREIGN KEY (student_id)
-                REFERENCES students(id)
-        )
+                FOREIGN KEY(student_id)
+                    REFERENCES students(id)
+                    ON DELETE SET NULL
+            )
         """)
 
-        # ==================================================
+        # --------------------------------------------------
         # WITHDRAWALS
-        # ==================================================
+        # --------------------------------------------------
 
         cursor.execute("""
-        CREATE TABLE IF NOT EXISTS withdrawals (
+            CREATE TABLE IF NOT EXISTS withdrawals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                promoter_id INTEGER NOT NULL,
 
-            promoter_id INTEGER NOT NULL,
+                amount REAL NOT NULL,
 
-            amount REAL DEFAULT 0,
+                bank_name TEXT NOT NULL,
+                bank_code TEXT NOT NULL,
 
-            bank_name TEXT NOT NULL,
+                account_name TEXT NOT NULL,
+                account_number TEXT NOT NULL,
 
-            bank_code TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
 
-            account_name TEXT NOT NULL,
+                transfer_reference TEXT UNIQUE,
 
-            account_number TEXT NOT NULL,
+                transfer_id TEXT UNIQUE,
 
-            status TEXT DEFAULT 'pending',
+                transfer_status TEXT,
 
-            transfer_reference TEXT,
+                transfer_message TEXT,
 
-            transfer_id TEXT,
+                created_at TEXT NOT NULL,
 
-            transfer_status TEXT,
-
-            transfer_message TEXT,
-
-            created_at
-                TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-            FOREIGN KEY (promoter_id)
-                REFERENCES promoters(id)
-        )
+                FOREIGN KEY(promoter_id)
+                    REFERENCES promoters(id)
+                    ON DELETE CASCADE
+            )
         """)
 
         # ==================================================
-        # OLD DATABASE MIGRATION
+        # SAFE MIGRATIONS
         # ==================================================
 
-        _add_column_if_missing(
-            cursor,
-            "withdrawals",
-            "bank_code",
-            "TEXT"
-        )
+        migrations = [
+            (
+                "promoters",
+                "password_hash",
+                "TEXT"
+            ),
+            (
+                "withdrawals",
+                "transfer_reference",
+                "TEXT"
+            ),
+            (
+                "withdrawals",
+                "transfer_id",
+                "TEXT"
+            ),
+            (
+                "withdrawals",
+                "transfer_status",
+                "TEXT"
+            ),
+            (
+                "withdrawals",
+                "transfer_message",
+                "TEXT"
+            ),
+        ]
 
-        _add_column_if_missing(
-            cursor,
-            "withdrawals",
-            "transfer_reference",
-            "TEXT"
-        )
+        for table, column, column_type in migrations:
 
-        _add_column_if_missing(
-            cursor,
-            "withdrawals",
-            "transfer_id",
-            "TEXT"
-        )
+            columns = cursor.execute(
+                f"PRAGMA table_info({table})"
+            ).fetchall()
 
-        _add_column_if_missing(
-            cursor,
-            "withdrawals",
-            "transfer_status",
-            "TEXT"
-        )
+            existing = {
+                row["name"]
+                for row in columns
+            }
 
-        _add_column_if_missing(
-            cursor,
-            "withdrawals",
-            "transfer_message",
-            "TEXT"
-        )
+            if column not in existing:
+
+                cursor.execute(
+                    f"""
+                    ALTER TABLE {table}
+                    ADD COLUMN {column} {column_type}
+                    """
+                )
 
         # ==================================================
         # INDEXES
@@ -349,32 +348,8 @@ def initialize_database():
 
             """
             CREATE INDEX IF NOT EXISTS
-            idx_students_promoter
-            ON students(promoter_id)
-            """,
-
-            """
-            CREATE INDEX IF NOT EXISTS
-            idx_payments_status
-            ON payments(payment_status)
-            """,
-
-            """
-            CREATE INDEX IF NOT EXISTS
-            idx_payments_promoter
-            ON payments(promoter_id)
-            """,
-
-            """
-            CREATE INDEX IF NOT EXISTS
             idx_promoters_referral
             ON promoters(referral_code)
-            """,
-
-            """
-            CREATE INDEX IF NOT EXISTS
-            idx_promoters_status
-            ON promoters(status)
             """,
 
             """
@@ -385,8 +360,8 @@ def initialize_database():
 
             """
             CREATE INDEX IF NOT EXISTS
-            idx_commissions_student
-            ON commissions(student_id)
+            idx_commissions_tx_ref
+            ON commissions(tx_ref)
             """,
 
             """
@@ -403,257 +378,25 @@ def initialize_database():
 
             """
             CREATE INDEX IF NOT EXISTS
+            idx_withdrawals_transfer_id
+            ON withdrawals(transfer_id)
+            """,
+
+            """
+            CREATE INDEX IF NOT EXISTS
             idx_withdrawals_transfer_reference
             ON withdrawals(transfer_reference)
-            """
+            """,
         ]
 
-        for sql in indexes:
-            cursor.execute(sql)
+        for statement in indexes:
+            cursor.execute(statement)
 
         conn.commit()
 
-    except Exception:
-
-        conn.rollback()
-
-        raise
+        logger.info("Database initialized successfully.")
 
     finally:
-
-        conn.close()
-
-
-# ==========================================================
-# STUDENT
-# ==========================================================
-
-def add_student(data):
-
-    conn = get_connection()
-
-    try:
-
-        cursor = conn.cursor()
-
-        cursor.execute("""
-        INSERT INTO students (
-
-            payment_token,
-            tx_ref,
-            full_name,
-            phone,
-            email,
-            course,
-            telegram_id,
-            telegram_username,
-            telegram_name,
-            payment_plan,
-            amount_paid,
-            payment_status,
-            registration_completed,
-            referral_code,
-            promoter_id
-
-        )
-
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-
-            data.get(
-                "payment_token",
-                ""
-            ),
-
-            data.get(
-                "tx_ref",
-                ""
-            ),
-
-            data.get(
-                "full_name",
-                ""
-            ),
-
-            data.get(
-                "phone",
-                ""
-            ),
-
-            data.get(
-                "email",
-                ""
-            ),
-
-            data.get(
-                "course",
-                ""
-            ),
-
-            str(
-                data.get(
-                    "telegram_id",
-                    ""
-                )
-                or ""
-            ),
-
-            data.get(
-                "telegram_username",
-                ""
-            ),
-
-            data.get(
-                "telegram_name",
-                ""
-            ),
-
-            data.get(
-                "payment_plan",
-                ""
-            ),
-
-            float(
-                data.get(
-                    "amount_paid",
-                    0
-                )
-                or 0
-            ),
-
-            data.get(
-                "payment_status",
-                "Pending"
-            ),
-
-            int(
-                data.get(
-                    "registration_completed",
-                    0
-                )
-                or 0
-            ),
-
-            data.get(
-                "referral_code",
-                ""
-            ),
-
-            data.get(
-                "promoter_id"
-            )
-        ))
-
-        student_id = cursor.lastrowid
-
-        conn.commit()
-
-        return student_id
-
-    except Exception:
-
-        conn.rollback()
-
-        raise
-
-    finally:
-
-        conn.close()
-
-
-# ==========================================================
-# GET STUDENT BY ID
-# ==========================================================
-
-def get_student_by_id(student_id):
-
-    if not student_id:
-        return None
-
-    conn = get_connection()
-
-    try:
-
-        cursor = conn.cursor()
-
-        cursor.execute("""
-        SELECT *
-        FROM students
-        WHERE id=?
-        LIMIT 1
-        """, (
-            student_id,
-        ))
-
-        return cursor.fetchone()
-
-    finally:
-
-        conn.close()
-
-
-# ==========================================================
-# GET STUDENT BY TELEGRAM ID
-# ==========================================================
-
-def get_student_by_telegram_id(
-    telegram_id
-):
-
-    if not telegram_id:
-        return None
-
-    conn = get_connection()
-
-    try:
-
-        cursor = conn.cursor()
-
-        cursor.execute("""
-        SELECT *
-        FROM students
-        WHERE telegram_id=?
-        ORDER BY id DESC
-        LIMIT 1
-        """, (
-            str(telegram_id),
-        ))
-
-        return cursor.fetchone()
-
-    finally:
-
-        conn.close()
-
-
-# ==========================================================
-# GET STUDENT BY TX REF
-# ==========================================================
-
-def get_student_by_tx_ref(tx_ref):
-
-    if not tx_ref:
-        return None
-
-    conn = get_connection()
-
-    try:
-
-        cursor = conn.cursor()
-
-        cursor.execute("""
-        SELECT *
-        FROM students
-        WHERE tx_ref=?
-        LIMIT 1
-        """, (
-            tx_ref,
-        ))
-
-        return cursor.fetchone()
-
-    finally:
-
         conn.close()
 
 
@@ -661,67 +404,156 @@ def get_student_by_tx_ref(tx_ref):
 # PROMOTER
 # ==========================================================
 
-def get_promoter_by_referral_code(
-    referral_code
-):
+def get_promoter_by_id(promoter_id):
+
+    conn = get_connection()
+
+    try:
+
+        return conn.execute(
+            """
+            SELECT *
+            FROM promoters
+            WHERE id = ?
+            LIMIT 1
+            """,
+            (promoter_id,)
+        ).fetchone()
+
+    finally:
+        conn.close()
+
+
+def get_promoter_by_referral_code(referral_code):
 
     if not referral_code:
         return None
 
-    conn = get_connection()
-
-    try:
-
-        cursor = conn.cursor()
-
-        cursor.execute("""
-        SELECT *
-        FROM promoters
-        WHERE referral_code=?
-        AND LOWER(status)='active'
-        LIMIT 1
-        """, (
-            referral_code.strip(),
-        ))
-
-        return cursor.fetchone()
-
-    finally:
-
-        conn.close()
-
-
-# ==========================================================
-# GET PROMOTER BY ID
-# ==========================================================
-
-def get_promoter_by_id(
-    promoter_id
-):
-
-    if not promoter_id:
-        return None
+    referral_code = str(referral_code).strip()
 
     conn = get_connection()
 
     try:
 
-        cursor = conn.cursor()
-
-        cursor.execute("""
-        SELECT *
-        FROM promoters
-        WHERE id=?
-        LIMIT 1
-        """, (
-            promoter_id,
-        ))
-
-        return cursor.fetchone()
+        return conn.execute(
+            """
+            SELECT *
+            FROM promoters
+            WHERE referral_code = ?
+              AND LOWER(status) = 'active'
+            LIMIT 1
+            """,
+            (referral_code,)
+        ).fetchone()
 
     finally:
-
         conn.close()
+
+
+def get_all_promoters():
+
+    conn = get_connection()
+
+    try:
+
+        return conn.execute(
+            """
+            SELECT *
+            FROM promoters
+            ORDER BY id DESC
+            """
+        ).fetchall()
+
+    finally:
+        conn.close()
+
+
+# ==========================================================
+# PROMOTER PASSWORD
+# ==========================================================
+
+def set_promoter_password(promoter_id, password):
+
+    if not password:
+        raise ValueError("Password is required.")
+
+    password = str(password)
+
+    if len(password) < 8:
+        raise ValueError(
+            "Password must contain at least 8 characters."
+        )
+
+    if len(password) > 200:
+        raise ValueError("Password is too long.")
+
+    password_hash = generate_password_hash(
+        password,
+        method="scrypt"
+    )
+
+    conn = get_connection()
+
+    try:
+
+        conn.execute(
+            """
+            UPDATE promoters
+            SET password_hash = ?
+            WHERE id = ?
+            """,
+            (password_hash, promoter_id)
+        )
+
+        conn.commit()
+
+    finally:
+        conn.close()
+
+
+def verify_promoter_password(promoter_id, password):
+
+    if not password:
+        return False
+
+    conn = get_connection()
+
+    try:
+
+        row = conn.execute(
+            """
+            SELECT password_hash
+            FROM promoters
+            WHERE id = ?
+            LIMIT 1
+            """,
+            (promoter_id,)
+        ).fetchone()
+
+    finally:
+        conn.close()
+
+    if not row:
+        return False
+
+    password_hash = row["password_hash"]
+
+    if not password_hash:
+        return False
+
+    try:
+        return check_password_hash(
+            password_hash,
+            password
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Password verification failed."
+        )
+
+        return False
 
 
 # ==========================================================
@@ -730,966 +562,379 @@ def get_promoter_by_id(
 
 def add_promoter(
     full_name,
-    phone,
-    email,
-    referral_code,
-    commission_rate=20
+    phone=None,
+    email=None,
+    referral_code=None,
+    commission_rate=0,
+    password=None,
 ):
 
-    full_name = (
-        full_name or ""
-    ).strip()
-
-    referral_code = (
-        referral_code or ""
-    ).strip()
+    full_name = str(full_name or "").strip()
 
     if not full_name:
+        raise ValueError("Full name is required.")
 
+    commission_rate = money(commission_rate)
+
+    if commission_rate < 0 or commission_rate > 100:
         raise ValueError(
-            "Promoter full name is required."
+            "Commission rate must be between 0 and 100."
         )
 
-    if not referral_code:
+    if password:
+        password = str(password)
 
-        raise ValueError(
-            "Referral code is required."
-        )
-
-    conn = get_connection()
-
-    try:
-
-        cursor = conn.cursor()
-
-        cursor.execute("""
-        INSERT INTO promoters (
-
-            full_name,
-            phone,
-            email,
-            referral_code,
-            commission_rate
-
-        )
-
-        VALUES (?, ?, ?, ?, ?)
-        """, (
-
-            full_name,
-            phone,
-            email,
-            referral_code,
-
-            float(
-                commission_rate or 20
-            )
-        ))
-
-        promoter_id = cursor.lastrowid
-
-        conn.commit()
-
-        return promoter_id
-
-    except Exception:
-
-        conn.rollback()
-
-        raise
-
-    finally:
-
-        conn.close()
-
-
-# ==========================================================
-# PAYMENT
-# ==========================================================
-
-def save_payment(data):
-
-    tx_ref = (
-        data.get(
-            "tx_ref",
-            ""
-        )
-        or ""
-    ).strip()
-
-    if not tx_ref:
-
-        raise ValueError(
-            "tx_ref is required."
-        )
-
-    conn = get_connection()
-
-    try:
-
-        cursor = conn.cursor()
-
-        cursor.execute("""
-        SELECT registration_completed
-        FROM payments
-        WHERE tx_ref=?
-        LIMIT 1
-        """, (
-            tx_ref,
-        ))
-
-        existing = cursor.fetchone()
-
-        if existing:
-
-            registration_completed = int(
-                existing[
-                    "registration_completed"
-                ]
-                or 0
+        if len(password) < 8:
+            raise ValueError(
+                "Password must contain at least 8 characters."
             )
 
-        else:
-
-            registration_completed = int(
-                data.get(
-                    "registration_completed",
-                    0
-                )
-                or 0
-            )
-
-        cursor.execute("""
-        INSERT INTO payments (
-
-            tx_ref,
-            transaction_id,
-            payment_plan,
-            amount,
-            payment_status,
-            referral_code,
-            promoter_id,
-            promoter_name,
-            commission,
-            telegram_id,
-            telegram_username,
-            telegram_name,
-            registration_completed
-
+        password_hash = generate_password_hash(
+            password,
+            method="scrypt"
         )
 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-
-        ON CONFLICT(tx_ref)
-        DO UPDATE SET
-
-            transaction_id =
-                excluded.transaction_id,
-
-            payment_plan =
-                excluded.payment_plan,
-
-            amount =
-                excluded.amount,
-
-            payment_status =
-                excluded.payment_status,
-
-            referral_code =
-                excluded.referral_code,
-
-            promoter_id =
-                excluded.promoter_id,
-
-            promoter_name =
-                excluded.promoter_name,
-
-            commission =
-                excluded.commission,
-
-            telegram_id =
-                excluded.telegram_id,
-
-            telegram_username =
-                excluded.telegram_username,
-
-            telegram_name =
-                excluded.telegram_name,
-
-            registration_completed =
-                excluded.registration_completed
-        """, (
-
-            tx_ref,
-
-            data.get(
-                "transaction_id",
-                ""
-            ),
-
-            data.get(
-                "payment_plan",
-                ""
-            ),
-
-            float(
-                data.get(
-                    "amount",
-                    0
-                )
-                or 0
-            ),
-
-            data.get(
-                "payment_status",
-                "Pending"
-            ),
-
-            data.get(
-                "referral_code",
-                ""
-            ),
-
-            data.get(
-                "promoter_id"
-            ),
-
-            data.get(
-                "promoter_name",
-                ""
-            ),
-
-            float(
-                data.get(
-                    "commission",
-                    0
-                )
-                or 0
-            ),
-
-            str(
-                data.get(
-                    "telegram_id",
-                    ""
-                )
-                or ""
-            ),
-
-            data.get(
-                "telegram_username",
-                ""
-            ),
-
-            data.get(
-                "telegram_name",
-                ""
-            ),
-
-            registration_completed
-        ))
-
-        conn.commit()
-
-        return True
-
-    except Exception:
-
-        conn.rollback()
-
-        raise
-
-    finally:
-
-        conn.close()
-
-
-# ==========================================================
-# GET PAYMENT
-# ==========================================================
-
-def get_payment_by_tx_ref(tx_ref):
-
-    if not tx_ref:
-        return None
+    else:
+        password_hash = None
 
     conn = get_connection()
 
     try:
 
-        cursor = conn.cursor()
+        for _ in range(10):
 
-        cursor.execute("""
-        SELECT *
-        FROM payments
-        WHERE tx_ref=?
-        LIMIT 1
-        """, (
-            tx_ref,
-        ))
+            if referral_code:
 
-        return cursor.fetchone()
+                code = str(referral_code).strip()
 
-    finally:
+            else:
 
-        conn.close()
-
-
-# ==========================================================
-# UPDATE PAYMENT STATUS
-# ==========================================================
-
-def update_payment_status(
-    tx_ref,
-    status,
-    transaction_id=None
-):
-
-    if not tx_ref:
-        return False
-
-    conn = get_connection()
-
-    try:
-
-        cursor = conn.cursor()
-
-        cursor.execute("""
-        UPDATE payments
-
-        SET
-
-            payment_status=?,
-
-            transaction_id =
-                COALESCE(
-                    ?,
-                    transaction_id
+                code = (
+                    "ALHIKAM-"
+                    + secrets.token_hex(5).upper()
                 )
 
-        WHERE tx_ref=?
-        """, (
-            status,
-            transaction_id,
-            tx_ref
-        ))
+            try:
 
-        changed = (
-            cursor.rowcount > 0
-        )
+                cursor = conn.execute(
+                    """
+                    INSERT INTO promoters (
+                        full_name,
+                        phone,
+                        email,
+                        referral_code,
+                        password_hash,
+                        commission_rate,
+                        created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        full_name,
+                        phone,
+                        email,
+                        code,
+                        float(commission_rate),
+                        password_hash,
+                        utc_now(),
+                    )
+                )
 
-        conn.commit()
+                conn.commit()
 
-        return changed
+                return cursor.lastrowid
 
-    except Exception:
+            except sqlite3.IntegrityError:
 
-        conn.rollback()
+                if referral_code:
+                    raise ValueError(
+                        "Referral code already exists."
+                    )
 
-        raise
-
-    finally:
-
-        conn.close()
-
-
-# ==========================================================
-# MARK REGISTRATION COMPLETED
-# ==========================================================
-
-def mark_payment_registration_completed(
-    tx_ref
-):
-
-    if not tx_ref:
-        return False
-
-    conn = get_connection()
-
-    try:
-
-        cursor = conn.cursor()
-
-        cursor.execute("""
-        UPDATE payments
-
-        SET registration_completed=1
-
-        WHERE tx_ref=?
-        """, (
-            tx_ref,
-        ))
-
-        changed = (
-            cursor.rowcount > 0
-        )
-
-        conn.commit()
-
-        return changed
-
-    except Exception:
-
-        conn.rollback()
-
-        raise
-
-    finally:
-
-        conn.close()
-
-
-# ==========================================================
-# COMMISSION EXISTS
-# ==========================================================
-
-def commission_exists(tx_ref):
-
-    if not tx_ref:
-        return False
-
-    conn = get_connection()
-
-    try:
-
-        cursor = conn.cursor()
-
-        cursor.execute("""
-        SELECT id
-        FROM commissions
-        WHERE tx_ref=?
-        LIMIT 1
-        """, (
-            tx_ref,
-        ))
-
-        return (
-            cursor.fetchone()
-            is not None
+        raise RuntimeError(
+            "Could not generate unique referral code."
         )
 
     finally:
-
         conn.close()
 
 
 # ==========================================================
-# GET COMMISSION
-# ==========================================================
-
-def get_commission_by_tx_ref(tx_ref):
-
-    if not tx_ref:
-        return None
-
-    conn = get_connection()
-
-    try:
-
-        cursor = conn.cursor()
-
-        cursor.execute("""
-        SELECT *
-        FROM commissions
-        WHERE tx_ref=?
-        LIMIT 1
-        """, (
-            tx_ref,
-        ))
-
-        return cursor.fetchone()
-
-    finally:
-
-        conn.close()
-
-
-# ==========================================================
-# CREATE COMMISSION
+# COMMISSION
 # ==========================================================
 
 def create_commission(
+    tx_ref,
     promoter_id,
     student_id,
-    tx_ref,
     payment_amount,
-    commission_amount
+    commission_rate,
+    commission_amount,
 ):
-
-    if not promoter_id:
-
-        raise ValueError(
-            "Promoter ID is required."
-        )
 
     if not tx_ref:
+        raise ValueError("Transaction reference required.")
 
-        raise ValueError(
-            "Transaction reference is required."
-        )
-
-    payment_amount = float(
-        payment_amount or 0
-    )
-
-    commission_amount = float(
-        commission_amount or 0
-    )
+    payment_amount = money(payment_amount)
+    commission_rate = money(commission_rate)
+    commission_amount = money(commission_amount)
 
     if payment_amount <= 0:
+        raise ValueError("Invalid payment amount.")
 
-        raise ValueError(
-            "Payment amount must be greater than zero."
-        )
-
-    if commission_amount <= 0:
-
-        raise ValueError(
-            "Commission amount must be greater than zero."
-        )
+    if commission_amount < 0:
+        raise ValueError("Invalid commission amount.")
 
     conn = get_connection()
 
     try:
 
-        cursor = conn.cursor()
+        conn.execute("BEGIN IMMEDIATE")
 
-        cursor.execute(
-            "BEGIN IMMEDIATE"
-        )
+        # ----------------------------------------------
+        # DUPLICATE PROTECTION
+        # ----------------------------------------------
 
-        # --------------------------------------------------
-        # CHECK DUPLICATE COMMISSION
-        # --------------------------------------------------
-
-        cursor.execute("""
-        SELECT *
-        FROM commissions
-        WHERE tx_ref=?
-        LIMIT 1
-        """, (
-            tx_ref,
-        ))
-
-        existing = cursor.fetchone()
+        existing = conn.execute(
+            """
+            SELECT id
+            FROM commissions
+            WHERE tx_ref = ?
+            LIMIT 1
+            """,
+            (tx_ref,)
+        ).fetchone()
 
         if existing:
-
             conn.commit()
+            return existing["id"]
 
-            return {
+        # ----------------------------------------------
+        # PROMOTER
+        # ----------------------------------------------
 
-                "commission_id":
-                    existing["id"],
-
-                "commission_amount":
-                    float(
-                        existing[
-                            "commission_amount"
-                        ]
-                        or 0
-                    )
-            }
-
-        # --------------------------------------------------
-        # GET PROMOTER
-        # --------------------------------------------------
-
-        cursor.execute("""
-        SELECT
-            id,
-            commission_rate,
-            status
-
-        FROM promoters
-
-        WHERE id=?
-
-        LIMIT 1
-        """, (
-            promoter_id,
-        ))
-
-        promoter = cursor.fetchone()
+        promoter = conn.execute(
+            """
+            SELECT *
+            FROM promoters
+            WHERE id = ?
+              AND LOWER(status) = 'active'
+            LIMIT 1
+            """,
+            (promoter_id,)
+        ).fetchone()
 
         if not promoter:
-
+            conn.rollback()
             raise ValueError(
-                "Promoter not found."
+                "Promoter is not active."
             )
 
-        if str(
-            promoter["status"]
-        ).lower() != "active":
+        # ----------------------------------------------
+        # COMMISSION
+        # ----------------------------------------------
 
-            raise ValueError(
-                "Promoter account is not active."
+        cursor = conn.execute(
+            """
+            INSERT INTO commissions (
+                tx_ref,
+                promoter_id,
+                student_id,
+                payment_amount,
+                commission_rate,
+                commission_amount,
+                status,
+                created_at
             )
-
-        # --------------------------------------------------
-        # CALCULATE COMMISSION RATE
-        # --------------------------------------------------
-
-        commission_rate = (
-            commission_amount /
-            payment_amount
-        ) * 100
-
-        # --------------------------------------------------
-        # INSERT COMMISSION
-        # --------------------------------------------------
-
-        cursor.execute("""
-        INSERT INTO commissions (
-
-            promoter_id,
-            student_id,
-            tx_ref,
-            payment_amount,
-            commission_rate,
-            commission_amount,
-            status
-
-        )
-
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (
-
-            promoter_id,
-            student_id,
-            tx_ref,
-            payment_amount,
-            commission_rate,
-            commission_amount,
-            "available"
-        ))
-
-        commission_id = (
-            cursor.lastrowid
-        )
-
-        # --------------------------------------------------
-        # CREDIT PROMOTER
-        # --------------------------------------------------
-
-        cursor.execute("""
-        UPDATE promoters
-
-        SET
-
-            total_sales =
-                total_sales + 1,
-
-            total_earned =
-                total_earned + ?,
-
-            available_balance =
-                available_balance + ?
-
-        WHERE id=?
-
-        AND LOWER(status)='active'
-        """, (
-
-            commission_amount,
-            commission_amount,
-            promoter_id
-        ))
-
-        if cursor.rowcount != 1:
-
-            raise ValueError(
-                "Promoter balance could not be updated."
+            VALUES (?, ?, ?, ?, ?, ?, 'successful', ?)
+            """,
+            (
+                tx_ref,
+                promoter_id,
+                student_id,
+                float(payment_amount),
+                float(commission_rate),
+                float(commission_amount),
+                utc_now(),
             )
-
-        conn.commit()
-
-        return {
-
-            "commission_id":
-                commission_id,
-
-            "commission_amount":
-                commission_amount
-        }
-
-    except Exception:
-
-        conn.rollback()
-
-        raise
-
-    finally:
-
-        conn.close()
-
-
-# ==========================================================
-# LINK COMMISSION TO STUDENT
-# ==========================================================
-
-def link_commission_to_student(
-    tx_ref,
-    student_id
-):
-
-    if not tx_ref or not student_id:
-        return False
-
-    conn = get_connection()
-
-    try:
-
-        cursor = conn.cursor()
-
-        cursor.execute("""
-        UPDATE commissions
-
-        SET student_id=?
-
-        WHERE tx_ref=?
-
-        AND (
-            student_id IS NULL
-            OR student_id=?
         )
-        """, (
-            student_id,
-            tx_ref,
-            student_id
-        ))
 
-        changed = (
-            cursor.rowcount > 0
+        # ----------------------------------------------
+        # ATOMIC BALANCE UPDATE
+        # ----------------------------------------------
+
+        conn.execute(
+            """
+            UPDATE promoters
+            SET
+                total_sales =
+                    total_sales + ?,
+
+                total_earned =
+                    total_earned + ?,
+
+                available_balance =
+                    available_balance + ?
+
+            WHERE id = ?
+            """,
+            (
+                float(payment_amount),
+                float(commission_amount),
+                float(commission_amount),
+                promoter_id,
+            )
         )
 
         conn.commit()
 
-        return changed
+        return cursor.lastrowid
 
     except Exception:
 
         conn.rollback()
-
         raise
 
     finally:
-
         conn.close()
 
 
 # ==========================================================
-# CREATE WITHDRAWAL
-#
-# MINIMUM WITHDRAWAL = ₦200
-#
-# The balance is reserved immediately.
-#
-# SUCCESS:
-#   withdrawn_amount increases.
-#
-# FAILED:
-#   available_balance is restored.
+# WITHDRAWAL
 # ==========================================================
 
 def create_withdrawal(
     promoter_id,
     amount,
     bank_name,
+    bank_code,
     account_name,
     account_number,
-    bank_code=None
 ):
 
-    if not promoter_id:
+    amount = money(amount)
 
+    if amount < MINIMUM_WITHDRAWAL:
         raise ValueError(
-            "Promoter ID is required."
+            f"Minimum withdrawal is ₦{MINIMUM_WITHDRAWAL:,.2f}"
         )
 
-    try:
-
-        amount = float(
-            amount or 0
-        )
-
-    except Exception:
-
-        raise ValueError(
-            "Invalid withdrawal amount."
-        )
-
-    if amount < 200:
-
-        raise ValueError(
-            "Minimum withdrawal is ₦200."
-        )
-
-    bank_name = (
-        bank_name or ""
-    ).strip()
-
-    bank_code = (
-        bank_code or ""
-    ).strip()
-
-    account_name = (
-        account_name or ""
-    ).strip()
-
-    account_number = (
-        account_number or ""
-    ).strip()
+    bank_name = str(bank_name or "").strip()
+    bank_code = str(bank_code or "").strip()
+    account_name = str(account_name or "").strip()
+    account_number = str(account_number or "").strip()
 
     if not bank_name:
+        raise ValueError("Bank name is required.")
 
-        raise ValueError(
-            "Bank name is required."
-        )
+    if not bank_code:
+        raise ValueError("Bank code is required.")
 
     if not account_name:
+        raise ValueError("Account name is required.")
 
+    if not account_number.isdigit():
         raise ValueError(
-            "Account name is required."
+            "Account number must contain digits only."
         )
 
-    if (
-        len(account_number) != 10
-        or not account_number.isdigit()
-    ):
-
+    if len(account_number) != 10:
         raise ValueError(
-            "Account number must contain exactly 10 digits."
+            "Account number must contain 10 digits."
         )
 
     conn = get_connection()
 
     try:
 
-        cursor = conn.cursor()
+        conn.execute("BEGIN IMMEDIATE")
 
-        cursor.execute(
-            "BEGIN IMMEDIATE"
-        )
-
-        # --------------------------------------------------
-        # GET PROMOTER
-        # --------------------------------------------------
-
-        cursor.execute("""
-        SELECT
-
-            id,
-            available_balance,
-            status
-
-        FROM promoters
-
-        WHERE id=?
-
-        LIMIT 1
-        """, (
-            promoter_id,
-        ))
-
-        promoter = cursor.fetchone()
+        promoter = conn.execute(
+            """
+            SELECT *
+            FROM promoters
+            WHERE id = ?
+              AND LOWER(status) = 'active'
+            LIMIT 1
+            """,
+            (promoter_id,)
+        ).fetchone()
 
         if not promoter:
-
-            raise ValueError(
-                "Promoter not found."
-            )
-
-        if str(
-            promoter["status"]
-        ).lower() != "active":
-
+            conn.rollback()
             raise ValueError(
                 "Promoter account is not active."
             )
 
-        balance = float(
+        available = money(
             promoter["available_balance"]
-            or 0
         )
 
-        # --------------------------------------------------
-        # CHECK BALANCE
-        # --------------------------------------------------
-
-        if amount > balance:
-
+        if amount > available:
+            conn.rollback()
             raise ValueError(
                 "Insufficient available balance."
             )
 
-        # --------------------------------------------------
+        # ----------------------------------------------
         # RESERVE BALANCE
-        # --------------------------------------------------
+        # ----------------------------------------------
 
-        cursor.execute("""
-        UPDATE promoters
+        cursor = conn.execute(
+            """
+            UPDATE promoters
+            SET available_balance =
+                available_balance - ?
 
-        SET available_balance =
-            available_balance - ?
+            WHERE id = ?
 
-        WHERE id=?
-
-        AND LOWER(status)='active'
-
-        AND available_balance >= ?
-        """, (
-
-            amount,
-            promoter_id,
-            amount
-        ))
+              AND available_balance >= ?
+            """,
+            (
+                float(amount),
+                promoter_id,
+                float(amount),
+            )
+        )
 
         if cursor.rowcount != 1:
 
+            conn.rollback()
+
             raise ValueError(
-                "Unable to reserve withdrawal amount."
+                "Withdrawal balance could not be reserved."
             )
 
-        # --------------------------------------------------
+        # ----------------------------------------------
         # CREATE WITHDRAWAL
-        # --------------------------------------------------
+        # ----------------------------------------------
 
-        cursor.execute("""
-        INSERT INTO withdrawals (
-
-            promoter_id,
-            amount,
-            bank_name,
-            bank_code,
-            account_name,
-            account_number,
-            status,
-            transfer_reference,
-            transfer_id,
-            transfer_status,
-            transfer_message
-
+        cursor = conn.execute(
+            """
+            INSERT INTO withdrawals (
+                promoter_id,
+                amount,
+                bank_name,
+                bank_code,
+                account_name,
+                account_number,
+                status,
+                created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)
+            """,
+            (
+                promoter_id,
+                float(amount),
+                bank_name,
+                bank_code,
+                account_name,
+                account_number,
+                utc_now(),
+            )
         )
 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-
-            promoter_id,
-            amount,
-            bank_name,
-            bank_code,
-            account_name,
-            account_number,
-            "pending",
-            None,
-            None,
-            None,
-            None
-        ))
-
-        withdrawal_id = (
-            cursor.lastrowid
-        )
+        withdrawal_id = cursor.lastrowid
 
         conn.commit()
 
@@ -1698,731 +943,62 @@ def create_withdrawal(
     except Exception:
 
         conn.rollback()
-
         raise
 
     finally:
-
         conn.close()
 
 
 # ==========================================================
-# GET WITHDRAWAL
+# WITHDRAWAL LOOKUPS
 # ==========================================================
 
-def get_withdrawal_by_id(
-    withdrawal_id
-):
-
-    if not withdrawal_id:
-        return None
+def get_all_withdrawals():
 
     conn = get_connection()
 
     try:
 
-        cursor = conn.cursor()
+        return conn.execute(
+            """
+            SELECT
+                w.*,
+                p.full_name AS promoter_name,
+                p.referral_code
+            FROM withdrawals w
 
-        cursor.execute("""
-        SELECT *
-        FROM withdrawals
-        WHERE id=?
-        LIMIT 1
-        """, (
-            withdrawal_id,
-        ))
+            JOIN promoters p
+              ON p.id = w.promoter_id
 
-        return cursor.fetchone()
+            ORDER BY w.id DESC
+            """
+        ).fetchall()
 
     finally:
-
         conn.close()
 
 
-# ==========================================================
-# GET PROMOTER WITHDRAWALS
-# ==========================================================
-
-def get_promoter_withdrawals(
-    promoter_id
-):
-
-    if not promoter_id:
-        return []
+def get_withdrawal_by_id(withdrawal_id):
 
     conn = get_connection()
 
     try:
 
-        cursor = conn.cursor()
-
-        cursor.execute("""
-        SELECT *
-        FROM withdrawals
-
-        WHERE promoter_id=?
-
-        ORDER BY id DESC
-        """, (
-            promoter_id,
-        ))
-
-        return cursor.fetchall()
+        return conn.execute(
+            """
+            SELECT *
+            FROM withdrawals
+            WHERE id = ?
+            LIMIT 1
+            """,
+            (withdrawal_id,)
+        ).fetchone()
 
     finally:
-
         conn.close()
 
 
-# ==========================================================
-# UPDATE TRANSFER INFORMATION
-# ==========================================================
-
-def update_withdrawal_transfer(
-    withdrawal_id,
-    transfer_reference=None,
-    transfer_id=None,
-    transfer_status=None,
-    transfer_message=None
-):
-
-    if not withdrawal_id:
-
-        raise ValueError(
-            "Withdrawal ID is required."
-        )
-
-    conn = get_connection()
-
-    try:
-
-        cursor = conn.cursor()
-
-        cursor.execute("""
-        UPDATE withdrawals
-
-        SET
-
-            transfer_reference =
-                COALESCE(
-                    ?,
-                    transfer_reference
-                ),
-
-            transfer_id =
-                COALESCE(
-                    ?,
-                    transfer_id
-                ),
-
-            transfer_status =
-                COALESCE(
-                    ?,
-                    transfer_status
-                ),
-
-            transfer_message =
-                COALESCE(
-                    ?,
-                    transfer_message
-                )
-
-        WHERE id=?
-        """, (
-
-            transfer_reference,
-            transfer_id,
-            transfer_status,
-            transfer_message,
-            withdrawal_id
-        ))
-
-        changed = (
-            cursor.rowcount > 0
-        )
-
-        conn.commit()
-
-        return changed
-
-    except Exception:
-
-        conn.rollback()
-
-        raise
-
-    finally:
-
-        conn.close()
-
-
-# ==========================================================
-# MARK WITHDRAWAL SUCCESSFUL
-#
-# IMPORTANT:
-# This function is idempotent.
-#
-# It will NEVER increase withdrawn_amount twice
-# for the same withdrawal.
-# ==========================================================
-
-def mark_withdrawal_successful(
-    withdrawal_id,
-    transfer_id=None,
-    transfer_reference=None,
-    transfer_message=None
-):
-
-    if not withdrawal_id:
-
-        raise ValueError(
-            "Withdrawal ID is required."
-        )
-
-    conn = get_connection()
-
-    try:
-
-        cursor = conn.cursor()
-
-        cursor.execute(
-            "BEGIN IMMEDIATE"
-        )
-
-        # --------------------------------------------------
-        # GET WITHDRAWAL
-        # --------------------------------------------------
-
-        cursor.execute("""
-        SELECT *
-        FROM withdrawals
-
-        WHERE id=?
-
-        LIMIT 1
-        """, (
-            withdrawal_id,
-        ))
-
-        withdrawal = cursor.fetchone()
-
-        if not withdrawal:
-
-            raise ValueError(
-                "Withdrawal not found."
-            )
-
-        old_status = str(
-            withdrawal["status"]
-            or ""
-        ).lower().strip()
-
-        amount = float(
-            withdrawal["amount"]
-            or 0
-        )
-
-        promoter_id = (
-            withdrawal["promoter_id"]
-        )
-
-        # --------------------------------------------------
-        # ALREADY SUCCESSFUL
-        # --------------------------------------------------
-
-        if old_status == "successful":
-
-            cursor.execute("""
-            UPDATE withdrawals
-
-            SET
-
-                transfer_id =
-                    COALESCE(
-                        ?,
-                        transfer_id
-                    ),
-
-                transfer_reference =
-                    COALESCE(
-                        ?,
-                        transfer_reference
-                    ),
-
-                transfer_status =
-                    'successful',
-
-                transfer_message =
-                    COALESCE(
-                        ?,
-                        transfer_message
-                    )
-
-            WHERE id=?
-            """, (
-
-                transfer_id,
-                transfer_reference,
-                transfer_message,
-                withdrawal_id
-            ))
-
-            conn.commit()
-
-            return True
-
-        # --------------------------------------------------
-        # ALREADY FAILED/CANCELLED
-        # --------------------------------------------------
-
-        if old_status in {
-            "failed",
-            "cancelled"
-        }:
-
-            raise ValueError(
-                "Withdrawal has already been finalized."
-            )
-
-        # --------------------------------------------------
-        # MARK WITHDRAWAL SUCCESSFUL FIRST
-        #
-        # Then increase withdrawn_amount only if
-        # this withdrawal changed from pending/processing.
-        # --------------------------------------------------
-
-        cursor.execute("""
-        UPDATE withdrawals
-
-        SET
-
-            status='successful',
-
-            transfer_id =
-                COALESCE(
-                    ?,
-                    transfer_id
-                ),
-
-            transfer_reference =
-                COALESCE(
-                    ?,
-                    transfer_reference
-                ),
-
-            transfer_status =
-                'successful',
-
-            transfer_message =
-                COALESCE(
-                    ?,
-                    transfer_message
-                )
-
-        WHERE id=?
-
-        AND status IN (
-            'pending',
-            'processing'
-        )
-        """, (
-
-            transfer_id,
-            transfer_reference,
-            transfer_message,
-            withdrawal_id
-        ))
-
-        if cursor.rowcount != 1:
-
-            raise ValueError(
-                "Withdrawal could not be marked successful."
-            )
-
-        # --------------------------------------------------
-        # INCREASE WITHDRAWN AMOUNT
-        # --------------------------------------------------
-
-        cursor.execute("""
-        UPDATE promoters
-
-        SET withdrawn_amount =
-            withdrawn_amount + ?
-
-        WHERE id=?
-        """, (
-
-            amount,
-            promoter_id
-        ))
-
-        if cursor.rowcount != 1:
-
-            raise ValueError(
-                "Could not update withdrawn amount."
-            )
-
-        conn.commit()
-
-        return True
-
-    except Exception:
-
-        conn.rollback()
-
-        raise
-
-    finally:
-
-        conn.close()
-
-
-# ==========================================================
-# REFUND WITHDRAWAL
-#
-# Used ONLY for confirmed failed/cancelled transfers.
-#
-# The reserved amount is returned to available_balance.
-# ==========================================================
-
-def refund_withdrawal(
-    withdrawal_id,
-    transfer_status="failed",
-    transfer_message=None
-):
-
-    if not withdrawal_id:
-
-        raise ValueError(
-            "Withdrawal ID is required."
-        )
-
-    transfer_status = (
-        transfer_status
-        or "failed"
-    ).strip().lower()
-
-    if transfer_status not in {
-        "failed",
-        "cancelled"
-    }:
-
-        transfer_status = "failed"
-
-    conn = get_connection()
-
-    try:
-
-        cursor = conn.cursor()
-
-        cursor.execute(
-            "BEGIN IMMEDIATE"
-        )
-
-        # --------------------------------------------------
-        # GET WITHDRAWAL
-        # --------------------------------------------------
-
-        cursor.execute("""
-        SELECT *
-        FROM withdrawals
-
-        WHERE id=?
-
-        LIMIT 1
-        """, (
-            withdrawal_id,
-        ))
-
-        withdrawal = cursor.fetchone()
-
-        if not withdrawal:
-
-            raise ValueError(
-                "Withdrawal not found."
-            )
-
-        old_status = str(
-            withdrawal["status"]
-            or ""
-        ).lower().strip()
-
-        amount = float(
-            withdrawal["amount"]
-            or 0
-        )
-
-        promoter_id = (
-            withdrawal["promoter_id"]
-        )
-
-        # --------------------------------------------------
-        # ALREADY REFUNDED
-        # --------------------------------------------------
-
-        if old_status in {
-            "failed",
-            "cancelled"
-        }:
-
-            cursor.execute("""
-            UPDATE withdrawals
-
-            SET
-
-                transfer_status=?,
-
-                transfer_message =
-                    COALESCE(
-                        ?,
-                        transfer_message
-                    )
-
-            WHERE id=?
-            """, (
-
-                transfer_status,
-                transfer_message,
-                withdrawal_id
-            ))
-
-            conn.commit()
-
-            return True
-
-        # --------------------------------------------------
-        # SUCCESSFUL CANNOT REFUND
-        # --------------------------------------------------
-
-        if old_status == "successful":
-
-            raise ValueError(
-                "Successful withdrawal cannot be refunded."
-            )
-
-        # --------------------------------------------------
-        # RETURN RESERVED BALANCE
-        # --------------------------------------------------
-
-        cursor.execute("""
-        UPDATE promoters
-
-        SET available_balance =
-            available_balance + ?
-
-        WHERE id=?
-        """, (
-
-            amount,
-            promoter_id
-        ))
-
-        if cursor.rowcount != 1:
-
-            raise ValueError(
-                "Could not restore promoter balance."
-            )
-
-        # --------------------------------------------------
-        # MARK FAILED/CANCELLED
-        # --------------------------------------------------
-
-        cursor.execute("""
-        UPDATE withdrawals
-
-        SET
-
-            status=?,
-
-            transfer_status=?,
-
-            transfer_message=?
-
-        WHERE id=?
-
-        AND status IN (
-            'pending',
-            'processing'
-        )
-        """, (
-
-            transfer_status,
-            transfer_status,
-            transfer_message,
-            withdrawal_id
-        ))
-
-        if cursor.rowcount != 1:
-
-            raise ValueError(
-                "Withdrawal could not be refunded."
-            )
-
-        conn.commit()
-
-        return True
-
-    except Exception:
-
-        conn.rollback()
-
-        raise
-
-    finally:
-
-        conn.close()
-
-
-# ==========================================================
-# UPDATE WITHDRAWAL STATUS
-# ==========================================================
-
-def update_withdrawal_status(
-    withdrawal_id,
-    status
-):
-
-    if not withdrawal_id:
-
-        raise ValueError(
-            "Withdrawal ID is required."
-        )
-
-    status = (
-        status or ""
-    ).strip().lower()
-
-    allowed_statuses = {
-
-        "pending",
-        "processing",
-        "successful",
-        "failed",
-        "cancelled"
-    }
-
-    if status not in allowed_statuses:
-
-        raise ValueError(
-            "Invalid withdrawal status."
-        )
-
-    # ------------------------------------------------------
-    # SUCCESS
-    # ------------------------------------------------------
-
-    if status == "successful":
-
-        return mark_withdrawal_successful(
-            withdrawal_id
-        )
-
-    # ------------------------------------------------------
-    # FAILED / CANCELLED
-    # ------------------------------------------------------
-
-    if status in {
-        "failed",
-        "cancelled"
-    }:
-
-        return refund_withdrawal(
-            withdrawal_id,
-            transfer_status=status
-        )
-
-    # ------------------------------------------------------
-    # PENDING / PROCESSING
-    # ------------------------------------------------------
-
-    conn = get_connection()
-
-    try:
-
-        cursor = conn.cursor()
-
-        cursor.execute(
-            "BEGIN IMMEDIATE"
-        )
-
-        cursor.execute("""
-        SELECT status
-        FROM withdrawals
-
-        WHERE id=?
-
-        LIMIT 1
-        """, (
-            withdrawal_id,
-        ))
-
-        withdrawal = cursor.fetchone()
-
-        if not withdrawal:
-
-            raise ValueError(
-                "Withdrawal not found."
-            )
-
-        old_status = str(
-            withdrawal["status"]
-            or ""
-        ).lower().strip()
-
-        if old_status in {
-            "successful",
-            "failed",
-            "cancelled"
-        }:
-
-            raise ValueError(
-                "Final withdrawal status cannot be changed."
-            )
-
-        cursor.execute("""
-        UPDATE withdrawals
-
-        SET status=?
-
-        WHERE id=?
-
-        AND status IN (
-            'pending',
-            'processing'
-        )
-        """, (
-
-            status,
-            withdrawal_id
-        ))
-
-        if cursor.rowcount != 1:
-
-            raise ValueError(
-                "Withdrawal status could not be updated."
-            )
-
-        conn.commit()
-
-        return True
-
-    except Exception:
-
-        conn.rollback()
-
-        raise
-
-    finally:
-
-        conn.close()
-
-# ==========================================================
-# FIND WITHDRAWAL BY TRANSFER ID
-# ==========================================================
-
-def get_withdrawal_by_transfer_id(
-    transfer_id
-):
+def get_withdrawal_by_transfer_id(transfer_id):
 
     if not transfer_id:
         return None
@@ -2431,27 +1007,19 @@ def get_withdrawal_by_transfer_id(
 
     try:
 
-        cursor = conn.cursor()
-
-        cursor.execute("""
-        SELECT *
-        FROM withdrawals
-        WHERE transfer_id=?
-        LIMIT 1
-        """, (
-            str(transfer_id),
-        ))
-
-        return cursor.fetchone()
+        return conn.execute(
+            """
+            SELECT *
+            FROM withdrawals
+            WHERE transfer_id = ?
+            LIMIT 1
+            """,
+            (str(transfer_id),)
+        ).fetchone()
 
     finally:
-
         conn.close()
 
-
-# ==========================================================
-# FIND WITHDRAWAL BY TRANSFER REFERENCE
-# ==========================================================
 
 def get_withdrawal_by_transfer_reference(
     transfer_reference
@@ -2464,169 +1032,188 @@ def get_withdrawal_by_transfer_reference(
 
     try:
 
-        cursor = conn.cursor()
-
-        cursor.execute("""
-        SELECT *
-        FROM withdrawals
-        WHERE transfer_reference=?
-        LIMIT 1
-        """, (
-            transfer_reference,
-        ))
-
-        return cursor.fetchone()
+        return conn.execute(
+            """
+            SELECT *
+            FROM withdrawals
+            WHERE transfer_reference = ?
+            LIMIT 1
+            """,
+            (str(transfer_reference),)
+        ).fetchone()
 
     finally:
-
         conn.close()
 
 
-# ==========================================================
-# PROCESS FLUTTERWAVE TRANSFER RESULT
-#
-# This is IDEMPOTENT.
-#
-# SUCCESSFUL:
-#   reserved balance stays deducted
-#   withdrawn_amount increases ONCE
-#
-# FAILED/CANCELLED:
-#   reserved balance is returned ONCE
-#
-# NEW/PROCESSING:
-#   balance remains reserved
-# ==========================================================
-
-def process_transfer_result(
-    withdrawal_id,
-    transfer_status,
-    transfer_id=None,
-    transfer_reference=None,
-    transfer_message=None
-):
-
-    if not withdrawal_id:
-        raise ValueError(
-            "Withdrawal ID is required."
-        )
-
-    status = str(
-        transfer_status or ""
-    ).upper().strip()
-
-    if status in {
-        "SUCCESSFUL",
-        "SUCCESS",
-        "COMPLETED"
-    }:
-
-        return mark_withdrawal_successful(
-            withdrawal_id=withdrawal_id,
-            transfer_id=transfer_id,
-            transfer_reference=transfer_reference,
-            transfer_message=transfer_message,
-        )
-
-    if status in {
-        "FAILED",
-        "CANCELLED",
-        "CANCELED"
-    }:
-
-        return refund_withdrawal(
-            withdrawal_id=withdrawal_id,
-            transfer_status=(
-                "cancelled"
-                if status in {
-                    "CANCELLED",
-                    "CANCELED"
-                }
-                else "failed"
-            ),
-            transfer_message=transfer_message,
-        )
-
-    # ------------------------------------------------------
-    # STILL PROCESSING
-    # ------------------------------------------------------
+def get_promoter_withdrawals(promoter_id):
 
     conn = get_connection()
 
     try:
 
-        cursor = conn.cursor()
+        return conn.execute(
+            """
+            SELECT *
+            FROM withdrawals
+            WHERE promoter_id = ?
 
-        cursor.execute(
-            "BEGIN IMMEDIATE"
-        )
+            ORDER BY id DESC
+            """,
+            (promoter_id,)
+        ).fetchall()
 
-        cursor.execute("""
-        SELECT status
-        FROM withdrawals
-        WHERE id=?
-        LIMIT 1
-        """, (
-            withdrawal_id,
-        ))
+    finally:
+        conn.close()
 
-        withdrawal = cursor.fetchone()
+
+# ==========================================================
+# TRANSFER UPDATE
+# ==========================================================
+
+def update_withdrawal_transfer(
+    withdrawal_id,
+    transfer_id=None,
+    transfer_reference=None,
+    transfer_status=None,
+    transfer_message=None,
+):
+
+    conn = get_connection()
+
+    try:
+
+        conn.execute("BEGIN IMMEDIATE")
+
+        withdrawal = conn.execute(
+            """
+            SELECT *
+            FROM withdrawals
+            WHERE id = ?
+            LIMIT 1
+            """,
+            (withdrawal_id,)
+        ).fetchone()
 
         if not withdrawal:
+            conn.rollback()
             raise ValueError(
                 "Withdrawal not found."
             )
 
-        old_status = str(
-            withdrawal["status"]
-            or ""
-        ).lower().strip()
-
-        if old_status in {
+        if withdrawal["status"] in {
             "successful",
             "failed",
-            "cancelled"
+            "cancelled",
         }:
 
             conn.commit()
-            return True
+            return False
 
-        cursor.execute("""
-        UPDATE withdrawals
+        # ----------------------------------------------
+        # TRANSFER ID COLLISION
+        # ----------------------------------------------
 
-        SET
+        if transfer_id:
 
-            status='processing',
+            existing = conn.execute(
+                """
+                SELECT id
+                FROM withdrawals
+                WHERE transfer_id = ?
+                  AND id != ?
+                LIMIT 1
+                """,
+                (
+                    str(transfer_id),
+                    withdrawal_id,
+                )
+            ).fetchone()
 
-            transfer_id =
-                COALESCE(
-                    ?,
-                    transfer_id
-                ),
+            if existing:
 
-            transfer_reference =
-                COALESCE(
-                    ?,
-                    transfer_reference
-                ),
+                conn.rollback()
 
-            transfer_status=?,
-
-            transfer_message =
-                COALESCE(
-                    ?,
-                    transfer_message
+                raise ValueError(
+                    "Transfer ID already belongs to another withdrawal."
                 )
 
-        WHERE id=?
-        """, (
+        # ----------------------------------------------
+        # REFERENCE COLLISION
+        # ----------------------------------------------
 
-            transfer_id,
-            transfer_reference,
-            status or "NEW",
-            transfer_message,
-            withdrawal_id
-        ))
+        if transfer_reference:
+
+            existing = conn.execute(
+                """
+                SELECT id
+                FROM withdrawals
+                WHERE transfer_reference = ?
+                  AND id != ?
+                LIMIT 1
+                """,
+                (
+                    str(transfer_reference),
+                    withdrawal_id,
+                )
+            ).fetchone()
+
+            if existing:
+
+                conn.rollback()
+
+                raise ValueError(
+                    "Transfer reference already belongs to another withdrawal."
+                )
+
+        new_status = withdrawal["status"]
+
+        if new_status == "pending":
+            new_status = "processing"
+
+        conn.execute(
+            """
+            UPDATE withdrawals
+
+            SET
+                transfer_id =
+                    COALESCE(?, transfer_id),
+
+                transfer_reference =
+                    COALESCE(?, transfer_reference),
+
+                transfer_status =
+                    COALESCE(?, transfer_status),
+
+                transfer_message =
+                    COALESCE(?, transfer_message),
+
+                status = ?
+
+            WHERE id = ?
+            """,
+            (
+                str(transfer_id)
+                if transfer_id is not None
+                else None,
+
+                str(transfer_reference)
+                if transfer_reference is not None
+                else None,
+
+                str(transfer_status)
+                if transfer_status is not None
+                else None,
+
+                str(transfer_message)
+                if transfer_message is not None
+                else None,
+
+                new_status,
+
+                withdrawal_id,
+            )
+        )
 
         conn.commit()
 
@@ -2638,12 +1225,440 @@ def process_transfer_result(
         raise
 
     finally:
-
         conn.close()
 
 
 # ==========================================================
-# START DATABASE
+# MARK SUCCESSFUL
+# ==========================================================
+
+def mark_withdrawal_successful(
+    withdrawal_id,
+    transfer_id=None,
+    transfer_reference=None,
+    transfer_message=None,
+):
+
+    conn = get_connection()
+
+    try:
+
+        conn.execute("BEGIN IMMEDIATE")
+
+        withdrawal = conn.execute(
+            """
+            SELECT *
+            FROM withdrawals
+            WHERE id = ?
+            LIMIT 1
+            """,
+            (withdrawal_id,)
+        ).fetchone()
+
+        if not withdrawal:
+
+            conn.rollback()
+
+            raise ValueError(
+                "Withdrawal not found."
+            )
+
+        # ----------------------------------------------
+        # IDEMPOTENT SUCCESS
+        # ----------------------------------------------
+
+        if withdrawal["status"] == "successful":
+
+            conn.commit()
+            return True
+
+        # ----------------------------------------------
+        # NEVER RESURRECT FAILED/CANCELLED
+        # ----------------------------------------------
+
+        if withdrawal["status"] in {
+            "failed",
+            "cancelled",
+        }:
+
+            conn.rollback()
+
+            raise ValueError(
+                "A failed or cancelled withdrawal cannot become successful."
+            )
+
+        conn.execute(
+            """
+            UPDATE withdrawals
+
+            SET
+                status = 'successful',
+
+                transfer_id =
+                    COALESCE(?, transfer_id),
+
+                transfer_reference =
+                    COALESCE(?, transfer_reference),
+
+                transfer_status = 'SUCCESSFUL',
+
+                transfer_message =
+                    COALESCE(?, transfer_message)
+
+            WHERE id = ?
+            """,
+            (
+                str(transfer_id)
+                if transfer_id is not None
+                else None,
+
+                str(transfer_reference)
+                if transfer_reference is not None
+                else None,
+
+                str(transfer_message)
+                if transfer_message is not None
+                else None,
+
+                withdrawal_id,
+            )
+        )
+
+        # ----------------------------------------------
+        # MONEY WAS ALREADY RESERVED.
+        # ONLY INCREMENT WITHDRAWN AMOUNT.
+        # ----------------------------------------------
+
+        conn.execute(
+            """
+            UPDATE promoters
+
+            SET withdrawn_amount =
+                withdrawn_amount + ?
+
+            WHERE id = ?
+            """,
+            (
+                float(
+                    money(withdrawal["amount"])
+                ),
+                withdrawal["promoter_id"],
+            )
+        )
+
+        conn.commit()
+
+        return True
+
+    except Exception:
+
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()
+
+
+# ==========================================================
+# REFUND FAILED/CANCELLED WITHDRAWAL
+# ==========================================================
+
+def refund_withdrawal(
+    withdrawal_id,
+    final_status="failed",
+    transfer_id=None,
+    transfer_reference=None,
+    transfer_message=None,
+):
+
+    if final_status not in {
+        "failed",
+        "cancelled",
+    }:
+
+        raise ValueError(
+            "Invalid refund status."
+        )
+
+    conn = get_connection()
+
+    try:
+
+        conn.execute("BEGIN IMMEDIATE")
+
+        withdrawal = conn.execute(
+            """
+            SELECT *
+            FROM withdrawals
+            WHERE id = ?
+            LIMIT 1
+            """,
+            (withdrawal_id,)
+        ).fetchone()
+
+        if not withdrawal:
+
+            conn.rollback()
+
+            raise ValueError(
+                "Withdrawal not found."
+            )
+
+        # ----------------------------------------------
+        # ALREADY FINAL
+        # ----------------------------------------------
+
+        if withdrawal["status"] in {
+            "failed",
+            "cancelled",
+        }:
+
+            conn.commit()
+            return True
+
+        if withdrawal["status"] == "successful":
+
+            conn.rollback()
+
+            raise ValueError(
+                "Successful withdrawal cannot be refunded."
+            )
+
+        amount = money(
+            withdrawal["amount"]
+        )
+
+        # ----------------------------------------------
+        # RETURN RESERVED MONEY
+        # ----------------------------------------------
+
+        conn.execute(
+            """
+            UPDATE promoters
+
+            SET available_balance =
+                available_balance + ?
+
+            WHERE id = ?
+            """,
+            (
+                float(amount),
+                withdrawal["promoter_id"],
+            )
+        )
+
+        # ----------------------------------------------
+        # FINAL STATUS
+        # ----------------------------------------------
+
+        conn.execute(
+            """
+            UPDATE withdrawals
+
+            SET
+                status = ?,
+
+                transfer_id =
+                    COALESCE(?, transfer_id),
+
+                transfer_reference =
+                    COALESCE(?, transfer_reference),
+
+                transfer_status = ?,
+
+                transfer_message =
+                    COALESCE(?, transfer_message)
+
+            WHERE id = ?
+            """,
+            (
+                final_status,
+
+                str(transfer_id)
+                if transfer_id is not None
+                else None,
+
+                str(transfer_reference)
+                if transfer_reference is not None
+                else None,
+
+                final_status.upper(),
+
+                str(transfer_message)
+                if transfer_message is not None
+                else None,
+
+                withdrawal_id,
+            )
+        )
+
+        conn.commit()
+
+        return True
+
+    except Exception:
+
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()
+
+
+# ==========================================================
+# UPDATE WITHDRAWAL STATUS
+# ==========================================================
+
+def update_withdrawal_status(
+    withdrawal_id,
+    status,
+    transfer_id=None,
+    transfer_reference=None,
+    message=None,
+):
+
+    status = str(status or "").upper()
+
+    if status in {
+        "SUCCESS",
+        "SUCCESSFUL",
+        "COMPLETED",
+    }:
+
+        return mark_withdrawal_successful(
+            withdrawal_id=withdrawal_id,
+            transfer_id=transfer_id,
+            transfer_reference=transfer_reference,
+            transfer_message=message,
+        )
+
+    if status in {
+        "FAILED",
+        "CANCELLED",
+        "CANCELED",
+        "REJECTED",
+    }:
+
+        final_status = (
+            "cancelled"
+            if status in {
+                "CANCELLED",
+                "CANCELED",
+            }
+            else "failed"
+        )
+
+        return refund_withdrawal(
+            withdrawal_id=withdrawal_id,
+            final_status=final_status,
+            transfer_id=transfer_id,
+            transfer_reference=transfer_reference,
+            transfer_message=message,
+        )
+
+    # ----------------------------------------------
+    # PROCESSING / PENDING / NEW
+    # ----------------------------------------------
+
+    return update_withdrawal_transfer(
+        withdrawal_id=withdrawal_id,
+        transfer_id=transfer_id,
+        transfer_reference=transfer_reference,
+        transfer_status=status,
+        transfer_message=message,
+    )
+
+
+# ==========================================================
+# TRUSTED FLUTTERWAVE RESULT
+# ==========================================================
+
+def process_transfer_result(
+    withdrawal_id,
+    flutterwave_status,
+    transfer_id=None,
+    transfer_reference=None,
+    message=None,
+):
+
+    """
+    IMPORTANT:
+
+    flutterwave_status MUST come from a trusted
+    server-side Flutterwave API verification.
+
+    Never trust status supplied directly by the browser.
+    """
+
+    status = str(
+        flutterwave_status or ""
+    ).strip().upper()
+
+    if not status:
+        raise ValueError(
+            "Flutterwave transfer status is required."
+        )
+
+    # ----------------------------------------------
+    # SUCCESS
+    # ----------------------------------------------
+
+    if status in {
+        "SUCCESS",
+        "SUCCESSFUL",
+        "COMPLETED",
+    }:
+
+        return mark_withdrawal_successful(
+            withdrawal_id=withdrawal_id,
+            transfer_id=transfer_id,
+            transfer_reference=transfer_reference,
+            transfer_message=message,
+        )
+
+    # ----------------------------------------------
+    # FAILED
+    # ----------------------------------------------
+
+    if status in {
+        "FAILED",
+        "CANCELLED",
+        "CANCELED",
+        "REJECTED",
+    }:
+
+        final_status = (
+            "cancelled"
+            if status in {
+                "CANCELLED",
+                "CANCELED",
+            }
+            else "failed"
+        )
+
+        return refund_withdrawal(
+            withdrawal_id=withdrawal_id,
+            final_status=final_status,
+            transfer_id=transfer_id,
+            transfer_reference=transfer_reference,
+            transfer_message=message,
+        )
+
+    # ----------------------------------------------
+    # UNKNOWN / PROCESSING
+    # ----------------------------------------------
+
+    return update_withdrawal_transfer(
+        withdrawal_id=withdrawal_id,
+        transfer_id=transfer_id,
+        transfer_reference=transfer_reference,
+        transfer_status=status,
+        transfer_message=message,
+    )
+
+
+# ==========================================================
+# INITIALIZE
 # ==========================================================
 
 initialize_database()
