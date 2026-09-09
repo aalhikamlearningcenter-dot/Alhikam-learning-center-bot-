@@ -14,6 +14,7 @@
 # - Flutterwave Transfer
 # - Transfer Status Verification
 # - Withdrawal History
+# - MAIN.PY COMPATIBILITY ALIASES
 # ============================================================
 
 import os
@@ -176,10 +177,13 @@ def _check_csrf():
     if not submitted or not expected:
         return False
 
-    return secrets.compare_digest(
-        submitted,
-        expected
-    )
+    try:
+        return secrets.compare_digest(
+            submitted,
+            expected
+        )
+    except Exception:
+        return False
 
 
 # ============================================================
@@ -201,13 +205,17 @@ def _current_promoter():
         return None
 
     try:
+
         return get_promoter_by_id(
             promoter_id
         )
+
     except Exception:
+
         logger.exception(
             "Unable to load current promoter"
         )
+
         return None
 
 
@@ -418,7 +426,9 @@ Promoter Dashboard Login
 {% endif %}
 
 <div class="info">
+
 Enter your referral code and promoter password.
+
 </div>
 
 <form method="POST"
@@ -551,11 +561,21 @@ def promoter_login_page():
 
         ), 400
 
-    promoter = (
-        get_promoter_by_referral_code(
-            referral_code
+    try:
+
+        promoter = (
+            get_promoter_by_referral_code(
+                referral_code
+            )
         )
-    )
+
+    except Exception:
+
+        logger.exception(
+            "Unable to find promoter"
+        )
+
+        promoter = None
 
     if not promoter:
 
@@ -567,7 +587,9 @@ def promoter_login_page():
 
             referral_code=referral_code,
 
-            error="❌ Invalid referral code or password.",
+            error=(
+                "❌ Invalid referral code or password."
+            ),
 
         ), 401
 
@@ -603,7 +625,9 @@ def promoter_login_page():
 
             referral_code=referral_code,
 
-            error="❌ Invalid referral code or password.",
+            error=(
+                "❌ Invalid referral code or password."
+            ),
 
         ), 401
 
@@ -649,6 +673,17 @@ def promoter_logout_page():
             "promoter_login"
         )
     )
+
+
+# ============================================================
+# COMPATIBILITY ALIAS
+#
+# IMPORTANT:
+# main.py was importing promoter_logout.
+# Keep BOTH names so ImportError cannot happen.
+# ============================================================
+
+promoter_logout = promoter_logout_page
 
 
 # ============================================================
@@ -1192,14 +1227,21 @@ Withdrawn
 </h2>
 
 <p class="small">
-Share this link with students. Payments made through your referral link will be connected to your referral account.
+
+Share this link with students.
+
+Payments made through your referral link
+will be connected to your referral account.
+
 </p>
+
 
 {% set referral_link =
     app_url
     + "/referral/"
     + promoter["referral_code"]
 %}
+
 
 <div class="link-box">
 
@@ -1223,6 +1265,7 @@ Share this link with students. Payments made through your referral link will be 
 
 </div>
 
+
 <br>
 
 <strong>
@@ -1245,14 +1288,21 @@ Referral Code:
 </h2>
 
 <p class="small">
-Students can use this link directly to open the payment page. Your referral code is automatically attached.
+
+Students can use this link directly to open
+the payment page.
+
+Your referral code is automatically attached.
+
 </p>
+
 
 {% set payment_link =
     app_url
     + "/pay?ref="
     + promoter["referral_code"]
 %}
+
 
 <div class="link-box">
 
@@ -1295,22 +1345,27 @@ Withdrawal Security
 
 <br><br>
 
-Your Withdrawal Code is required before any withdrawal can be processed.
+Your Withdrawal Code is required before
+any withdrawal can be processed.
 
-<br>
+<br><br>
 
-Never share your Withdrawal Code with another person.
+Never share your Withdrawal Code with
+another person.
 
 </div>
+
 
 <p class="small">
 
 Minimum withdrawal:
+
 <strong>
 ₦{{ "{:,.2f}".format(minimum_withdrawal) }}
 </strong>
 
 </p>
+
 
 <form method="POST"
       action="{{ url_for('promoter_withdrawal') }}">
@@ -1606,7 +1661,7 @@ def referral_dashboard_by_code(
 
 
 # ============================================================
-# WITHDRAWAL HTML
+# WITHDRAWAL STATUS HTML
 # ============================================================
 
 WITHDRAWAL_STATUS_HTML = """
@@ -1625,6 +1680,10 @@ ALHIKAM Withdrawal Status
 </title>
 
 <style>
+
+*{
+    box-sizing:border-box;
+}
 
 body{
 
@@ -1727,6 +1786,7 @@ a{
 <h1>
 💰 Withdrawal Status
 </h1>
+
 
 <div class="item">
 
@@ -1871,6 +1931,7 @@ Message
 ← Back to Dashboard
 </a>
 
+
 </div>
 
 </div>
@@ -1955,6 +2016,19 @@ def withdrawal_page():
             )
         )
 
+    if amount <= 0:
+
+        flash(
+            "Withdrawal amount must be greater than zero.",
+            "error"
+        )
+
+        return redirect(
+            url_for(
+                "referral_dashboard"
+            )
+        )
+
     if amount < MINIMUM_WITHDRAWAL:
 
         flash(
@@ -2029,8 +2103,8 @@ def withdrawal_page():
     # VERIFY WITHDRAWAL CODE
     #
     # IMPORTANT:
-    # This happens BEFORE bank resolution and BEFORE money
-    # is reserved.
+    # This happens BEFORE bank resolution and BEFORE balance
+    # reservation.
     # --------------------------------------------------------
 
     try:
@@ -2169,7 +2243,6 @@ def withdrawal_page():
 
     except TypeError:
 
-        # Compatibility with possible positional version
         try:
 
             resolved = resolve_bank_account(
@@ -2177,14 +2250,14 @@ def withdrawal_page():
                 account_number
             )
 
-        except Exception as e:
+        except Exception:
 
             logger.exception(
                 "Bank account resolve failed"
             )
 
             flash(
-                f"Unable to verify bank account: {e}",
+                "Unable to verify bank account. Please check your bank and account number.",
                 "error"
             )
 
@@ -2194,7 +2267,7 @@ def withdrawal_page():
                 )
             )
 
-    except Exception as e:
+    except Exception:
 
         logger.exception(
             "Bank account resolve failed"
@@ -2227,6 +2300,8 @@ def withdrawal_page():
     # --------------------------------------------------------
     # ACCOUNT NAME
     # --------------------------------------------------------
+
+    account_name = ""
 
     if isinstance(
         resolved,
@@ -2286,7 +2361,7 @@ def withdrawal_page():
     # --------------------------------------------------------
     # CREATE WITHDRAWAL
     #
-    # Database reserves the balance atomically.
+    # Database reserves available balance atomically.
     # --------------------------------------------------------
 
     try:
@@ -2313,14 +2388,14 @@ def withdrawal_page():
 
         )
 
-    except Exception as e:
+    except Exception:
 
         logger.exception(
             "Create withdrawal failed"
         )
 
         flash(
-            f"Unable to create withdrawal: {e}",
+            "Unable to create withdrawal. Please try again.",
             "error"
         )
 
@@ -2365,7 +2440,6 @@ def withdrawal_page():
 
     except TypeError:
 
-        # Compatibility with alternative function signature
         try:
 
             update_withdrawal_transfer(
@@ -2396,9 +2470,11 @@ def withdrawal_page():
         transfer_result = (
             create_flutterwave_transfer(
 
-                amount=amount,
+                amount=
+                    amount,
 
-                bank_code=bank_code,
+                bank_code=
+                    bank_code,
 
                 account_number=
                     account_number,
@@ -2414,7 +2490,6 @@ def withdrawal_page():
 
     except TypeError:
 
-        # Compatibility fallback
         try:
 
             transfer_result = (
@@ -2473,7 +2548,6 @@ def withdrawal_page():
 
     except TypeError:
 
-        # Compatibility with older signature
         try:
 
             process_transfer_result(
@@ -2707,7 +2781,10 @@ def withdrawal_status_page(
                     "Unable to process refreshed transfer result"
                 )
 
-            # Reload latest withdrawal
+            # ------------------------------------------------
+            # RELOAD LATEST WITHDRAWAL
+            # ------------------------------------------------
+
             withdrawal = (
                 get_withdrawal_by_id(
                     withdrawal_id
@@ -2745,7 +2822,8 @@ def withdrawal_status_page(
 
         WITHDRAWAL_STATUS_HTML,
 
-        withdrawal=withdrawal,
+        withdrawal=
+            withdrawal,
 
         csrf_token=
             _csrf_token(),
@@ -2757,3 +2835,16 @@ def withdrawal_status_page(
             _mask_account,
 
     )
+
+
+# ============================================================
+# COMPATIBILITY ALIASES
+#
+# These aliases help main.py if it imports these names.
+# ============================================================
+
+promoter_login = promoter_login_page
+
+promoter_logout = promoter_logout_page
+
+withdrawal_status = withdrawal_status_page
