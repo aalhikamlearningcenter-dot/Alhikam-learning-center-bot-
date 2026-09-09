@@ -99,6 +99,7 @@ from referral_dashboard import (
 # ============================================================
 
 try:
+
     from admin_referral import (
         admin_referral_page,
         admin_login_page,
@@ -110,6 +111,7 @@ try:
     ADMIN_MODULE_AVAILABLE = True
 
 except ImportError:
+
     ADMIN_MODULE_AVAILABLE = False
 
 
@@ -157,6 +159,7 @@ PORT = int(
 
 MAIN_GROUP_ID = -1004384506380
 
+
 PUBLIC_PAYMENT_PAGE = (
     f"{RAILWAY_URL}/pay"
 )
@@ -171,6 +174,7 @@ TELEGRAM_BOT_USERNAME = "Alhikamcenterbot"
 # ============================================================
 
 PAYMENT_PLANS = {
+
     "1": {
         "name": "1 Month",
         "amount": 3600,
@@ -200,11 +204,13 @@ PAYMENT_PLANS = {
         "name": "6 Months",
         "amount": 20000,
     },
+
 }
 
 
 # ============================================================
 # TEMPORARY STORAGE
+#
 # NOTE:
 # Railway restarts clear this memory.
 # Database remains the source of truth.
@@ -238,12 +244,17 @@ web_app.secret_key = SECRET_KEY
 
 
 web_app.config.update(
+
     SESSION_COOKIE_HTTPONLY=True,
+
     SESSION_COOKIE_SAMESITE="Lax",
+
     SESSION_COOKIE_SECURE=RAILWAY_URL.startswith(
         "https://"
     ),
+
     PERMANENT_SESSION_LIFETIME=86400,
+
 )
 
 
@@ -258,17 +269,25 @@ web_app.config.update(
 def home():
 
     return jsonify(
+
         {
+
             "status": "online",
-            "bot": "ALHIKAM Learning Center Bot",
-            "payment_page": PUBLIC_PAYMENT_PAGE,
-            "webhook": (
-                f"{RAILWAY_URL}/webhook/flutterwave"
-            ),
-            "telegram_login": (
-                f"{RAILWAY_URL}/telegram-auth"
-            ),
+
+            "bot":
+                "ALHIKAM Learning Center Bot",
+
+            "payment_page":
+                PUBLIC_PAYMENT_PAGE,
+
+            "webhook":
+                f"{RAILWAY_URL}/webhook/flutterwave",
+
+            "telegram_login":
+                f"{RAILWAY_URL}/telegram-login",
+
         }
+
     )
 
 
@@ -294,7 +313,9 @@ def health():
 # ============================================================
 
 PAYMENT_PAGE_HTML = """
+
 <!DOCTYPE html>
+
 <html>
 
 <head>
@@ -302,73 +323,122 @@ PAYMENT_PAGE_HTML = """
 <meta name="viewport"
       content="width=device-width, initial-scale=1">
 
-<title>ALHIKAM Learning Center Payment</title>
+<title>
+ALHIKAM Learning Center Payment
+</title>
 
 <style>
 
 body{
+
     font-family:Arial,sans-serif;
+
     background:#f4f7f6;
+
     margin:0;
+
     padding:20px
+
 }
 
 .container{
+
     max-width:520px;
+
     margin:30px auto;
+
     background:white;
+
     padding:25px;
+
     border-radius:16px;
+
     box-shadow:0 4px 18px rgba(0,0,0,.10)
+
 }
 
 h1{
+
     color:#087f5b;
+
     text-align:center
+
 }
 
 .subtitle{
+
     text-align:center;
+
     color:#555;
+
     margin-bottom:25px
+
 }
 
 .plan{
+
     border:1px solid #ddd;
+
     border-radius:12px;
+
     padding:15px;
+
     margin:10px 0
+
 }
 
 .plan label{
+
     display:block;
+
     cursor:pointer
+
 }
 
 .amount{
+
     font-weight:bold;
+
     font-size:18px;
+
     color:#087f5b
+
 }
 
 button{
+
     width:100%;
+
     padding:15px;
+
     margin-top:20px;
+
     border:none;
+
     border-radius:10px;
+
     background:#087f5b;
+
     color:white;
+
     font-size:17px;
+
     font-weight:bold;
+
     cursor:pointer
+
 }
 
 .note{
+
     text-align:center;
+
     font-size:13px;
+
     color:#777;
+
     margin-top:18px
+
 }
 
 </style>
@@ -379,10 +449,14 @@ button{
 
 <div class="container">
 
-<h1>🎓 ALHIKAM Learning Center</h1>
+<h1>
+🎓 ALHIKAM Learning Center
+</h1>
 
 <div class="subtitle">
+
 Choose your learning duration and continue to secure payment.
+
 </div>
 
 <form method="POST"
@@ -410,7 +484,9 @@ Choose your learning duration and continue to secure payment.
 <br>
 
 <span class="amount">
+
 ₦{{ "{:,}".format(plan.amount) }}
+
 </span>
 
 </label>
@@ -420,7 +496,9 @@ Choose your learning duration and continue to secure payment.
 {% endfor %}
 
 <button type="submit">
+
 💳 CONTINUE TO SECURE PAYMENT
+
 </button>
 
 </form>
@@ -436,6 +514,7 @@ After successful payment, you will connect your Telegram account and complete re
 </body>
 
 </html>
+
 """
 
 
@@ -446,28 +525,37 @@ After successful payment, you will connect your Telegram account and complete re
 def payment_page():
 
     referral_code = (
+
         request.args.get(
             "ref",
             "",
         )
         or ""
+
     ).strip()
 
 
     if (
+
         referral_code
+
         and not get_promoter_by_referral_code(
             referral_code
         )
+
     ):
 
         referral_code = ""
 
 
     return render_template_string(
+
         PAYMENT_PAGE_HTML,
+
         plans=PAYMENT_PLANS,
+
         referral_code=referral_code,
+
     )
 
 
@@ -490,10 +578,12 @@ def create_payment():
 
 
     plan_number = (
+
         request.form.get(
             "plan"
         )
         or ""
+
     ).strip()
 
 
@@ -511,10 +601,12 @@ def create_payment():
 
 
     referral_code = (
+
         request.form.get(
             "referral_code"
         )
         or ""
+
     ).strip()
 
 
@@ -536,6 +628,7 @@ def create_payment():
 
     payment_token = uuid.uuid4().hex
 
+
     tx_ref = (
         f"ALHIKAM_{payment_token}"
     )
@@ -543,35 +636,47 @@ def create_payment():
 
     payment = {
 
-        "tx_ref": tx_ref,
+        "tx_ref":
+            tx_ref,
 
-        "plan": plan_number,
+        "plan":
+            plan_number,
 
-        "plan_name": plan["name"],
+        "plan_name":
+            plan["name"],
 
-        "amount": plan["amount"],
+        "amount":
+            plan["amount"],
 
-        "status": "pending",
+        "status":
+            "pending",
 
-        "payment_status": "Pending",
+        "payment_status":
+            "Pending",
 
-        "referral_code": referral_code,
+        "referral_code":
+            referral_code,
 
-        "promoter_id": (
-            promoter["id"]
-            if promoter
-            else None
-        ),
+        "promoter_id":
+            (
+                promoter["id"]
+                if promoter
+                else None
+            ),
 
-        "promoter_name": (
-            promoter["full_name"]
-            if promoter
-            else ""
-        ),
+        "promoter_name":
+            (
+                promoter["full_name"]
+                if promoter
+                else ""
+            ),
 
-        "commission": 0,
+        "commission":
+            0,
 
-        "registration_completed": 0,
+        "registration_completed":
+            0,
+
     }
 
 
@@ -587,25 +692,32 @@ def create_payment():
 
     payload = {
 
-        "tx_ref": tx_ref,
+        "tx_ref":
+            tx_ref,
 
-        "amount": plan["amount"],
+        "amount":
+            plan["amount"],
 
-        "currency": "NGN",
+        "currency":
+            "NGN",
 
-        "redirect_url": (
-            f"{RAILWAY_URL}/payment-complete/"
-            f"{payment_token}"
-        ),
+        "redirect_url":
+            (
+                f"{RAILWAY_URL}/payment-complete/"
+                f"{payment_token}"
+            ),
 
         "customer": {
 
-            "email": (
-                f"student_{payment_token}"
-                "@alhikam.com"
-            ),
+            "email":
+                (
+                    f"student_{payment_token}"
+                    "@alhikam.com"
+                ),
 
-            "name": "ALHIKAM Student",
+            "name":
+                "ALHIKAM Student",
+
         },
 
         "customizations": {
@@ -616,8 +728,11 @@ def create_payment():
             "description":
                 f"{plan['name']} Training",
 
-            "logo": "",
+            "logo":
+                "",
+
         },
+
     }
 
 
@@ -628,6 +743,7 @@ def create_payment():
 
         "Content-Type":
             "application/json",
+
     }
 
 
@@ -642,6 +758,7 @@ def create_payment():
             headers=headers,
 
             timeout=30,
+
         )
 
 
@@ -649,8 +766,11 @@ def create_payment():
 
 
         logger.info(
+
             "Flutterwave checkout status=%s",
+
             response.status_code,
+
         )
 
 
@@ -665,12 +785,14 @@ def create_payment():
         ):
 
             payment_link = (
+
                 result.get(
                     "data",
                     {}
                 ).get(
                     "link"
                 )
+
             )
 
 
@@ -750,14 +872,17 @@ def _payment_from_token(
             )
 
             or ""
+
         )
 
 
         data["amount"] = float(
+
             data.get(
                 "amount"
             )
             or 0
+
         )
 
 
@@ -781,9 +906,7 @@ def _payment_from_token(
 
         }:
 
-            data["status"] = (
-                "successful"
-            )
+            data["status"] = "successful"
 
 
         data[
@@ -794,6 +917,7 @@ def _payment_from_token(
                 "registration_completed"
             )
             or 0
+
         )
 
 
@@ -830,6 +954,7 @@ def _payment_from_token(
 
                 "last_name":
                     " ".join(
+
                         (
                             data.get(
                                 "telegram_name"
@@ -838,7 +963,9 @@ def _payment_from_token(
                         ).split(
                             " "
                         )[1:]
+
                     ),
+
             }
 
 
@@ -861,9 +988,11 @@ def _commission_for_amount(
     try:
 
         amount = int(
+
             Decimal(
                 str(amount)
             )
+
         )
 
     except Exception:
@@ -873,17 +1002,23 @@ def _commission_for_amount(
 
     return {
 
-        3600: 200,
+        3600:
+            200,
 
-        6800: 500,
+        6800:
+            500,
 
-        10000: 800,
+        10000:
+            800,
 
-        13600: 1200,
+        13600:
+            1200,
 
-        16500: 1800,
+        16500:
+            1800,
 
-        20000: 2500,
+        20000:
+            2500,
 
     }.get(
         amount,
@@ -912,8 +1047,13 @@ def payment_complete(
 
         return (
             """
-            <h2>Payment Reference Not Found</h2>
-            <p>Please contact ALHIKAM Learning Center.</p>
+            <h2>
+            Payment Reference Not Found
+            </h2>
+
+            <p>
+            Please contact ALHIKAM Learning Center.
+            </p>
             """,
             404,
         )
@@ -924,6 +1064,7 @@ def payment_complete(
     ) != "successful":
 
         return f"""
+
         <html>
 
         <head>
@@ -934,9 +1075,13 @@ def payment_complete(
         <style>
 
         body{{
+
             font-family:Arial;
+
             text-align:center;
+
             padding:50px 20px
+
         }}
 
         </style>
@@ -945,9 +1090,13 @@ def payment_complete(
 
         <body>
 
-        <h2>⏳ Payment Verification</h2>
+        <h2>
+        ⏳ Payment Verification
+        </h2>
 
-        <p>Your payment is being verified.</p>
+        <p>
+        Your payment is being verified.
+        </p>
 
         <p>
         Please wait a moment and refresh this page.
@@ -960,11 +1109,12 @@ def payment_complete(
         </body>
 
         </html>
+
         """
 
 
     return redirect(
-        f"/register/{payment_token}"
+        f"/telegram-login/{payment_token}"
     )
 
 
@@ -973,7 +1123,9 @@ def payment_complete(
 # ============================================================
 
 TELEGRAM_LOGIN_HTML = """
+
 <!DOCTYPE html>
+
 <html>
 
 <head>
@@ -981,39 +1133,62 @@ TELEGRAM_LOGIN_HTML = """
 <meta name="viewport"
       content="width=device-width, initial-scale=1">
 
-<title>Connect Telegram</title>
+<title>
+Connect Telegram
+</title>
 
 <style>
 
 body{
+
     font-family:Arial,sans-serif;
+
     background:#f4f7f6;
+
     padding:20px;
+
 }
 
 .container{
+
     max-width:520px;
+
     margin:30px auto;
+
     background:white;
+
     padding:25px;
+
     border-radius:16px;
+
     box-shadow:0 4px 18px rgba(0,0,0,.10);
+
     text-align:center;
+
 }
 
 h1{
+
     color:#087f5b
+
 }
 
 .info{
+
     background:#eef8f4;
+
     padding:15px;
+
     border-radius:10px;
+
     margin:20px 0;
+
     text-align:left;
+
 }
 
 </style>
+
 
 <script async
         src="https://telegram.org/js/telegram-widget.js?22"
@@ -1062,6 +1237,7 @@ function onTelegramAuth(user) {
 
         hash:
             user.hash
+
     };
 
 
@@ -1083,6 +1259,7 @@ function onTelegramAuth(user) {
         form.appendChild(
             input
         );
+
     }
 
 
@@ -1090,18 +1267,23 @@ function onTelegramAuth(user) {
         form
     );
 
+
     form.submit();
+
 }
 
 </script>
 
 </head>
 
+
 <body>
 
 <div class="container">
 
-<h1>🔗 Connect Your Telegram</h1>
+<h1>
+🔗 Connect Your Telegram
+</h1>
 
 
 <div class="info">
@@ -1124,28 +1306,94 @@ Amount:
 
 
 <p>
+
 To continue registration, connect the Telegram account you will use to receive your ALHIKAM class invite.
+
 </p>
 
 
 <p>
+
 <strong>
 ⚠️ Do not enter your Telegram ID manually.
 </strong>
+
 </p>
 
 
 <p>
-Click the Telegram button below to connect your account.
-</p>
 
+Click the Telegram button below to connect your account.
+
+</p>
 
 </div>
 
 </body>
 
 </html>
+
 """
+
+
+# ============================================================
+# TELEGRAM LOGIN ROUTE
+# ============================================================
+
+@web_app.route(
+    "/telegram-login/<payment_token>",
+    methods=["GET"],
+)
+def telegram_login_page(
+    payment_token
+):
+
+    payment = _payment_from_token(
+        payment_token
+    )
+
+
+    if not payment:
+
+        return (
+            "Payment reference not found.",
+            404,
+        )
+
+
+    if payment.get(
+        "status"
+    ) != "successful":
+
+        return (
+            "Payment has not been verified.",
+            400,
+        )
+
+
+    return render_template_string(
+
+        TELEGRAM_LOGIN_HTML,
+
+        bot_username=
+            TELEGRAM_BOT_USERNAME,
+
+        payment_token=
+            payment_token,
+
+        plan_name=
+            payment.get(
+                "plan_name",
+                ""
+            ),
+
+        amount=
+            payment.get(
+                "amount",
+                0
+            ),
+
+    )
 
 
 # ============================================================
@@ -1166,25 +1414,35 @@ def verify_telegram_login(
         ""
     )
 
+
     auth_date = str(
+
         data.get(
             "auth_date",
             ""
         )
+
     )
 
+
     telegram_id = str(
+
         data.get(
             "id",
             ""
         )
+
     )
 
 
     if (
+
         not received_hash
+
         or not auth_date
+
         or not telegram_id
+
     ):
 
         return False
@@ -1193,11 +1451,17 @@ def verify_telegram_login(
     try:
 
         if (
+
             abs(
+
                 int(time.time())
+
                 - int(auth_date)
+
             )
+
             > 3600
+
         ):
 
             return False
@@ -1238,6 +1502,7 @@ def verify_telegram_login(
 
         "auth_date":
             auth_date,
+
     }
 
 
@@ -1297,11 +1562,13 @@ def verify_telegram_login(
 def telegram_auth():
 
     payment_token = (
+
         request.form.get(
             "payment_token",
             ""
         )
-    )
+
+    ).strip()
 
 
     payment = _payment_from_token(
@@ -1370,6 +1637,7 @@ def telegram_auth():
                 "hash",
                 ""
             ),
+
     }
 
 
@@ -1404,10 +1672,12 @@ def telegram_auth():
 
         "last_name":
             data["last_name"],
+
     }
 
 
     save_payment(
+
         {
 
             "tx_ref":
@@ -1474,7 +1744,9 @@ def telegram_auth():
                     "registration_completed",
                     0
                 ),
+
         }
+
     )
 
 
@@ -1488,7 +1760,9 @@ def telegram_auth():
 # ============================================================
 
 REGISTRATION_HTML = """
+
 <!DOCTYPE html>
+
 <html>
 
 <head>
@@ -1503,57 +1777,97 @@ ALHIKAM Student Registration
 <style>
 
 body{
+
     font-family:Arial;
+
     background:#f4f7f6;
+
     padding:20px
+
 }
 
 .container{
+
     max-width:520px;
+
     margin:30px auto;
+
     background:white;
+
     padding:25px;
+
     border-radius:16px;
+
     box-shadow:0 4px 18px rgba(0,0,0,.10)
+
 }
 
 h1{
+
     color:#087f5b;
+
     text-align:center
+
 }
 
 input,select{
+
     width:100%;
+
     padding:13px;
+
     margin:8px 0 15px;
+
     border:1px solid #ddd;
+
     border-radius:8px;
+
     box-sizing:border-box
+
 }
 
 button{
+
     width:100%;
+
     padding:15px;
+
     background:#087f5b;
+
     color:white;
+
     border:none;
+
     border-radius:10px;
+
     font-size:17px;
+
     font-weight:bold
+
 }
 
 .info{
+
     background:#eef8f4;
+
     padding:15px;
+
     border-radius:10px;
+
     margin-bottom:20px
+
 }
 
 .connected{
+
     background:#e8f5e9;
+
     padding:12px;
+
     border-radius:8px;
+
     margin-bottom:20px
+
 }
 
 </style>
@@ -1608,7 +1922,6 @@ Your Telegram ID has been verified automatically.
 
 
 <form method="POST">
-
 
 <input
     type="hidden"
@@ -1687,9 +2000,10 @@ CBT Training
 
 
 <button type="submit">
-✅ COMPLETE REGISTRATION
-</button>
 
+✅ COMPLETE REGISTRATION
+
+</button>
 
 </form>
 
@@ -1698,6 +2012,7 @@ CBT Training
 </body>
 
 </html>
+
 """
 
 
@@ -1774,7 +2089,7 @@ def registration_form(
     if not telegram_auth:
 
         return redirect(
-            f"/register/{payment_token}"
+            f"/telegram-login/{payment_token}"
         )
 
 
@@ -1783,15 +2098,15 @@ def registration_form(
     ):
 
         return (
-            """
-            <h2>
-            Registration Already Completed
-            </h2>
 
-            <p>
-            Your Telegram class access has already been processed.
-            </p>
-            """
+            "<h2>"
+            "Registration Already Completed"
+            "</h2>"
+
+            "<p>"
+            "Your Telegram class access has already been processed."
+            "</p>"
+
         )
 
 
@@ -1801,22 +2116,23 @@ def registration_form(
 
             REGISTRATION_HTML,
 
-            plan_name:
+            plan_name=
                 payment["plan_name"],
 
-            amount:
+            amount=
                 payment["amount"],
 
-            telegram_username:
+            telegram_username=
                 telegram_auth.get(
                     "telegram_username",
                     "",
                 ),
 
-            csrf_token:
+            csrf_token=
                 registration_csrf(
                     payment_token
                 ),
+
         )
 
 
@@ -1846,58 +2162,81 @@ def registration_form(
     ):
 
         return (
+
             "Invalid registration request. "
             "Please refresh and try again.",
+
             400,
+
         )
 
 
     full_name = (
+
         request.form.get(
             "full_name",
             ""
         )
+
         .strip()
+
     )
 
 
     phone = (
+
         request.form.get(
             "phone",
             ""
         )
+
         .strip()
+
     )
 
 
     email = (
+
         request.form.get(
             "email",
             ""
         )
+
         .strip()
+
     )
 
 
     course = (
+
         request.form.get(
             "course",
             ""
         )
+
         .strip()
+
     )
 
 
     if (
+
         not full_name
+
         or not phone
+
         or not email
+
         or not course
+
     ):
 
         return (
+
             "Please complete all required fields.",
+
             400,
+
         )
 
 
@@ -1909,9 +2248,10 @@ def registration_form(
             ],
 
         "telegram_username":
-            telegram_auth[
-                "telegram_username"
-            ],
+            telegram_auth.get(
+                "telegram_username",
+                "",
+            ),
 
         "full_name":
             full_name,
@@ -1939,6 +2279,7 @@ def registration_form(
             payment[
                 "tx_ref"
             ],
+
     }
 
 
@@ -1950,9 +2291,12 @@ def registration_form(
     if not saved:
 
         return (
+
             "Registration could not be saved. "
             "Please try again.",
+
             500,
+
         )
 
 
@@ -1964,7 +2308,9 @@ def registration_form(
     if not invite_link:
 
         return (
+
             """
+
             <h2>
             Registration Saved ✅
             </h2>
@@ -1977,8 +2323,11 @@ def registration_form(
             <p>
             Please contact ALHIKAM Learning Center.
             </p>
+
             """,
+
             500,
+
         )
 
 
@@ -2049,7 +2398,9 @@ def registration_form(
                 payment.get(
                     "promoter_id"
                 ),
+
         }
+
     )
 
 
@@ -2060,8 +2411,15 @@ def registration_form(
         )
 
         return (
-            "<h2>Registration Already Completed</h2>"
-            "<p>Your registration has already been processed.</p>"
+
+            "<h2>"
+            "Registration Already Completed"
+            "</h2>"
+
+            "<p>"
+            "Your registration has already been processed."
+            "</p>"
+
         )
 
 
@@ -2086,6 +2444,7 @@ def registration_form(
 
 
     save_payment(
+
         {
 
             "tx_ref":
@@ -2156,14 +2515,18 @@ def registration_form(
 
             "registration_completed":
                 1,
+
         }
+
     )
 
 
     telegram_id = int(
+
         telegram_auth[
             "telegram_id"
         ]
+
     )
 
 
@@ -2194,6 +2557,7 @@ def registration_form(
 
 
     return f"""
+
     <html>
 
     <head>
@@ -2204,9 +2568,13 @@ def registration_form(
     <style>
 
     body{{
+
         font-family:Arial;
+
         text-align:center;
+
         padding:40px 20px
+
     }}
 
     </style>
@@ -2220,8 +2588,10 @@ def registration_form(
     </h1>
 
     <p>
+
     Welcome to ALHIKAM Learning Center,
     <strong>{safe_full_name}</strong>.
+
     </p>
 
     <p>
@@ -2229,17 +2599,22 @@ def registration_form(
     </p>
 
     <p>
+
     ✅ Your unique Telegram class invite has been sent to your connected Telegram account.
+
     </p>
 
     <p>
+
     Please open Telegram and check the message from
     <strong>@Alhikamcenterbot</strong>.
+
     </p>
 
     </body>
 
     </html>
+
     """
 
 
@@ -2266,6 +2641,7 @@ def save_registration_to_google_sheets(
             json=data,
 
             timeout=20,
+
         )
 
 
@@ -2321,6 +2697,7 @@ def create_unique_invite_link(
         async def create_link():
 
             return await (
+
                 telegram_bot_app.bot
                 .create_chat_invite_link(
 
@@ -2331,7 +2708,9 @@ def create_unique_invite_link(
                     name=(
                         f"ALHIKAM-{payment_token[:10]}"
                     ),
+
                 )
+
             )
 
 
@@ -2384,6 +2763,7 @@ def send_registration_access(
                 invite_link,
 
             )
+
         )
 
 
@@ -2468,6 +2848,7 @@ async def send_access_message(
                 ]
 
             ),
+
         )
 
 
@@ -2516,6 +2897,7 @@ def verify_flutterwave_transaction(
 
             "Content-Type":
                 "application/json",
+
         }
 
 
@@ -2526,6 +2908,7 @@ def verify_flutterwave_transaction(
             headers=headers,
 
             timeout=30,
+
         )
 
 
@@ -2591,7 +2974,8 @@ def flutterwave_webhook():
 
             {
 
-                "status": "error",
+                "status":
+                    "error",
 
                 "message":
                     "Webhook secret hash missing",
@@ -2621,7 +3005,8 @@ def flutterwave_webhook():
 
             {
 
-                "status": "error",
+                "status":
+                    "error",
 
                 "message":
                     "Invalid verification hash",
@@ -2637,17 +3022,21 @@ def flutterwave_webhook():
 
 
     payment_data = (
+
         data.get(
             "data"
         )
         or {}
+
     )
 
 
     transaction_id = (
+
         payment_data.get(
             "id"
         )
+
     )
 
 
@@ -2662,15 +3051,19 @@ def flutterwave_webhook():
 
 
     if (
+
         not transaction_id
+
         or not callback_tx_ref
+
     ):
 
         return jsonify(
 
             {
 
-                "status": "error",
+                "status":
+                    "error",
 
                 "message":
                     "Missing transaction data",
@@ -2681,7 +3074,9 @@ def flutterwave_webhook():
 
 
     verified = verify_flutterwave_transaction(
+
         transaction_id
+
     )
 
 
@@ -2691,7 +3086,8 @@ def flutterwave_webhook():
 
             {
 
-                "status": "accepted",
+                "status":
+                    "accepted",
 
                 "message":
                     "Verification unavailable; retry later",
@@ -2735,7 +3131,8 @@ def flutterwave_webhook():
 
         return jsonify(
             {
-                "status": "ignored"
+                "status":
+                    "ignored"
             }
         ), 200
 
@@ -2752,7 +3149,8 @@ def flutterwave_webhook():
 
             {
 
-                "status": "error",
+                "status":
+                    "error",
 
                 "message":
                     "Transaction verification mismatch",
@@ -2770,7 +3168,8 @@ def flutterwave_webhook():
 
             {
 
-                "status": "error",
+                "status":
+                    "error",
 
                 "message":
                     "Invalid transaction reference",
@@ -2796,7 +3195,8 @@ def flutterwave_webhook():
 
             {
 
-                "status": "accepted",
+                "status":
+                    "accepted",
 
                 "message":
                     "Payment record not found yet",
@@ -2815,6 +3215,7 @@ def flutterwave_webhook():
                     "amount"
                 )
             )
+
         )
 
 
@@ -2825,6 +3226,7 @@ def flutterwave_webhook():
                     "amount"
                 )
             )
+
         )
 
 
@@ -2834,7 +3236,8 @@ def flutterwave_webhook():
 
             {
 
-                "status": "error",
+                "status":
+                    "error",
 
                 "message":
                     "Invalid amount",
@@ -2859,7 +3262,8 @@ def flutterwave_webhook():
 
             {
 
-                "status": "error",
+                "status":
+                    "error",
 
                 "message":
                     "Amount mismatch",
@@ -2976,13 +3380,17 @@ def flutterwave_webhook():
 
             "payment_plan":
 
-                payment.get(
-                    "plan_name"
-                )
+                (
 
-                or payment.get(
-                    "payment_plan",
-                    "",
+                    payment.get(
+                        "plan_name"
+                    )
+
+                    or payment.get(
+                        "payment_plan",
+                        "",
+                    )
+
                 ),
 
             "amount":
@@ -2996,25 +3404,31 @@ def flutterwave_webhook():
             "referral_code":
 
                 (
+
                     referral_code
                     if promoter
                     else ""
+
                 ),
 
             "promoter_id":
 
                 (
+
                     promoter["id"]
                     if promoter
                     else None
+
                 ),
 
             "promoter_name":
 
                 (
+
                     promoter["full_name"]
                     if promoter
                     else ""
+
                 ),
 
             "commission":
@@ -3043,7 +3457,9 @@ def flutterwave_webhook():
                     "registration_completed",
                     0,
                 ),
+
         }
+
     )
 
 
@@ -3068,21 +3484,28 @@ def flutterwave_webhook():
             transaction_id,
 
         "promoter_id":
+
             (
+
                 promoter["id"]
                 if promoter
                 else None
+
             ),
 
         "promoter_name":
+
             (
+
                 promoter["full_name"]
                 if promoter
                 else ""
+
             ),
 
         "commission":
             commission_amount,
+
     }
 
 
@@ -3234,31 +3657,40 @@ def flutterwave_transfer_callback():
         if transfer_id:
 
             withdrawal = (
+
                 get_withdrawal_by_transfer_id(
                     transfer_id
                 )
+
             )
 
 
         if (
+
             not withdrawal
+
             and callback_reference
+
         ):
 
             withdrawal = (
+
                 get_withdrawal_by_transfer_reference(
                     callback_reference
                 )
+
             )
 
 
         if not withdrawal:
 
             return jsonify(
+
                 {
                     "status":
                         "accepted"
                 }
+
             ), 202
 
 
@@ -3294,37 +3726,45 @@ def flutterwave_transfer_callback():
 
 
             return jsonify(
+
                 {
                     "status":
                         "accepted"
                 }
+
             ), 202
 
 
         if transfer_id:
 
             verified = (
+
                 get_flutterwave_transfer_status(
                     transfer_id
                 )
+
             )
 
         else:
 
             verified = (
+
                 get_flutterwave_transfer_status_by_reference(
                     local_reference
                 )
+
             )
 
 
         if not verified:
 
             return jsonify(
+
                 {
                     "status":
                         "accepted"
                 }
+
             ), 202
 
 
@@ -3360,10 +3800,12 @@ def flutterwave_transfer_callback():
 
 
             return jsonify(
+
                 {
                     "status":
                         "accepted"
                 }
+
             ), 202
 
 
@@ -3378,6 +3820,7 @@ def flutterwave_transfer_callback():
                 ),
 
             transfer_id=
+
                 verified.get(
                     "transfer_id"
                 )
@@ -3387,6 +3830,7 @@ def flutterwave_transfer_callback():
 
                 verified_reference
                 or local_reference
+
             ),
 
             message=
@@ -3398,10 +3842,12 @@ def flutterwave_transfer_callback():
 
 
         return jsonify(
+
             {
                 "status":
                     "accepted"
             }
+
         ), 200
 
 
@@ -3413,10 +3859,12 @@ def flutterwave_transfer_callback():
 
 
         return jsonify(
+
             {
                 "status":
                     "accepted"
             }
+
         ), 202
 
 
@@ -3805,6 +4253,7 @@ async def menu_handler(
 
     text = update.message.text
 
+
     step = context.user_data.get(
         "step"
     )
@@ -3819,6 +4268,7 @@ async def menu_handler(
         context.user_data[
             "full_name"
         ] = text
+
 
         context.user_data[
             "step"
@@ -3840,6 +4290,7 @@ async def menu_handler(
             "phone"
         ] = text
 
+
         context.user_data[
             "step"
         ] = "email"
@@ -3859,6 +4310,7 @@ async def menu_handler(
         context.user_data[
             "email"
         ] = text
+
 
         context.user_data[
             "step"
@@ -3915,6 +4367,7 @@ async def menu_handler(
                     "course",
                     "",
                 ),
+
         }
 
 
@@ -3954,6 +4407,7 @@ async def menu_handler(
     if text == "👤 Student Registration":
 
         context.user_data.clear()
+
 
         context.user_data[
             "step"
