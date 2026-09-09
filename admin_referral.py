@@ -1,14 +1,9 @@
-==========================================================
-
-ALHIKAM LEARNING CENTER V2
-
-admin_referral.py
-
-
-
-SECURE ADMIN REFERRAL MANAGEMENT
-
-==========================================================
+# ==========================================================
+# ALHIKAM LEARNING CENTER V2
+# admin_referral.py
+#
+# SECURE ADMIN REFERRAL MANAGEMENT
+# ==========================================================
 
 import os
 import secrets
@@ -16,1276 +11,1297 @@ import logging
 from functools import wraps
 
 from flask import (
-request,
-redirect,
-url_for,
-render_template_string,
-session,
-abort,
+    request,
+    redirect,
+    url_for,
+    render_template_string,
+    session,
+    abort,
 )
 
 from database import (
-get_all_promoters,
-get_all_withdrawals,
-add_promoter,
-get_withdrawal_by_id,
-update_withdrawal_status,
-set_promoter_password,
+    get_all_promoters,
+    get_all_withdrawals,
+    add_promoter,
+    get_withdrawal_by_id,
+    update_withdrawal_status,
+    set_promoter_password,
 )
 
 from transfer import (
-get_flutterwave_transfer_status,
+    get_flutterwave_transfer_status,
 )
 
-==========================================================
 
-LOGGING
+# ==========================================================
+# LOGGING
+# ==========================================================
 
-==========================================================
+logger = logging.getLogger(__name__)
 
-logger = logging.getLogger(name)
 
-==========================================================
-
-CONFIG
-
-==========================================================
+# ==========================================================
+# CONFIG
+# ==========================================================
 
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 
 ADMIN_SESSION_KEY = "alhikam_admin_logged_in"
 ADMIN_CSRF_KEY = "alhikam_admin_csrf"
 
-==========================================================
 
-ADMIN PASSWORD CONFIG CHECK
-
-==========================================================
+# ==========================================================
+# ADMIN PASSWORD CONFIG CHECK
+# ==========================================================
 
 if not ADMIN_PASSWORD:
-logger.warning(
-"ADMIN_PASSWORD is not configured."
-)
+    logger.warning(
+        "ADMIN_PASSWORD is not configured."
+    )
 
-==========================================================
 
-ADMIN SESSION CHECK
-
-==========================================================
+# ==========================================================
+# ADMIN SESSION CHECK
+# ==========================================================
 
 def admin_logged_in():
-return session.get(ADMIN_SESSION_KEY) is True
+    return session.get(ADMIN_SESSION_KEY) is True
+
 
 def admin_required(view):
-@wraps(view)
-def wrapped(*args, **kwargs):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
 
-if not admin_logged_in():  
-        return redirect(  
-            url_for("admin_login")  
-        )  
+        if not admin_logged_in():
+            return redirect(
+                url_for("admin_login")
+            )
 
-    return view(*args, **kwargs)  
+        return view(*args, **kwargs)
 
-return wrapped
+    return wrapped
 
-==========================================================
 
-CSRF
-
-==========================================================
+# ==========================================================
+# CSRF
+# ==========================================================
 
 def get_admin_csrf():
-token = session.get(ADMIN_CSRF_KEY)
+    token = session.get(ADMIN_CSRF_KEY)
 
-if not token:  
-    token = secrets.token_urlsafe(32)  
-    session[ADMIN_CSRF_KEY] = token  
+    if not token:
+        token = secrets.token_urlsafe(32)
+        session[ADMIN_CSRF_KEY] = token
 
-return token
+    return token
+
 
 def verify_admin_csrf():
 
-token = request.form.get(  
-    "csrf_token",  
-    ""  
-)  
+    token = request.form.get(
+        "csrf_token",
+        ""
+    )
 
-expected = session.get(  
-    ADMIN_CSRF_KEY  
-)  
+    expected = session.get(
+        ADMIN_CSRF_KEY
+    )
 
-if not expected or not token:  
-    abort(403)  
+    if not expected or not token:
+        abort(403)
 
-if not secrets.compare_digest(  
-    str(token),  
-    str(expected)  
-):  
-    abort(403)
+    if not secrets.compare_digest(
+        str(token),
+        str(expected)
+    ):
+        abort(403)
 
-==========================================================
 
-MASK ACCOUNT NUMBER
-
-==========================================================
+# ==========================================================
+# MASK ACCOUNT NUMBER
+# ==========================================================
 
 def mask_account_number(account_number):
 
-account_number = str(  
-    account_number or ""  
-).strip()  
+    account_number = str(
+        account_number or ""
+    ).strip()
 
-if not account_number:  
-    return "**********"  
+    if not account_number:
+        return "**********"
 
-if len(account_number) <= 4:  
-    return "*" * len(account_number)  
+    if len(account_number) <= 4:
+        return "*" * len(account_number)
 
-return (  
-    "*" * (len(account_number) - 4)  
-    + account_number[-4:]  
-)
+    return (
+        "*" * (len(account_number) - 4)
+        + account_number[-4:]
+    )
 
-==========================================================
 
-ADMIN LOGIN
-
-==========================================================
+# ==========================================================
+# ADMIN LOGIN
+# ==========================================================
 
 def admin_login_page():
 
-if request.method == "POST":  
+    if request.method == "POST":
 
-    password = request.form.get(  
-        "password",  
-        ""  
-    ).strip()  
+        password = request.form.get(
+            "password",
+            ""
+        ).strip()
 
-    if (  
-        ADMIN_PASSWORD  
-        and secrets.compare_digest(  
-            password,  
-            ADMIN_PASSWORD  
-        )  
-    ):  
+        if (
+            ADMIN_PASSWORD
+            and secrets.compare_digest(
+                password,
+                ADMIN_PASSWORD
+            )
+        ):
 
-        # Do NOT use session.clear()  
-        # because other application sessions  
-        # may contain payment/registration data.  
+            # Do NOT use session.clear()
+            # because other application sessions
+            # may contain payment/registration data.
 
-        session.pop(  
-            ADMIN_SESSION_KEY,  
-            None  
-        )  
+            session.pop(
+                ADMIN_SESSION_KEY,
+                None
+            )
 
-        session.pop(  
-            ADMIN_CSRF_KEY,  
-            None  
-        )  
+            session.pop(
+                ADMIN_CSRF_KEY,
+                None
+            )
 
-        session[  
-            ADMIN_SESSION_KEY  
-        ] = True  
+            session[
+                ADMIN_SESSION_KEY
+            ] = True
 
-        session[  
-            ADMIN_CSRF_KEY  
-        ] = secrets.token_urlsafe(32)  
+            session[
+                ADMIN_CSRF_KEY
+            ] = secrets.token_urlsafe(32)
 
-        session.permanent = True  
+            session.permanent = True
 
-        return redirect(  
-            url_for("admin_referral")  
-        )  
+            return redirect(
+                url_for("admin_referral")
+            )
 
-    return render_template_string(  
-        ADMIN_LOGIN_HTML,  
-        error="Invalid admin password."  
-    )  
+        return render_template_string(
+            ADMIN_LOGIN_HTML,
+            error="Invalid admin password."
+        )
 
-return render_template_string(  
-    ADMIN_LOGIN_HTML  
-)
+    return render_template_string(
+        ADMIN_LOGIN_HTML
+    )
 
-==========================================================
 
-ADMIN LOGOUT
-
-==========================================================
+# ==========================================================
+# ADMIN LOGOUT
+# ==========================================================
 
 @admin_required
 def admin_logout_page():
 
-verify_admin_csrf()  
+    verify_admin_csrf()
 
-session.pop(  
-    ADMIN_SESSION_KEY,  
-    None  
-)  
+    session.pop(
+        ADMIN_SESSION_KEY,
+        None
+    )
 
-session.pop(  
-    ADMIN_CSRF_KEY,  
-    None  
-)  
+    session.pop(
+        ADMIN_CSRF_KEY,
+        None
+    )
 
-return redirect(  
-    url_for("admin_login")  
-)
+    return redirect(
+        url_for("admin_login")
+    )
 
-==========================================================
 
-ADMIN DASHBOARD
-
-==========================================================
+# ==========================================================
+# ADMIN DASHBOARD
+# ==========================================================
 
 @admin_required
 def admin_referral_page():
 
-promoters = get_all_promoters()  
-withdrawals = get_all_withdrawals()  
+    promoters = get_all_promoters()
+    withdrawals = get_all_withdrawals()
 
-csrf_token = get_admin_csrf()  
+    csrf_token = get_admin_csrf()
 
-safe_withdrawals = []  
+    safe_withdrawals = []
 
-for withdrawal in withdrawals:  
+    for withdrawal in withdrawals:
 
-    item = dict(withdrawal)  
+        item = dict(withdrawal)
 
-    item["masked_account_number"] = (  
-        mask_account_number(  
-            withdrawal.get(  
-                "account_number"  
-            )  
-        )  
-    )  
+        item["masked_account_number"] = (
+            mask_account_number(
+                withdrawal.get(
+                    "account_number"
+                )
+            )
+        )
 
-    safe_withdrawals.append(item)  
+        safe_withdrawals.append(item)
 
-return render_template_string(  
-    ADMIN_DASHBOARD_HTML,  
-    promoters=promoters,  
-    withdrawals=safe_withdrawals,  
-    csrf_token=csrf_token,  
-)
+    return render_template_string(
+        ADMIN_DASHBOARD_HTML,
+        promoters=promoters,
+        withdrawals=safe_withdrawals,
+        csrf_token=csrf_token,
+    )
 
-==========================================================
 
-CREATE PROMOTER
-
-==========================================================
+# ==========================================================
+# CREATE PROMOTER
+# ==========================================================
 
 @admin_required
 def create_promoter_page():
 
-verify_admin_csrf()  
+    verify_admin_csrf()
 
-full_name = request.form.get(  
-    "full_name",  
-    ""  
-).strip()  
+    full_name = request.form.get(
+        "full_name",
+        ""
+    ).strip()
 
-phone = request.form.get(  
-    "phone",  
-    ""  
-).strip()  
+    phone = request.form.get(
+        "phone",
+        ""
+    ).strip()
 
-email = request.form.get(  
-    "email",  
-    ""  
-).strip()  
+    email = request.form.get(
+        "email",
+        ""
+    ).strip()
 
-commission_rate_raw = request.form.get(  
-    "commission_rate",  
-    "20"  
-).strip()  
+    commission_rate_raw = request.form.get(
+        "commission_rate",
+        "20"
+    ).strip()
 
-password = request.form.get(  
-    "password",  
-    ""  
-)  
-
-# ------------------------------------------------------  
-# VALIDATE NAME  
-# ------------------------------------------------------  
-
-if not full_name:  
-    return redirect(  
-        url_for(  
-            "admin_referral",  
-            error="Full name is required."  
-        )  
-    )  
-
-if len(full_name) > 100:  
-    return redirect(  
-        url_for(  
-            "admin_referral",  
-            error="Full name is too long."  
-        )  
-    )  
-
-# ------------------------------------------------------  
-# VALIDATE PASSWORD  
-# ------------------------------------------------------  
-
-if len(password) < 8:  
-    return redirect(  
-        url_for(  
-            "admin_referral",  
-            error=(  
-                "Promoter password must be "  
-                "at least 8 characters."  
-            )  
-        )  
-    )  
-
-if len(password) > 200:  
-    return redirect(  
-        url_for(  
-            "admin_referral",  
-            error="Password is too long."  
-        )  
-    )  
-
-# ------------------------------------------------------  
-# VALIDATE COMMISSION  
-# ------------------------------------------------------  
-
-try:  
-    commission_rate = float(  
-        commission_rate_raw  
-    )  
-except (TypeError, ValueError):  
-
-    return redirect(  
-        url_for(  
-            "admin_referral",  
-            error="Invalid commission rate."  
-        )  
-    )  
-
-if (  
-    commission_rate < 0  
-    or commission_rate > 100  
-):  
-
-    return redirect(  
-        url_for(  
-            "admin_referral",  
-            error=(  
-                "Commission rate must "  
-                "be between 0 and 100."  
-            )  
-        )  
-    )  
-
-# ------------------------------------------------------  
-# CREATE PROMOTER  
-# ------------------------------------------------------  
-
-try:  
-
-    promoter_id = add_promoter(  
-        full_name=full_name,  
-        phone=phone,  
-        email=email,  
-        commission_rate=commission_rate,  
-    )  
-
-    # Password is hashed inside database.py  
-    set_promoter_password(  
-        promoter_id,  
-        password  
-    )  
-
-    logger.info(  
-        "Promoter created successfully: id=%s",  
-        promoter_id  
-    )  
-
-    return redirect(  
-        url_for(  
-            "admin_referral",  
-            success="Promoter created successfully."  
-        )  
-    )  
-
-except Exception as exc:  
-
-    logger.exception(  
-        "Failed to create promoter"  
-    )  
-
-    return redirect(  
-        url_for(  
-            "admin_referral",  
-            error="Unable to create promoter."  
-        )  
+    password = request.form.get(
+        "password",
+        ""
     )
 
-==========================================================
+    # ------------------------------------------------------
+    # VALIDATE NAME
+    # ------------------------------------------------------
 
-REFRESH FLUTTERWAVE WITHDRAWAL STATUS
+    if not full_name:
+        return redirect(
+            url_for(
+                "admin_referral",
+                error="Full name is required."
+            )
+        )
 
-==========================================================
+    if len(full_name) > 100:
+        return redirect(
+            url_for(
+                "admin_referral",
+                error="Full name is too long."
+            )
+        )
+
+    # ------------------------------------------------------
+    # VALIDATE PASSWORD
+    # ------------------------------------------------------
+
+    if len(password) < 8:
+        return redirect(
+            url_for(
+                "admin_referral",
+                error=(
+                    "Promoter password must be "
+                    "at least 8 characters."
+                )
+            )
+        )
+
+    if len(password) > 200:
+        return redirect(
+            url_for(
+                "admin_referral",
+                error="Password is too long."
+            )
+        )
+
+    # ------------------------------------------------------
+    # VALIDATE COMMISSION
+    # ------------------------------------------------------
+
+    try:
+        commission_rate = float(
+            commission_rate_raw
+        )
+
+    except (TypeError, ValueError):
+
+        return redirect(
+            url_for(
+                "admin_referral",
+                error="Invalid commission rate."
+            )
+        )
+
+    if (
+        commission_rate < 0
+        or commission_rate > 100
+    ):
+
+        return redirect(
+            url_for(
+                "admin_referral",
+                error=(
+                    "Commission rate must "
+                    "be between 0 and 100."
+                )
+            )
+        )
+
+    # ------------------------------------------------------
+    # CREATE PROMOTER
+    # ------------------------------------------------------
+
+    try:
+
+        promoter_id = add_promoter(
+            full_name=full_name,
+            phone=phone,
+            email=email,
+            commission_rate=commission_rate,
+        )
+
+        # Password is hashed inside database.py
+        set_promoter_password(
+            promoter_id,
+            password
+        )
+
+        logger.info(
+            "Promoter created successfully: id=%s",
+            promoter_id
+        )
+
+        return redirect(
+            url_for(
+                "admin_referral",
+                success="Promoter created successfully."
+            )
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Failed to create promoter"
+        )
+
+        return redirect(
+            url_for(
+                "admin_referral",
+                error="Unable to create promoter."
+            )
+        )
+
+
+# ==========================================================
+# REFRESH FLUTTERWAVE WITHDRAWAL STATUS
+# ==========================================================
 
 def refresh_withdrawal_status(
-withdrawal_id
+    withdrawal_id
 ):
 
-withdrawal = get_withdrawal_by_id(  
-    withdrawal_id  
-)  
+    withdrawal = get_withdrawal_by_id(
+        withdrawal_id
+    )
 
-if not withdrawal:  
-    return False, "Withdrawal not found."  
+    if not withdrawal:
+        return False, "Withdrawal not found."
 
-transfer_id = withdrawal.get(  
-    "transfer_id"  
-)  
+    transfer_id = withdrawal.get(
+        "transfer_id"
+    )
 
-if not transfer_id:  
+    if not transfer_id:
 
-    return False, (  
-        "This withdrawal does not "  
-        "have a Flutterwave transfer ID."  
-    )  
+        return False, (
+            "This withdrawal does not "
+            "have a Flutterwave transfer ID."
+        )
 
-try:  
+    try:
 
-    result = (  
-        get_flutterwave_transfer_status(  
-            transfer_id  
-        )  
-    )  
+        result = (
+            get_flutterwave_transfer_status(
+                transfer_id
+            )
+        )
 
-except Exception:  
+    except Exception:
 
-    logger.exception(  
-        "Flutterwave status check failed "  
-        "for withdrawal %s",  
-        withdrawal_id  
-    )  
+        logger.exception(
+            "Flutterwave status check failed "
+            "for withdrawal %s",
+            withdrawal_id
+        )
 
-    return False, (  
-        "Unable to verify transfer status."  
-    )  
+        return False, (
+            "Unable to verify transfer status."
+        )
 
-if not result:  
-    return False, (  
-        "Flutterwave returned no status."  
-    )  
+    if not result:
+        return False, (
+            "Flutterwave returned no status."
+        )
 
-status = str(  
-    result.get("status", "")  
-).upper().strip()  
+    status = str(
+        result.get("status", "")
+    ).upper().strip()
 
-message = str(  
-    result.get("message", "")  
-).strip()  
+    message = str(
+        result.get("message", "")
+    ).strip()
 
-# ------------------------------------------------------  
-# SUCCESS  
-# ------------------------------------------------------  
+    # ------------------------------------------------------
+    # SUCCESS
+    # ------------------------------------------------------
 
-if status in (  
-    "SUCCESSFUL",  
-    "SUCCESS",  
-    "COMPLETED",  
-):  
+    if status in (
+        "SUCCESSFUL",
+        "SUCCESS",
+        "COMPLETED",
+    ):
 
-    try:  
+        try:
 
-        update_withdrawal_status(  
-            withdrawal_id,  
-            "successful",  
-            transfer_id=transfer_id,  
-            transfer_status=status,  
-            transfer_message=message,  
-        )  
+            update_withdrawal_status(
+                withdrawal_id,
+                "successful",
+                transfer_id=transfer_id,
+                transfer_status=status,
+                transfer_message=message,
+            )
 
-        return True, (  
-            "Withdrawal confirmed successful."  
-        )  
+            return True, (
+                "Withdrawal confirmed successful."
+            )
 
-    except Exception:  
+        except Exception:
 
-        logger.exception(  
-            "Failed to mark withdrawal %s "  
-            "successful",  
-            withdrawal_id  
-        )  
+            logger.exception(
+                "Failed to mark withdrawal %s "
+                "successful",
+                withdrawal_id
+            )
 
-        return False, (  
-            "Database update failed."  
-        )  
+            return False, (
+                "Database update failed."
+            )
 
-# ------------------------------------------------------  
-# FAILED  
-# ------------------------------------------------------  
+    # ------------------------------------------------------
+    # FAILED
+    # ------------------------------------------------------
 
-if status in (  
-    "FAILED",  
-    "CANCELLED",  
-    "REVERSED",  
-):  
+    if status in (
+        "FAILED",
+        "CANCELLED",
+        "REVERSED",
+    ):
 
-    try:  
+        try:
 
-        update_withdrawal_status(  
-            withdrawal_id,  
-            "failed",  
-            transfer_id=transfer_id,  
-            transfer_status=status,  
-            transfer_message=message,  
-        )  
+            update_withdrawal_status(
+                withdrawal_id,
+                "failed",
+                transfer_id=transfer_id,
+                transfer_status=status,
+                transfer_message=message,
+            )
 
-        return True, (  
-            "Withdrawal failed and balance "  
-            "was returned according to "  
-            "the withdrawal state."  
-        )  
+            return True, (
+                "Withdrawal failed and balance "
+                "was returned according to "
+                "the withdrawal state."
+            )
 
-    except Exception:  
+        except Exception:
 
-        logger.exception(  
-            "Failed to process failed withdrawal %s",  
-            withdrawal_id  
-        )  
+            logger.exception(
+                "Failed to process failed withdrawal %s",
+                withdrawal_id
+            )
 
-        return False, (  
-            "Database update failed."  
-        )  
+            return False, (
+                "Database update failed."
+            )
 
-# ------------------------------------------------------  
-# PROCESSING  
-# ------------------------------------------------------  
+    # ------------------------------------------------------
+    # PROCESSING
+    # ------------------------------------------------------
 
-try:  
+    try:
 
-    update_withdrawal_status(  
-        withdrawal_id,  
-        "processing",  
-        transfer_id=transfer_id,  
-        transfer_status=status,  
-        transfer_message=message,  
-    )  
+        update_withdrawal_status(
+            withdrawal_id,
+            "processing",
+            transfer_id=transfer_id,
+            transfer_status=status,
+            transfer_message=message,
+        )
 
-except Exception:  
+    except Exception:
 
-    logger.exception(  
-        "Failed to update processing withdrawal %s",  
-        withdrawal_id  
-    )  
+        logger.exception(
+            "Failed to update processing withdrawal %s",
+            withdrawal_id
+        )
 
-    return False, (  
-        "Database update failed."  
-    )  
+        return False, (
+            "Database update failed."
+        )
 
-return True, (  
-    f"Transfer is still processing ({status})."  
-)
+    return True, (
+        f"Transfer is still processing ({status})."
+    )
 
-==========================================================
 
-ADMIN WITHDRAWAL STATUS
-
-==========================================================
+# ==========================================================
+# ADMIN WITHDRAWAL STATUS
+# ==========================================================
 
 @admin_required
 def admin_withdrawal_status_page():
 
-verify_admin_csrf()  
+    verify_admin_csrf()
 
-withdrawal_id_raw = request.form.get(  
-    "withdrawal_id",  
-    ""  
-).strip()  
+    withdrawal_id_raw = request.form.get(
+        "withdrawal_id",
+        ""
+    ).strip()
 
-new_status = request.form.get(  
-    "status",  
-    ""  
-).strip().lower()  
+    new_status = request.form.get(
+        "status",
+        ""
+    ).strip().lower()
 
-try:  
-    withdrawal_id = int(  
-        withdrawal_id_raw  
-    )  
-except (TypeError, ValueError):  
+    try:
 
-    return redirect(  
-        url_for(  
-            "admin_referral",  
-            error="Invalid withdrawal ID."  
-        )  
-    )  
+        withdrawal_id = int(
+            withdrawal_id_raw
+        )
 
-withdrawal = get_withdrawal_by_id(  
-    withdrawal_id  
-)  
+    except (TypeError, ValueError):
 
-if not withdrawal:  
+        return redirect(
+            url_for(
+                "admin_referral",
+                error="Invalid withdrawal ID."
+            )
+        )
 
-    return redirect(  
-        url_for(  
-            "admin_referral",  
-            error="Withdrawal not found."  
-        )  
-    )  
+    withdrawal = get_withdrawal_by_id(
+        withdrawal_id
+    )
 
-# ------------------------------------------------------  
-# IMPORTANT:  
-# ADMIN MUST NOT MANUALLY CLAIM SUCCESS.  
-#  
-# SUCCESS/FAILED PAYOUTS MUST BE VERIFIED  
-# AGAINST FLUTTERWAVE.  
-# ------------------------------------------------------  
+    if not withdrawal:
 
-if new_status in (  
-    "successful",  
-    "success",  
-):  
+        return redirect(
+            url_for(
+                "admin_referral",
+                error="Withdrawal not found."
+            )
+        )
 
-    ok, message = (  
-        refresh_withdrawal_status(  
-            withdrawal_id  
-        )  
-    )  
+    # ------------------------------------------------------
+    # IMPORTANT:
+    # ADMIN MUST NOT MANUALLY CLAIM SUCCESS.
+    #
+    # SUCCESS/FAILED PAYOUTS MUST BE VERIFIED
+    # AGAINST FLUTTERWAVE.
+    # ------------------------------------------------------
 
-    return redirect(  
-        url_for(  
-            "admin_referral",  
-            success=message if ok else None,  
-            error=None if ok else message,  
-        )  
-    )  
+    if new_status in (
+        "successful",
+        "success",
+    ):
 
-# ------------------------------------------------------  
-# FAILED  
-# ------------------------------------------------------  
+        ok, message = (
+            refresh_withdrawal_status(
+                withdrawal_id
+            )
+        )
 
-if new_status == "failed":  
+        return redirect(
+            url_for(
+                "admin_referral",
+                success=message if ok else None,
+                error=None if ok else message,
+            )
+        )
 
-    ok, message = (  
-        refresh_withdrawal_status(  
-            withdrawal_id  
-        )  
-    )  
+    # ------------------------------------------------------
+    # FAILED
+    # ------------------------------------------------------
 
-    return redirect(  
-        url_for(  
-            "admin_referral",  
-            success=message if ok else None,  
-            error=None if ok else message,  
-        )  
-    )  
+    if new_status == "failed":
 
-# ------------------------------------------------------  
-# PROCESSING  
-# ------------------------------------------------------  
+        ok, message = (
+            refresh_withdrawal_status(
+                withdrawal_id
+            )
+        )
 
-if new_status == "processing":  
+        return redirect(
+            url_for(
+                "admin_referral",
+                success=message if ok else None,
+                error=None if ok else message,
+            )
+        )
 
-    try:  
+    # ------------------------------------------------------
+    # PROCESSING
+    # ------------------------------------------------------
 
-        update_withdrawal_status(  
-            withdrawal_id,  
-            "processing"  
-        )  
+    if new_status == "processing":
 
-        return redirect(  
-            url_for(  
-                "admin_referral",  
-                success=(  
-                    "Withdrawal marked as processing."  
-                )  
-            )  
-        )  
+        try:
 
-    except Exception:  
+            update_withdrawal_status(
+                withdrawal_id,
+                "processing"
+            )
 
-        logger.exception(  
-            "Failed to mark withdrawal "  
-            "%s as processing",  
-            withdrawal_id  
-        )  
+            return redirect(
+                url_for(
+                    "admin_referral",
+                    success=(
+                        "Withdrawal marked as processing."
+                    )
+                )
+            )
 
-        return redirect(  
-            url_for(  
-                "admin_referral",  
-                error=(  
-                    "Unable to update withdrawal."  
-                )  
-            )  
-        )  
+        except Exception:
 
-# ------------------------------------------------------  
-# CANCELLED  
-# ------------------------------------------------------  
-#  
-# Do NOT allow arbitrary cancellation from the  
-# browser because cancellation may trigger a refund.  
-#  
-# It should only be done through a dedicated,  
-# explicitly authorized workflow.  
-# ------------------------------------------------------  
+            logger.exception(
+                "Failed to mark withdrawal "
+                "%s as processing",
+                withdrawal_id
+            )
 
-if new_status == "cancelled":  
+            return redirect(
+                url_for(
+                    "admin_referral",
+                    error=(
+                        "Unable to update withdrawal."
+                    )
+                )
+            )
 
-    return redirect(  
-        url_for(  
-            "admin_referral",  
-            error=(  
-                "Manual cancellation is disabled. "  
-                "Verify the Flutterwave transfer status "  
-                "before changing the withdrawal."  
-            )  
-        )  
-    )  
+    # ------------------------------------------------------
+    # CANCELLED
+    # ------------------------------------------------------
+    #
+    # Do NOT allow arbitrary cancellation from the
+    # browser because cancellation may trigger a refund.
+    #
+    # It should only be done through a dedicated,
+    # explicitly authorized workflow.
+    # ------------------------------------------------------
 
-return redirect(  
-    url_for(  
-        "admin_referral",  
-        error="Invalid withdrawal status."  
-    )  
-)
+    if new_status == "cancelled":
 
-==========================================================
+        return redirect(
+            url_for(
+                "admin_referral",
+                error=(
+                    "Manual cancellation is disabled. "
+                    "Verify the Flutterwave transfer status "
+                    "before changing the withdrawal."
+                )
+            )
+        )
 
-HTML: ADMIN LOGIN
+    return redirect(
+        url_for(
+            "admin_referral",
+            error="Invalid withdrawal status."
+        )
+    )
 
-==========================================================
+
+# ==========================================================
+# HTML: ADMIN LOGIN
+# ==========================================================
 
 ADMIN_LOGIN_HTML = """
 <!doctype html>
 
-<html>  
-<head>  
-    <meta charset="utf-8">  
-    <meta name="viewport"  
-          content="width=device-width, initial-scale=1">  <title>Alhikam Admin Login</title>  
+<html>
+<head>
 
-<style>  
-    body {  
-        font-family: Arial, sans-serif;  
-        background: #f4f6f8;  
-        margin: 0;  
-        padding: 30px;  
-    }  
+    <meta charset="utf-8">
 
-    .box {  
-        max-width: 420px;  
-        margin: 80px auto;  
-        background: white;  
-        padding: 25px;  
-        border-radius: 12px;  
-        box-shadow: 0 5px 25px rgba(0,0,0,.08);  
-    }  
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
 
-    input {  
-        width: 100%;  
-        box-sizing: border-box;  
-        padding: 12px;  
-        margin: 8px 0 15px;  
-        border: 1px solid #ddd;  
-        border-radius: 8px;  
-    }  
+    <title>Alhikam Admin Login</title>
 
-    button {  
-        width: 100%;  
-        padding: 12px;  
-        border: 0;  
-        border-radius: 8px;  
-        cursor: pointer;  
-    }  
+    <style>
 
-    .error {  
-        background: #ffe5e5;  
-        padding: 10px;  
-        border-radius: 8px;  
-        margin-bottom: 15px;  
-    }  
-</style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f6f8;
+            margin: 0;
+            padding: 30px;
+        }
 
-</head>  <body>  <div class="box">  <h2>Alhikam Learning Center</h2>  
-<h3>Admin Login</h3>  
+        .box {
+            max-width: 420px;
+            margin: 80px auto;
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 5px 25px rgba(0,0,0,.08);
+        }
 
-{% if error %}  
-    <div class="error">  
-        {{ error }}  
-    </div>  
-{% endif %}  
+        input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 12px;
+            margin: 8px 0 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
 
-<form method="POST"  
-      action="{{ url_for('admin_login') }}">  
+        button {
+            width: 100%;
+            padding: 12px;
+            border: 0;
+            border-radius: 8px;
+            cursor: pointer;
+        }
 
-    <label>Admin Password</label>  
+        .error {
+            background: #ffe5e5;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
 
-    <input  
-        type="password"  
-        name="password"  
-        required  
-        autocomplete="current-password"  
-    >  
+    </style>
 
-    <button type="submit">  
-        Login  
-    </button>  
+</head>
 
-</form>
+<body>
 
-</div>  </body>  
-</html>  
-"""  ==========================================================
+<div class="box">
 
-HTML: ADMIN DASHBOARD
+    <h2>Alhikam Learning Center</h2>
 
-==========================================================
+    <h3>Admin Login</h3>
+
+    {% if error %}
+
+        <div class="error">
+            {{ error }}
+        </div>
+
+    {% endif %}
+
+    <form method="POST"
+          action="{{ url_for('admin_login') }}">
+
+        <label>Admin Password</label>
+
+        <input
+            type="password"
+            name="password"
+            required
+            autocomplete="current-password"
+        >
+
+        <button type="submit">
+            Login
+        </button>
+
+    </form>
+
+</div>
+
+</body>
+</html>
+"""
+
+
+# ==========================================================
+# HTML: ADMIN DASHBOARD
+# ==========================================================
 
 ADMIN_DASHBOARD_HTML = """
 <!doctype html>
 
-<html>  
-<head>  <meta charset="utf-8">  
-
-<meta name="viewport"  
-      content="width=device-width, initial-scale=1">  
-
-<title>Alhikam Referral Admin</title>  
-
-<style>  
-
-    body {  
-        font-family: Arial, sans-serif;  
-        margin: 0;  
-        background: #f5f7fa;  
-        color: #222;  
-    }  
-
-    header {  
-        background: #111827;  
-        color: white;  
-        padding: 18px;  
-    }  
-
-    main {  
-        max-width: 1200px;  
-        margin: auto;  
-        padding: 20px;  
-    }  
-
-    .card {  
-        background: white;  
-        padding: 20px;  
-        margin-bottom: 20px;  
-        border-radius: 12px;  
-        box-shadow: 0 3px 15px rgba(0,0,0,.06);  
-    }  
-
-    input,  
-    select {  
-        width: 100%;  
-        box-sizing: border-box;  
-        padding: 10px;  
-        margin: 6px 0 12px;  
-        border: 1px solid #ddd;  
-        border-radius: 7px;  
-    }  
-
-    button {  
-        padding: 10px 15px;  
-        border: 0;  
-        border-radius: 7px;  
-        cursor: pointer;  
-    }  
-
-    table {  
-        width: 100%;  
-        border-collapse: collapse;  
-        overflow-x: auto;  
-    }  
-
-    th,  
-    td {  
-        padding: 10px;  
-        border-bottom: 1px solid #eee;  
-        text-align: left;  
-    }  
-
-    .success {  
-        background: #e8f8ed;  
-        padding: 12px;  
-        border-radius: 8px;  
-        margin-bottom: 15px;  
-    }  
-
-    .error {  
-        background: #ffe7e7;  
-        padding: 12px;  
-        border-radius: 8px;  
-        margin-bottom: 15px;  
-    }  
+<html>
+<head>
+
+    <meta charset="utf-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Alhikam Referral Admin</title>
+
+    <style>
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            background: #f5f7fa;
+            color: #222;
+        }
+
+        header {
+            background: #111827;
+            color: white;
+            padding: 18px;
+        }
+
+        main {
+            max-width: 1200px;
+            margin: auto;
+            padding: 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 12px;
+            box-shadow: 0 3px 15px rgba(0,0,0,.06);
+        }
+
+        input,
+        select {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 10px;
+            margin: 6px 0 12px;
+            border: 1px solid #ddd;
+            border-radius: 7px;
+        }
+
+        button {
+            padding: 10px 15px;
+            border: 0;
+            border-radius: 7px;
+            cursor: pointer;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            text-align: left;
+        }
 
-    .logout {  
-        background: white;  
-        color: #111827;  
-    }  
+        .success {
+            background: #e8f8ed;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+
+        .error {
+            background: #ffe7e7;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+
+        .logout {
+            background: white;
+            color: #111827;
+        }
+
+        @media(max-width:700px) {
 
-    @media(max-width:700px) {  
+            table {
+                display: block;
+                overflow-x: auto;
+                white-space: nowrap;
+            }
 
-        table {  
-            display: block;  
-            overflow-x: auto;  
-            white-space: nowrap;  
-        }  
+        }
 
-    }  
+    </style>
+
+</head>
 
-</style>
+<body>
 
-</head>  <body>  <header>  <div style="  
-    max-width:1200px;  
-    margin:auto;  
-    display:flex;  
-    justify-content:space-between;  
-    align-items:center;  
-    gap:10px;  
-">  
+<header>
 
-    <strong>  
-        ALHIKAM LEARNING CENTER  
-    </strong>  
+    <div style="
+        max-width:1200px;
+        margin:auto;
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        gap:10px;
+    ">
 
-    <form method="POST"  
-          action="{{ url_for('admin_logout') }}">  
+        <strong>
+            ALHIKAM LEARNING CENTER
+        </strong>
 
-        <input  
-            type="hidden"  
-            name="csrf_token"  
-            value="{{ csrf_token }}"  
-        >  
+        <form method="POST"
+              action="{{ url_for('admin_logout') }}">
 
-        <button class="logout"  
-                type="submit">  
+            <input
+                type="hidden"
+                name="csrf_token"
+                value="{{ csrf_token }}"
+            >
 
-            Logout  
+            <button
+                class="logout"
+                type="submit"
+            >
+                Logout
+            </button>
 
-        </button>  
+        </form>
 
-    </form>  
+    </div>
 
-</div>
+</header>
 
-</header>  <main>  {% if request.args.get('success') %}  
+<main>
 
-    <div class="success">  
-        {{ request.args.get('success') }}  
-    </div>  
+    {% if request.args.get('success') %}
 
-{% endif %}  
+        <div class="success">
+            {{ request.args.get('success') }}
+        </div>
 
+    {% endif %}
 
-{% if request.args.get('error') %}  
+    {% if request.args.get('error') %}
 
-    <div class="error">  
-        {{ request.args.get('error') }}  
-    </div>  
+        <div class="error">
+            {{ request.args.get('error') }}
+        </div>
 
-{% endif %}  
+    {% endif %}
 
 
-<!-- ================================================== -->  
-<!-- CREATE PROMOTER -->  
-<!-- ================================================== -->  
+    <!-- ================================================== -->
+    <!-- CREATE PROMOTER -->
+    <!-- ================================================== -->
 
-<div class="card">  
+    <div class="card">
 
-    <h2>Create Promoter</h2>  
+        <h2>Create Promoter</h2>
 
-    <form method="POST"  
-          action="{{ url_for('create_promoter') }}">  
+        <form method="POST"
+              action="{{ url_for('create_promoter') }}">
 
-        <input  
-            type="hidden"  
-            name="csrf_token"  
-            value="{{ csrf_token }}"  
-        >  
+            <input
+                type="hidden"
+                name="csrf_token"
+                value="{{ csrf_token }}"
+            >
 
-        <label>Full Name</label>  
+            <label>Full Name</label>
 
-        <input  
-            type="text"  
-            name="full_name"  
-            required  
-            maxlength="100"  
-        >  
+            <input
+                type="text"
+                name="full_name"
+                required
+                maxlength="100"
+            >
 
+            <label>Phone</label>
 
-        <label>Phone</label>  
+            <input
+                type="text"
+                name="phone"
+            >
 
-        <input  
-            type="text"  
-            name="phone"  
-        >  
+            <label>Email</label>
 
+            <input
+                type="email"
+                name="email"
+            >
 
-        <label>Email</label>  
+            <label>Commission Rate (%)</label>
 
-        <input  
-            type="email"  
-            name="email"  
-        >  
+            <input
+                type="number"
+                name="commission_rate"
+                value="20"
+                min="0"
+                max="100"
+                step="0.01"
+            >
 
+            <label>Promoter Password</label>
 
-        <label>Commission Rate (%)</label>  
+            <input
+                type="password"
+                name="password"
+                minlength="8"
+                required
+                autocomplete="new-password"
+            >
 
-        <input  
-            type="number"  
-            name="commission_rate"  
-            value="20"  
-            min="0"  
-            max="100"  
-            step="0.01"  
-        >  
+            <button type="submit">
+                Create Promoter
+            </button>
 
+        </form>
 
-        <label>Promoter Password</label>  
+    </div>
 
-        <input  
-            type="password"  
-            name="password"  
-            minlength="8"  
-            required  
-            autocomplete="new-password"  
-        >  
 
+    <!-- ================================================== -->
+    <!-- PROMOTERS -->
+    <!-- ================================================== -->
 
-        <button type="submit">  
-            Create Promoter  
-        </button>  
+    <div class="card">
 
-    </form>  
+        <h2>Promoters</h2>
 
-</div>  
+        <div style="overflow-x:auto;">
 
+            <table>
 
-<!-- ================================================== -->  
-<!-- PROMOTERS -->  
-<!-- ================================================== -->  
+                <thead>
 
-<div class="card">  
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Phone</th>
+                        <th>Referral Code</th>
+                        <th>Sales</th>
+                        <th>Earned</th>
+                        <th>Available</th>
+                        <th>Status</th>
+                    </tr>
 
-    <h2>Promoters</h2>  
+                </thead>
 
-    <div style="overflow-x:auto;">  
+                <tbody>
 
-        <table>  
+                {% for promoter in promoters %}
 
-            <thead>  
+                    <tr>
 
-                <tr>  
-                    <th>ID</th>  
-                    <th>Name</th>  
-                    <th>Phone</th>  
-                    <th>Referral Code</th>  
-                    <th>Sales</th>  
-                    <th>Earned</th>  
-                    <th>Available</th>  
-                    <th>Status</th>  
-                </tr>  
+                        <td>
+                            {{ promoter["id"] }}
+                        </td>
 
-            </thead>  
+                        <td>
+                            {{ promoter["full_name"] }}
+                        </td>
 
-            <tbody>  
+                        <td>
+                            {{ promoter["phone"] or "" }}
+                        </td>
 
-            {% for promoter in promoters %}  
+                        <td>
+                            {{ promoter["referral_code"] }}
+                        </td>
 
-                <tr>  
+                        <td>
+                            {{ promoter["total_sales"] }}
+                        </td>
 
-                    <td>  
-                        {{ promoter["id"] }}  
-                    </td>  
+                        <td>
+                            ₦{{ "%.2f"|format(
+                                promoter["total_earned"] or 0
+                            ) }}
+                        </td>
 
-                    <td>  
-                        {{ promoter["full_name"] }}  
-                    </td>  
+                        <td>
+                            ₦{{ "%.2f"|format(
+                                promoter["available_balance"] or 0
+                            ) }}
+                        </td>
 
-                    <td>  
-                        {{ promoter["phone"] or "" }}  
-                    </td>  
+                        <td>
+                            {{ promoter["status"] }}
+                        </td>
 
-                    <td>  
-                        {{ promoter["referral_code"] }}  
-                    </td>  
+                    </tr>
 
-                    <td>  
-                        {{ promoter["total_sales"] }}  
-                    </td>  
+                {% else %}
 
-                    <td>  
-                        ₦{{ "%.2f"|format(  
-                            promoter["total_earned"] or 0  
-                        ) }}  
-                    </td>  
+                    <tr>
 
-                    <td>  
-                        ₦{{ "%.2f"|format(  
-                            promoter["available_balance"] or 0  
-                        ) }}  
-                    </td>  
+                        <td colspan="8">
+                            No promoters found.
+                        </td>
 
-                    <td>  
-                        {{ promoter["status"] }}  
-                    </td>  
+                    </tr>
 
-                </tr>  
+                {% endfor %}
 
-            {% else %}  
+                </tbody>
 
-                <tr>  
-                    <td colspan="8">  
-                        No promoters found.  
-                    </td>  
-                </tr>  
+            </table>
 
-            {% endfor %}  
+        </div>
 
-            </tbody>  
+    </div>
 
-        </table>  
 
-    </div>  
+    <!-- ================================================== -->
+    <!-- WITHDRAWALS -->
+    <!-- ================================================== -->
 
-</div>  
+    <div class="card">
 
+        <h2>Withdrawals</h2>
 
-<!-- ================================================== -->  
-<!-- WITHDRAWALS -->  
-<!-- ================================================== -->  
+        <div style="overflow-x:auto;">
 
-<div class="card">  
+            <table>
 
-    <h2>Withdrawals</h2>  
+                <thead>
 
-    <div style="overflow-x:auto;">  
+                    <tr>
+                        <th>ID</th>
+                        <th>Promoter</th>
+                        <th>Amount</th>
+                        <th>Bank</th>
+                        <th>Account</th>
+                        <th>Status</th>
+                        <th>Transfer</th>
+                        <th>Action</th>
+                    </tr>
 
-        <table>  
+                </thead>
 
-            <thead>  
+                <tbody>
 
-                <tr>  
-                    <th>ID</th>  
-                    <th>Promoter</th>  
-                    <th>Amount</th>  
-                    <th>Bank</th>  
-                    <th>Account</th>  
-                    <th>Status</th>  
-                    <th>Transfer</th>  
-                    <th>Action</th>  
-                </tr>  
+                {% for withdrawal in withdrawals %}
 
-            </thead>  
+                    <tr>
 
-            <tbody>  
+                        <td>
+                            {{ withdrawal["id"] }}
+                        </td>
 
-            {% for withdrawal in withdrawals %}  
+                        <td>
+                            {{ withdrawal["promoter_id"] }}
+                        </td>
 
-                <tr>  
+                        <td>
+                            ₦{{ "%.2f"|format(
+                                withdrawal["amount"] or 0
+                            ) }}
+                        </td>
 
-                    <td>  
-                        {{ withdrawal["id"] }}  
-                    </td>  
+                        <td>
+                            {{ withdrawal["bank_name"] or "" }}
+                        </td>
 
-                    <td>  
-                        {{ withdrawal["promoter_id"] }}  
-                    </td>  
+                        <td>
+                            {{ withdrawal["masked_account_number"] }}
+                        </td>
 
-                    <td>  
-                        ₦{{ "%.2f"|format(  
-                            withdrawal["amount"] or 0  
-                        ) }}  
-                    </td>  
+                        <td>
+                            {{ withdrawal["status"] }}
+                        </td>
 
-                    <td>  
-                        {{ withdrawal["bank_name"] or "" }}  
-                    </td>  
+                        <td>
+                            {{ withdrawal["transfer_status"] or "" }}
+                        </td>
 
-                    <td>  
-                        {{ withdrawal["masked_account_number"] }}  
-                    </td>  
+                        <td>
 
-                    <td>  
-                        {{ withdrawal["status"] }}  
-                    </td>  
+                            <form method="POST"
+                                  action="{{ url_for(
+                                      'admin_withdrawal_status'
+                                  ) }}">
 
-                    <td>  
-                        {{ withdrawal["transfer_status"] or "" }}  
-                    </td>  
+                                <input
+                                    type="hidden"
+                                    name="csrf_token"
+                                    value="{{ csrf_token }}"
+                                >
 
-                    <td>  
+                                <input
+                                    type="hidden"
+                                    name="withdrawal_id"
+                                    value="{{ withdrawal['id'] }}"
+                                >
 
-                        <form method="POST"  
-                              action="{{ url_for(  
-                                  'admin_withdrawal_status'  
-                              ) }}">  
+                                <select name="status">
 
-                            <input  
-                                type="hidden"  
-                                name="csrf_token"  
-                                value="{{ csrf_token }}"  
-                            >  
+                                    <option value="processing">
+                                        Check Processing
+                                    </option>
 
-                            <input  
-                                type="hidden"  
-                                name="withdrawal_id"  
-                                value="{{ withdrawal['id'] }}"  
-                            >  
+                                    <option value="successful">
+                                        Verify Success
+                                    </option>
 
-                            <select name="status">  
+                                    <option value="failed">
+                                        Verify Failed
+                                    </option>
 
-                                <option value="processing">  
-                                    Check Processing  
-                                </option>  
+                                </select>
 
-                                <option value="successful">  
-                                    Verify Success  
-                                </option>  
+                                <button type="submit">
+                                    Update
+                                </button>
 
-                                <option value="failed">  
-                                    Verify Failed  
-                                </option>  
+                            </form>
 
-                            </select>  
+                        </td>
 
-                            <button type="submit">  
-                                Update  
-                            </button>  
+                    </tr>
 
-                        </form>  
+                {% else %}
 
-                    </td>  
+                    <tr>
 
-                </tr>  
+                        <td colspan="8">
+                            No withdrawals found.
+                        </td>
 
-            {% else %}  
+                    </tr>
 
-                <tr>  
-                    <td colspan="8">  
-                        No withdrawals found.  
-                    </td>  
-                </tr>  
+                {% endfor %}
 
-            {% endfor %}  
+                </tbody>
 
-            </tbody>  
+            </table>
 
-        </table>  
+        </div>
 
-    </div>  
+    </div>
 
-</div>
+</main>
 
-</main>  </body>  
-</html>  
+</body>
+</html>
 """
