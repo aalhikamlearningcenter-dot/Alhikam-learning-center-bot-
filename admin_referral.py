@@ -65,7 +65,9 @@ if not ADMIN_PASSWORD:
 # ==========================================================
 
 def admin_logged_in():
-    return session.get(ADMIN_SESSION_KEY) is True
+    return session.get(
+        ADMIN_SESSION_KEY
+    ) is True
 
 
 def admin_required(view):
@@ -74,11 +76,17 @@ def admin_required(view):
     def wrapped(*args, **kwargs):
 
         if not admin_logged_in():
+
             return redirect(
-                url_for("admin_referral_login")
+                url_for(
+                    "admin_referral_login"
+                )
             )
 
-        return view(*args, **kwargs)
+        return view(
+            *args,
+            **kwargs
+        )
 
     return wrapped
 
@@ -95,7 +103,9 @@ def get_admin_csrf():
 
     if not token:
 
-        token = secrets.token_urlsafe(32)
+        token = secrets.token_urlsafe(
+            32
+        )
 
         session[
             ADMIN_CSRF_KEY
@@ -129,7 +139,9 @@ def verify_admin_csrf():
 # MASK ACCOUNT NUMBER
 # ==========================================================
 
-def mask_account_number(account_number):
+def mask_account_number(
+    account_number
+):
 
     account_number = str(
         account_number or ""
@@ -139,10 +151,14 @@ def mask_account_number(account_number):
         return "**********"
 
     if len(account_number) <= 4:
-        return "*" * len(account_number)
+        return "*" * len(
+            account_number
+        )
 
     return (
-        "*" * (len(account_number) - 4)
+        "*" * (
+            len(account_number) - 4
+        )
         + account_number[-4:]
     )
 
@@ -184,12 +200,16 @@ def admin_login_page():
 
             session[
                 ADMIN_CSRF_KEY
-            ] = secrets.token_urlsafe(32)
+            ] = secrets.token_urlsafe(
+                32
+            )
 
             session.permanent = True
 
             return redirect(
-                url_for("admin_referral")
+                url_for(
+                    "admin_referral"
+                )
             )
 
         return render_template_string(
@@ -223,7 +243,9 @@ def admin_logout_page():
     )
 
     return redirect(
-        url_for("admin_referral_login")
+        url_for(
+            "admin_referral_login"
+        )
     )
 
 
@@ -244,7 +266,9 @@ def admin_referral_page():
 
     for withdrawal in withdrawals:
 
-        item = dict(withdrawal)
+        item = dict(
+            withdrawal
+        )
 
         item[
             "masked_account_number"
@@ -254,7 +278,9 @@ def admin_referral_page():
             )
         )
 
-        safe_withdrawals.append(item)
+        safe_withdrawals.append(
+            item
+        )
 
     return render_template_string(
         ADMIN_DASHBOARD_HTML,
@@ -355,12 +381,17 @@ def create_promoter_page():
             commission_rate_raw
         )
 
-    except (TypeError, ValueError):
+    except (
+        TypeError,
+        ValueError
+    ):
 
         return redirect(
             url_for(
                 "admin_referral",
-                error="Invalid commission rate."
+                error=(
+                    "Invalid commission rate."
+                )
             )
         )
 
@@ -420,7 +451,9 @@ def create_promoter_page():
         return redirect(
             url_for(
                 "admin_referral",
-                error="Unable to create promoter."
+                error=(
+                    "Unable to create promoter."
+                )
             )
         )
 
@@ -632,12 +665,17 @@ def admin_withdrawal_status_page():
             withdrawal_id_raw
         )
 
-    except (TypeError, ValueError):
+    except (
+        TypeError,
+        ValueError
+    ):
 
         return redirect(
             url_for(
                 "admin_referral",
-                error="Invalid withdrawal ID."
+                error=(
+                    "Invalid withdrawal ID."
+                )
             )
         )
 
@@ -650,7 +688,9 @@ def admin_withdrawal_status_page():
         return redirect(
             url_for(
                 "admin_referral",
-                error="Withdrawal not found."
+                error=(
+                    "Withdrawal not found."
+                )
             )
         )
 
@@ -672,8 +712,12 @@ def admin_withdrawal_status_page():
         return redirect(
             url_for(
                 "admin_referral",
-                success=message if ok else None,
-                error=None if ok else message,
+                success=(
+                    message if ok else None
+                ),
+                error=(
+                    None if ok else message
+                ),
             )
         )
 
@@ -692,8 +736,12 @@ def admin_withdrawal_status_page():
         return redirect(
             url_for(
                 "admin_referral",
-                success=message if ok else None,
-                error=None if ok else message,
+                success=(
+                    message if ok else None
+                ),
+                error=(
+                    None if ok else message
+                ),
             )
         )
 
@@ -844,7 +892,9 @@ ADMIN_LOGIN_HTML = """
     <form method="POST"
           action="{{ url_for('admin_referral_login') }}">
 
-        <label>Admin Password</label>
+        <label>
+            Admin Password
+        </label>
 
         <input
             type="password"
@@ -993,8 +1043,10 @@ ADMIN_DASHBOARD_HTML = """
             ALHIKAM LEARNING CENTER
         </strong>
 
+        <!-- FIXED: correct Flask endpoint -->
+
         <form method="POST"
-              action="{{ url_for('admin_logout') }}">
+              action="{{ url_for('admin_referral_logout') }}">
 
             <input
                 type="hidden"
@@ -1051,7 +1103,9 @@ ADMIN_DASHBOARD_HTML = """
                 value="{{ csrf_token }}"
             >
 
-            <label>Full Name</label>
+            <label>
+                Full Name
+            </label>
 
             <input
                 type="text"
@@ -1060,21 +1114,27 @@ ADMIN_DASHBOARD_HTML = """
                 maxlength="100"
             >
 
-            <label>Phone</label>
+            <label>
+                Phone
+            </label>
 
             <input
                 type="text"
                 name="phone"
             >
 
-            <label>Email</label>
+            <label>
+                Email
+            </label>
 
             <input
                 type="email"
                 name="email"
             >
 
-            <label>Commission Rate (%)</label>
+            <label>
+                Commission Rate (%)
+            </label>
 
             <input
                 type="number"
@@ -1085,7 +1145,9 @@ ADMIN_DASHBOARD_HTML = """
                 step="0.01"
             >
 
-            <label>Promoter Password</label>
+            <label>
+                Promoter Password
+            </label>
 
             <input
                 type="password"
@@ -1110,7 +1172,9 @@ ADMIN_DASHBOARD_HTML = """
 
     <div class="card">
 
-        <h2>Promoters</h2>
+        <h2>
+            Promoters
+        </h2>
 
         <div style="overflow-x:auto;">
 
@@ -1119,6 +1183,7 @@ ADMIN_DASHBOARD_HTML = """
                 <thead>
 
                     <tr>
+
                         <th>ID</th>
                         <th>Name</th>
                         <th>Phone</th>
@@ -1127,6 +1192,7 @@ ADMIN_DASHBOARD_HTML = """
                         <th>Earned</th>
                         <th>Available</th>
                         <th>Status</th>
+
                     </tr>
 
                 </thead>
@@ -1202,7 +1268,9 @@ ADMIN_DASHBOARD_HTML = """
 
     <div class="card">
 
-        <h2>Withdrawals</h2>
+        <h2>
+            Withdrawals
+        </h2>
 
         <div style="overflow-x:auto;">
 
@@ -1211,6 +1279,7 @@ ADMIN_DASHBOARD_HTML = """
                 <thead>
 
                     <tr>
+
                         <th>ID</th>
                         <th>Promoter</th>
                         <th>Amount</th>
@@ -1219,6 +1288,7 @@ ADMIN_DASHBOARD_HTML = """
                         <th>Status</th>
                         <th>Transfer</th>
                         <th>Action</th>
+
                     </tr>
 
                 </thead>
@@ -1248,7 +1318,9 @@ ADMIN_DASHBOARD_HTML = """
                         </td>
 
                         <td>
-                            {{ withdrawal["masked_account_number"] }}
+                            {{ withdrawal[
+                                "masked_account_number"
+                            ] }}
                         </td>
 
                         <td>
@@ -1256,7 +1328,9 @@ ADMIN_DASHBOARD_HTML = """
                         </td>
 
                         <td>
-                            {{ withdrawal["transfer_status"] or "" }}
+                            {{ withdrawal[
+                                "transfer_status"
+                            ] or "" }}
                         </td>
 
                         <td>
