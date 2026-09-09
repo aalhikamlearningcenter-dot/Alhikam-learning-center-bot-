@@ -2,11 +2,14 @@
 # ALHIKAM LEARNING CENTER
 # ADMIN REFERRAL DASHBOARD
 #
-# Features:
+# FEATURES
 # - Secure Admin Login
 # - Admin Password Protection
 # - CSRF Protection
 # - Create Promoter
+# - One-time display of promoter password
+# - Automatic unique withdrawal code
+# - One-time display of withdrawal code
 # - Main Payment Link
 # - Individual Referral Link
 # - Individual Referral Payment Link
@@ -38,6 +41,7 @@ from database import (
     set_promoter_password,
 )
 
+
 from transfer import (
     get_flutterwave_transfer_status,
 )
@@ -63,6 +67,9 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 
 ADMIN_SESSION_KEY = "alhikam_admin_logged_in"
 ADMIN_CSRF_KEY = "alhikam_admin_csrf"
+
+# One-time promoter creation result
+ADMIN_CREATED_PROMOTER_KEY = "alhikam_created_promoter"
 
 
 # ============================================================
@@ -512,6 +519,11 @@ def admin_logout_page():
         None
     )
 
+    session.pop(
+        ADMIN_CREATED_PROMOTER_KEY,
+        None
+    )
+
     return redirect(
         url_for(
             "admin_referral_login"
@@ -822,11 +834,55 @@ th{
 
     color:#1b5e20;
 
-    padding:12px;
+    padding:16px;
+
+    border-radius:10px;
+
+    margin-bottom:20px;
+
+    border-left:5px solid #2e7d32;
+
+}
+
+.success h3{
+
+    margin-top:0;
+
+}
+
+.credential-box{
+
+    background:white;
+
+    border:1px solid #c8e6c9;
 
     border-radius:8px;
 
-    margin-bottom:15px;
+    padding:12px;
+
+    margin-top:10px;
+
+}
+
+.credential-label{
+
+    font-size:12px;
+
+    color:#555;
+
+    margin-bottom:5px;
+
+}
+
+.credential-value{
+
+    font-size:18px;
+
+    font-weight:bold;
+
+    word-break:break-all;
+
+    color:#087f5b;
 
 }
 
@@ -1018,7 +1074,7 @@ function fallbackCopy(
     } catch (e) {
 
         alert(
-            "Please copy the link manually."
+            "Please copy the text manually."
         );
 
     }
@@ -1069,6 +1125,89 @@ Admin Referral Dashboard
 </form>
 
 </div>
+
+
+<!-- ===================================================== -->
+<!-- ONE-TIME CREATED PROMOTER CREDENTIALS -->
+<!-- ===================================================== -->
+
+{% if created_promoter %}
+
+<div class="success">
+
+<h3>
+✅ Promoter Created Successfully
+</h3>
+
+<p>
+<strong>
+Important:
+</strong>
+These credentials are shown for this creation only.
+The database stores the password and withdrawal code securely as hashes.
+</p>
+
+
+<div class="credential-box">
+
+<div class="credential-label">
+👤 PROMOTER
+</div>
+
+<div class="credential-value">
+{{ created_promoter["full_name"] }}
+</div>
+
+</div>
+
+
+<div class="credential-box">
+
+<div class="credential-label">
+🏷️ REFERRAL CODE
+</div>
+
+<div class="credential-value">
+{{ created_promoter["referral_code"] }}
+</div>
+
+</div>
+
+
+<div class="credential-box">
+
+<div class="credential-label">
+🔑 PROMOTER PASSWORD
+</div>
+
+<div class="credential-value">
+{{ created_promoter["password"] }}
+</div>
+
+</div>
+
+
+<div class="credential-box">
+
+<div class="credential-label">
+💰 WITHDRAWAL CODE
+</div>
+
+<div class="credential-value">
+{{ created_promoter["withdrawal_code"] }}
+</div>
+
+</div>
+
+
+<p>
+⚠️ Save these credentials securely.
+The password and withdrawal code will not be stored in plaintext.
+</p>
+
+</div>
+
+{% endif %}
 
 
 <!-- ===================================================== -->
@@ -1123,7 +1262,7 @@ Use this when no promoter referral is required.
 
 <p class="small">
 General promoter login/dashboard page.
-A promoter can use their referral credentials to access their account.
+Promoters can use their referral code and password to access their account.
 </p>
 
 <div class="link-box">
@@ -1162,7 +1301,17 @@ A promoter can use their referral credentials to access their account.
 </h2>
 
 <div class="info">
-After creating a promoter, the system will generate a unique referral code for that promoter.
+
+After creating a promoter, the system automatically generates:
+<br><br>
+• Unique Referral Code
+<br>
+• Unique Withdrawal Code
+<br>
+• Secure Password Hash
+<br><br>
+The password and withdrawal code will be shown once after creation.
+
 </div>
 
 <form method="POST"
@@ -1689,6 +1838,12 @@ def admin_referral_page():
         f"{base_url}/referral/dashboard"
     )
 
+    # Get one-time creation result
+    created_promoter = session.pop(
+        ADMIN_CREATED_PROMOTER_KEY,
+        None
+    )
+
     return render_template_string(
 
         ADMIN_DASHBOARD_HTML,
@@ -1703,6 +1858,9 @@ def admin_referral_page():
 
         promoter_dashboard_link=
             promoter_dashboard_link,
+
+        created_promoter=
+            created_promoter,
 
         csrf_token=
             get_admin_csrf(),
@@ -1757,6 +1915,7 @@ def create_promoter_page():
             ""
         )
         .strip()
+        .lower()
     )
 
     password = request.form.get(
@@ -1776,6 +1935,10 @@ def create_promoter_page():
     except Exception:
 
         commission_rate = 10.0
+
+    # --------------------------------------------------------
+    # VALIDATION
+    # --------------------------------------------------------
 
     if not full_name:
 
@@ -1819,6 +1982,10 @@ def create_promoter_page():
             400,
         )
 
+    # --------------------------------------------------------
+    # CREATE PROMOTER
+    # --------------------------------------------------------
+
     try:
 
         promoter = add_promoter(
@@ -1835,6 +2002,7 @@ def create_promoter_page():
 
     except TypeError:
 
+        # Compatibility with older positional version
         try:
 
             promoter = add_promoter(
@@ -1878,6 +2046,16 @@ def create_promoter_page():
             500,
         )
 
+    # --------------------------------------------------------
+    # NEW DATABASE VERSION RETURNS DICT
+    #
+    # {
+    #     "id": ...,
+    #     "referral_code": ...,
+    #     "withdrawal_code": ...
+    # }
+    # --------------------------------------------------------
+
     try:
 
         if isinstance(
@@ -1887,9 +2065,32 @@ def create_promoter_page():
 
             promoter_id = promoter["id"]
 
+            referral_code = (
+                promoter.get(
+                    "referral_code"
+                )
+                or ""
+            )
+
+            withdrawal_code = (
+                promoter.get(
+                    "withdrawal_code"
+                )
+                or ""
+            )
+
         else:
 
+            # Older database compatibility
             promoter_id = promoter
+
+            referral_code = ""
+
+            withdrawal_code = ""
+
+        # ----------------------------------------------------
+        # SET PROMOTER PASSWORD
+        # ----------------------------------------------------
 
         set_promoter_password(
 
@@ -1909,6 +2110,36 @@ def create_promoter_page():
             "Promoter was created but password could not be saved.",
             500,
         )
+
+    # --------------------------------------------------------
+    # IMPORTANT:
+    #
+    # Password and withdrawal code are NOT saved as plaintext.
+    #
+    # They are kept temporarily in the admin session so the
+    # administrator can see them once after creation.
+    # --------------------------------------------------------
+
+    session[
+        ADMIN_CREATED_PROMOTER_KEY
+    ] = {
+
+        "id":
+            promoter_id,
+
+        "full_name":
+            full_name,
+
+        "referral_code":
+            referral_code,
+
+        "password":
+            password,
+
+        "withdrawal_code":
+            withdrawal_code,
+
+    }
 
     return redirect(
         url_for(
