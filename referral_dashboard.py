@@ -2,765 +2,897 @@
 # ALHIKAM LEARNING CENTER V2
 # referral_dashboard.py
 #
-# REFERRAL DASHBOARD
+# SECURE PROMOTER / REFERRAL DASHBOARD
+# PAYMENT
+# COMMISSION
 # WITHDRAWAL
 # FLUTTERWAVE TRANSFER
-# WITHDRAWAL STATUS
-#
-# MINIMUM WITHDRAWAL = ₦200
 # ==========================================================
 
+import os
+import hmac
+import secrets
 import logging
-import math
+
+from decimal import Decimal, InvalidOperation
 
 from flask import (
     request,
     redirect,
     render_template_string,
+    session,
+    url_for,
+    abort,
 )
 
 from database import (
+    MINIMUM_WITHDRAWAL,
     get_promoter_by_referral_code,
+    get_promoter_by_id,
     create_withdrawal,
     get_promoter_withdrawals,
     get_withdrawal_by_id,
     update_withdrawal_transfer,
     process_transfer_result,
+    verify_promoter_password,
 )
 
 from transfer import (
     resolve_bank_account,
     create_flutterwave_transfer,
     get_flutterwave_transfer_status,
+    get_flutterwave_transfer_status_by_reference,
+    get_flutterwave_banks,
+)
+
+
+logger = logging.getLogger(__name__)
+
+
+# ==========================================================
+# CONFIG
+# ==========================================================
+
+APP_URL = os.getenv(
+    "APP_URL",
+    "http://127.0.0.1:5000"
+).rstrip("/")
+
+
+PROMOTER_SESSION_ID = (
+    "alhikam_promoter_id"
+)
+
+PROMOTER_CSRF_SESSION = (
+    "alhikam_promoter_csrf"
 )
 
 
 # ==========================================================
-# LOGGING
+# SQLITE ROW HELPER
 # ==========================================================
 
-logger = logging.getLogger("ALHIKAM")
-
-
-# ==========================================================
-# SETTINGS
-# ==========================================================
-
-MINIMUM_WITHDRAWAL = 200
-
-
-# ==========================================================
-# BANKS
-# ==========================================================
-
-BANKS = {
-
-    "044": "Access Bank",
-    "023": "Citibank Nigeria",
-    "050": "Ecobank Nigeria",
-    "011": "First Bank Nigeria",
-    "214": "FCMB",
-    "070": "Fidelity Bank",
-    "058": "GTBank",
-    "030": "Heritage Bank",
-    "301": "Jaiz Bank",
-    "082": "Keystone Bank",
-    "221": "Stanbic IBTC",
-    "068": "Standard Chartered Bank",
-    "232": "Sterling Bank",
-    "100": "SunTrust Bank",
-    "032": "Union Bank",
-    "033": "UBA",
-    "215": "Unity Bank",
-    "035": "Wema Bank",
-    "057": "Zenith Bank",
-
-    # Digital banks / wallets
-    "090267": "Kuda Bank",
-    "999991": "PalmPay",
-    "999992": "OPay",
-
-}
-
-
-# ==========================================================
-# HELPER
-# ==========================================================
-
-def row_value(row, key, default=None):
+def _row_get(row, key, default=None):
 
     if row is None:
         return default
 
     try:
+        return row[key]
 
-        keys = row.keys()
+    except (
+        KeyError,
+        IndexError,
+        TypeError,
+    ):
+        return default
 
-        if key in keys:
 
-            value = row[key]
+# ==========================================================
+# ACCOUNT MASK
+# ==========================================================
 
-            if value is None:
-                return default
+def _mask_account(account_number):
 
-            return value
+    account_number = str(
+        account_number or ""
+    )
 
-    except Exception:
-        pass
+    if len(account_number) <= 4:
+        return "****"
 
-    return default
+    return (
+        "*" * (len(account_number) - 4)
+        + account_number[-4:]
+    )
 
 
 # ==========================================================
 # MONEY FORMAT
 # ==========================================================
 
-def money(value):
+def _safe_money(value):
 
     try:
 
-        value = float(value or 0)
+        amount = Decimal(
+            str(value or "0")
+        )
 
-        return f"₦{value:,.2f}"
+        return (
+            f"₦{amount:,.2f}"
+        )
 
-    except Exception:
+    except (
+        InvalidOperation,
+        ValueError,
+        TypeError,
+    ):
 
         return "₦0.00"
 
 
 # ==========================================================
-# REFERRAL DASHBOARD
+# CSRF
 # ==========================================================
 
-def referral_dashboard_by_code(
-    referral_code
-):
+def _csrf_token():
 
-    referral_code = (
-        referral_code or ""
-    ).strip()
+    token = session.get(
+        PROMOTER_CSRF_SESSION
+    )
 
-    if not referral_code:
+    if not token:
 
-        return (
-            "Referral code is required.",
-            400
+        token = secrets.token_urlsafe(32)
+
+        session[
+            PROMOTER_CSRF_SESSION
+        ] = token
+
+    return token
+
+
+def _check_csrf():
+
+    sent = str(
+        request.form.get(
+            "csrf_token",
+            ""
         )
+    )
+
+    expected = session.get(
+        PROMOTER_CSRF_SESSION
+    )
+
+    if (
+        not sent
+        or not expected
+        or not hmac.compare_digest(
+            sent,
+            expected
+        )
+    ):
+
+        abort(400)
 
 
-    # ======================================================
-    # GET PROMOTER
-    # ======================================================
+# ==========================================================
+# CURRENT PROMOTER
+# ==========================================================
+
+def _current_promoter():
+
+    promoter_id = session.get(
+        PROMOTER_SESSION_ID
+    )
+
+    if promoter_id is None:
+        return None
 
     try:
-
-        promoter = (
-            get_promoter_by_referral_code(
-                referral_code
-            )
+        promoter_id = int(
+            promoter_id
         )
 
-    except Exception:
+    except (
+        ValueError,
+        TypeError,
+    ):
 
-        logger.exception(
-            "Could not load promoter dashboard."
+        session.pop(
+            PROMOTER_SESSION_ID,
+            None
         )
 
-        return (
-            "Unable to load referral dashboard.",
-            500
+        session.pop(
+            PROMOTER_CSRF_SESSION,
+            None
         )
 
+        return None
+
+    promoter = get_promoter_by_id(
+        promoter_id
+    )
 
     if not promoter:
 
-        return (
-            "Invalid referral code.",
-            404
+        session.pop(
+            PROMOTER_SESSION_ID,
+            None
         )
 
+        session.pop(
+            PROMOTER_CSRF_SESSION,
+            None
+        )
 
-    # ======================================================
-    # STATUS
-    # ======================================================
+        return None
 
-    promoter_status = str(
-        row_value(
+    if str(
+        _row_get(
             promoter,
             "status",
             ""
         )
-        or ""
-    ).lower().strip()
+    ).lower() != "active":
 
-
-    if promoter_status != "active":
-
-        return (
-            "This referral account is not active.",
-            403
+        session.pop(
+            PROMOTER_SESSION_ID,
+            None
         )
 
-
-    # ======================================================
-    # PROMOTER DATA
-    # ======================================================
-
-    promoter_id = row_value(
-        promoter,
-        "id",
-        0
-    )
-
-    full_name = str(
-        row_value(
-            promoter,
-            "full_name",
-            ""
+        session.pop(
+            PROMOTER_CSRF_SESSION,
+            None
         )
-        or ""
-    )
+
+        return None
+
+    return promoter
 
 
-    total_sales = row_value(
-        promoter,
-        "total_sales",
-        0
-    )
+# ==========================================================
+# LOGIN PAGE
+# ==========================================================
 
-    total_earned = row_value(
-        promoter,
-        "total_earned",
-        0
-    )
+def promoter_login_page():
 
-    available_balance = row_value(
-        promoter,
-        "available_balance",
-        0
-    )
+    existing = _current_promoter()
 
-    withdrawn_amount = row_value(
-        promoter,
-        "withdrawn_amount",
-        0
-    )
+    if existing:
 
-
-    # ======================================================
-    # WITHDRAWAL HISTORY
-    # ======================================================
-
-    try:
-
-        withdrawals = (
-            get_promoter_withdrawals(
-                promoter_id
+        return redirect(
+            url_for(
+                "referral_dashboard"
             )
         )
 
-    except Exception:
+    csrf = _csrf_token()
 
-        logger.exception(
-            "Could not load withdrawal history."
+    referral_prefill = str(
+        request.args.get(
+            "ref",
+            ""
         )
+    ).strip()
 
-        withdrawals = []
+    error = None
 
+    if request.method == "POST":
 
-    # ======================================================
-    # REFERRAL LINK
-    # ======================================================
+        try:
 
-    try:
+            _check_csrf()
 
-        from config import APP_URL
+            referral_code = str(
+                request.form.get(
+                    "referral_code",
+                    ""
+                )
+            ).strip()
 
-        referral_link = (
-            f"{APP_URL}/referral/"
-            f"{referral_code}"
-        )
+            password = str(
+                request.form.get(
+                    "password",
+                    ""
+                )
+            )
 
-    except Exception:
+            if not referral_code:
 
-        referral_link = (
-            f"/referral/{referral_code}"
-        )
+                raise ValueError(
+                    "Referral code is required."
+                )
 
+            if not password:
 
-    # ======================================================
-    # HTML
-    # ======================================================
+                raise ValueError(
+                    "Password is required."
+                )
 
-    html = """
+            promoter = (
+                get_promoter_by_referral_code(
+                    referral_code
+                )
+            )
 
-<!DOCTYPE html>
+            if not promoter:
 
+                raise ValueError(
+                    "Invalid referral code or password."
+                )
+
+            promoter_id = _row_get(
+                promoter,
+                "id"
+            )
+
+            if not verify_promoter_password(
+                promoter_id,
+                password
+            ):
+
+                raise ValueError(
+                    "Invalid referral code or password."
+                )
+
+            # ------------------------------------------
+            # ROTATE PROMOTER SESSION
+            # ------------------------------------------
+
+            session.pop(
+                PROMOTER_SESSION_ID,
+                None
+            )
+
+            session.pop(
+                PROMOTER_CSRF_SESSION,
+                None
+            )
+
+            session[
+                PROMOTER_SESSION_ID
+            ] = int(promoter_id)
+
+            session[
+                PROMOTER_CSRF_SESSION
+            ] = secrets.token_urlsafe(32)
+
+            session.permanent = True
+
+            return redirect(
+                url_for(
+                    "referral_dashboard"
+                )
+            )
+
+        except Exception as exc:
+
+            if isinstance(
+                exc,
+                ValueError
+            ):
+
+                error = str(exc)
+
+            else:
+
+                logger.exception(
+                    "Promoter login error."
+                )
+
+                error = (
+                    "Unable to login right now."
+                )
+
+    return render_template_string(
+        """
+<!doctype html>
 <html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport"
+          content="width=device-width,initial-scale=1">
 
+    <title>Promoter Login - Alhikam</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f7fb;
+            margin: 0;
+            padding: 30px 15px;
+        }
+
+        .box {
+            max-width: 430px;
+            margin: 40px auto;
+            background: white;
+            padding: 25px;
+            border-radius: 14px;
+            box-shadow: 0 8px 30px rgba(0,0,0,.08);
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-top: 15px;
+            font-weight: bold;
+        }
+
+        input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 13px;
+            margin-top: 7px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            margin-top: 22px;
+            border: 0;
+            border-radius: 8px;
+            background: #111827;
+            color: white;
+            font-weight: bold;
+        }
+
+        .error {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="box">
+
+    <h1>Alhikam Promoter Login</h1>
+
+    {% if error %}
+        <div class="error">
+            {{ error }}
+        </div>
+    {% endif %}
+
+    <form method="POST">
+
+        <input
+            type="hidden"
+            name="csrf_token"
+            value="{{ csrf }}"
+        >
+
+        <label>
+            Referral Code
+        </label>
+
+        <input
+            type="text"
+            name="referral_code"
+            value="{{ referral_prefill }}"
+            required
+            autocomplete="username"
+        >
+
+        <label>
+            Password
+        </label>
+
+        <input
+            type="password"
+            name="password"
+            required
+            autocomplete="current-password"
+        >
+
+        <button type="submit">
+            Login
+        </button>
+
+    </form>
+
+</div>
+
+</body>
+</html>
+        """,
+        csrf=csrf,
+        referral_prefill=referral_prefill,
+        error=error,
+    )
+
+
+# ==========================================================
+# LOGOUT
+# ==========================================================
+
+def promoter_logout():
+
+    promoter = _current_promoter()
+
+    if not promoter:
+        return redirect(
+            url_for(
+                "promoter_login"
+            )
+        )
+
+    if request.method != "POST":
+        abort(405)
+
+    _check_csrf()
+
+    # IMPORTANT:
+    # Do NOT use session.clear()
+    # because the main application may have
+    # other session information.
+
+    session.pop(
+        PROMOTER_SESSION_ID,
+        None
+    )
+
+    session.pop(
+        PROMOTER_CSRF_SESSION,
+        None
+    )
+
+    return redirect(
+        url_for(
+            "promoter_login"
+        )
+    )
+
+
+# ==========================================================
+# DASHBOARD
+# ==========================================================
+
+def referral_dashboard_by_code(
+    referral_code=None
+):
+
+    promoter = _current_promoter()
+
+    if not promoter:
+
+        return redirect(
+            url_for(
+                "promoter_login",
+                ref=referral_code
+                if referral_code
+                else ""
+            )
+        )
+
+    promoter_id = _row_get(
+        promoter,
+        "id"
+    )
+
+    actual_referral_code = _row_get(
+        promoter,
+        "referral_code",
+        ""
+    )
+
+    withdrawals = (
+        get_promoter_withdrawals(
+            promoter_id
+        )
+    )
+
+    withdrawal_rows = []
+
+    for withdrawal in withdrawals:
+
+        withdrawal_rows.append({
+            "id": _row_get(
+                withdrawal,
+                "id"
+            ),
+
+            "amount": _safe_money(
+                _row_get(
+                    withdrawal,
+                    "amount",
+                    0
+                )
+            ),
+
+            "bank_name": _row_get(
+                withdrawal,
+                "bank_name",
+                ""
+            ),
+
+            "account_number":
+                _mask_account(
+                    _row_get(
+                        withdrawal,
+                        "account_number",
+                        ""
+                    )
+                ),
+
+            "status": _row_get(
+                withdrawal,
+                "status",
+                "pending"
+            ),
+
+            "transfer_status":
+                _row_get(
+                    withdrawal,
+                    "transfer_status",
+                    ""
+                ),
+
+            "created_at":
+                _row_get(
+                    withdrawal,
+                    "created_at",
+                    ""
+                ),
+        })
+
+    referral_link = (
+        f"{APP_URL}/payment?ref="
+        f"{actual_referral_code}"
+    )
+
+    return render_template_string(
+        """
+<!doctype html>
+<html>
 <head>
 
-<meta name="viewport"
-      content="width=device-width, initial-scale=1">
+<meta charset="utf-8">
 
-<title>Alhikam Referral Dashboard</title>
+<meta name="viewport"
+      content="width=device-width,initial-scale=1">
+
+<title>Promoter Dashboard</title>
 
 <style>
 
 body {
-
-    margin: 0;
-
-    padding: 0;
-
     font-family: Arial, sans-serif;
-
-    background: #f4f7fb;
-
-    color: #172033;
-
+    background: #f5f7fb;
+    margin: 0;
+    padding: 15px;
 }
 
 .container {
-
     max-width: 900px;
-
     margin: auto;
-
-    padding: 20px;
-
-}
-
-.header {
-
-    background: #111827;
-
-    color: white;
-
-    padding: 22px;
-
-    border-radius: 18px;
-
-    margin-bottom: 18px;
-
-}
-
-.header h1 {
-
-    margin: 0 0 8px 0;
-
-    font-size: 25px;
-
-}
-
-.header p {
-
-    margin: 5px 0;
-
-    opacity: .9;
-
-}
-
-.cards {
-
-    display: grid;
-
-    grid-template-columns:
-        repeat(auto-fit, minmax(190px, 1fr));
-
-    gap: 14px;
-
-    margin-bottom: 18px;
-
 }
 
 .card {
-
     background: white;
-
-    padding: 18px;
-
-    border-radius: 16px;
-
-    box-shadow:
-        0 5px 18px rgba(0,0,0,.06);
-
+    padding: 20px;
+    margin-bottom: 15px;
+    border-radius: 14px;
+    box-shadow: 0 5px 20px rgba(0,0,0,.06);
 }
 
-.card-title {
-
-    font-size: 13px;
-
-    color: #6b7280;
-
-    margin-bottom: 8px;
-
-}
-
-.card-value {
-
-    font-size: 23px;
-
+.balance {
+    font-size: 30px;
     font-weight: bold;
-
 }
 
-.section {
-
-    background: white;
-
-    padding: 18px;
-
-    border-radius: 16px;
-
-    margin-bottom: 18px;
-
-    box-shadow:
-        0 5px 18px rgba(0,0,0,.06);
-
-}
-
-.section h2 {
-
-    margin-top: 0;
-
-}
-
-.referral-box {
-
-    background: #f3f4f6;
-
-    padding: 13px;
-
-    border-radius: 10px;
-
+.link {
     word-break: break-all;
-
-    margin: 10px 0;
-
+    background: #f3f4f6;
+    padding: 12px;
+    border-radius: 8px;
 }
 
-.button {
-
+a, button {
     display: inline-block;
-
-    padding: 13px 18px;
-
-    border-radius: 10px;
-
-    background: #111827;
-
-    color: white;
-
+    padding: 11px 15px;
+    border-radius: 8px;
     text-decoration: none;
-
-    font-weight: bold;
-
-}
-
-.button:hover {
-
-    opacity: .9;
-
+    border: 0;
+    cursor: pointer;
 }
 
 .withdraw {
+    background: #111827;
+    color: white;
+}
 
-    background: #047857;
-
+.logout {
+    background: #fee2e2;
+    color: #991b1b;
 }
 
 table {
-
     width: 100%;
-
     border-collapse: collapse;
-
 }
 
 th, td {
-
-    padding: 11px 7px;
-
+    padding: 10px;
     border-bottom: 1px solid #eee;
-
     text-align: left;
-
-    font-size: 13px;
-
 }
 
 .status {
-
     font-weight: bold;
-
-}
-
-@media(max-width:600px) {
-
-    .container {
-
-        padding: 12px;
-
-    }
-
-    table {
-
-        font-size: 12px;
-
-    }
-
 }
 
 </style>
 
 </head>
 
-
 <body>
-
 
 <div class="container">
 
+<div class="card">
 
-<div class="header">
-
-<h1>Alhikam Learning Center</h1>
+<h2>
+    Welcome, {{ promoter_name }}
+</h2>
 
 <p>
-Referral Dashboard
+    Referral Code:
+    <strong>{{ referral_code }}</strong>
+</p>
+
+<p class="balance">
+    {{ available_balance }}
 </p>
 
 <p>
-Welcome, {{ full_name }}
+    Available Balance
 </p>
 
-<p>
-Referral Code:
-<strong>{{ referral_code }}</strong>
-</p>
-
-</div>
-
-
-<div class="cards">
-
-
-<div class="card">
-
-<div class="card-title">
-Total Sales
-</div>
-
-<div class="card-value">
-{{ total_sales }}
-</div>
-
-</div>
-
-
-<div class="card">
-
-<div class="card-title">
-Total Earned
-</div>
-
-<div class="card-value">
-{{ total_earned }}
-</div>
-
-</div>
-
-
-<div class="card">
-
-<div class="card-title">
-Available Balance
-</div>
-
-<div class="card-value">
-{{ available_balance }}
-</div>
-
-</div>
-
-
-<div class="card">
-
-<div class="card-title">
-Withdrawn
-</div>
-
-<div class="card-value">
-{{ withdrawn_amount }}
-</div>
-
-</div>
-
-
-</div>
-
-
-<div class="section">
-
-<h2>Your Referral Link</h2>
-
-<div class="referral-box">
-{{ referral_link }}
-</div>
-
-<a
-href="/referral/withdraw?ref={{ referral_code }}"
-class="button withdraw">
-
-Withdraw Commission
-
+<a class="withdraw"
+   href="{{ url_for('referral_withdraw') }}">
+    Withdraw Money
 </a>
 
+<form method="POST"
+      action="{{ url_for('promoter_logout') }}"
+      style="margin-top:10px;">
+
+    <input
+        type="hidden"
+        name="csrf_token"
+        value="{{ csrf }}"
+    >
+
+    <button class="logout"
+            type="submit">
+        Logout
+    </button>
+
+</form>
+
 </div>
 
 
-<div class="section">
+<div class="card">
 
-<h2>Withdrawal History</h2>
+<h3>Your Referral Link</h3>
 
+<div class="link">
+    {{ referral_link }}
+</div>
+
+</div>
+
+
+<div class="card">
+
+<h3>Withdrawal History</h3>
 
 {% if withdrawals %}
 
 <table>
 
-<thead>
-
 <tr>
-
-<th>ID</th>
-
-<th>Amount</th>
-
-<th>Bank</th>
-
-<th>Status</th>
-
-<th>Date</th>
-
+    <th>ID</th>
+    <th>Amount</th>
+    <th>Bank</th>
+    <th>Account</th>
+    <th>Status</th>
+    <th></th>
 </tr>
-
-</thead>
-
-
-<tbody>
-
 
 {% for item in withdrawals %}
 
 <tr>
 
 <td>
-#{{ item["id"] }}
+    #{{ item.id }}
 </td>
 
 <td>
-{{ money(item["amount"]) }}
+    {{ item.amount }}
 </td>
 
 <td>
-{{ item["bank_name"] }}
+    {{ item.bank_name }}
+</td>
+
+<td>
+    {{ item.account_number }}
 </td>
 
 <td class="status">
-
-{% set s = (item["status"] or "")|lower %}
-
-{% if s == "successful" %}
-
-Successful
-
-{% elif s == "failed" %}
-
-Failed
-
-{% elif s == "cancelled" %}
-
-Cancelled
-
-{% elif s == "processing" %}
-
-Processing
-
-{% else %}
-
-Pending
-
-{% endif %}
-
+    {{ item.status }}
 </td>
 
 <td>
-{{ item["created_at"] or "" }}
+    <a href="{{ url_for(
+        'withdrawal_status',
+        withdrawal_id=item.id
+    ) }}">
+        View
+    </a>
 </td>
 
 </tr>
 
 {% endfor %}
 
-
-</tbody>
-
 </table>
-
 
 {% else %}
 
 <p>
-No withdrawal history yet.
+    No withdrawals yet.
 </p>
 
 {% endif %}
 
-
 </div>
 
-
 </div>
-
 
 </body>
-
 </html>
+        """,
 
-"""
+        promoter_name=_row_get(
+            promoter,
+            "full_name",
+            "Promoter"
+        ),
 
+        referral_code=actual_referral_code,
 
-    return render_template_string(
-
-        html,
-
-        full_name=full_name,
-
-        referral_code=referral_code,
+        available_balance=_safe_money(
+            _row_get(
+                promoter,
+                "available_balance",
+                0
+            )
+        ),
 
         referral_link=referral_link,
 
-        total_sales=int(
-            total_sales or 0
-        ),
+        withdrawals=withdrawal_rows,
 
-        total_earned=money(
-            total_earned
-        ),
-
-        available_balance=money(
-            available_balance
-        ),
-
-        withdrawn_amount=money(
-            withdrawn_amount
-        ),
-
-        withdrawals=withdrawals,
-
-        money=money,
-
+        csrf=_csrf_token(),
     )
 
 
@@ -769,1821 +901,1037 @@ No withdrawal history yet.
 # ==========================================================
 
 def withdrawal_page(
-    referral_code
+    referral_code=None
 ):
 
-    referral_code = (
-        referral_code or ""
-    ).strip()
-
-
-    if not referral_code:
-
-        return (
-            "Referral code is required.",
-            400
-        )
-
-
-    # ======================================================
-    # GET PROMOTER
-    # ======================================================
-
-    try:
-
-        promoter = (
-            get_promoter_by_referral_code(
-                referral_code
-            )
-        )
-
-    except Exception:
-
-        logger.exception(
-            "Withdrawal promoter lookup failed."
-        )
-
-        return (
-            "Unable to load promoter.",
-            500
-        )
-
+    promoter = _current_promoter()
 
     if not promoter:
 
-        return (
-            "Invalid referral code.",
-            404
+        return redirect(
+            url_for(
+                "promoter_login",
+                ref=referral_code
+                if referral_code
+                else ""
+            )
         )
 
-
-    promoter_id = row_value(
+    promoter_id = _row_get(
         promoter,
-        "id",
-        0
+        "id"
     )
 
-    full_name = str(
-        row_value(
-            promoter,
-            "full_name",
-            ""
-        )
-        or ""
-    )
+    csrf = _csrf_token()
 
-    available_balance = float(
-        row_value(
-            promoter,
-            "available_balance",
-            0
-        )
-        or 0
-    )
+    error = None
 
+    # ------------------------------------------------------
+    # BANKS
+    # ------------------------------------------------------
 
-    # ======================================================
-    # PROCESS POST
-    # ======================================================
+    banks = get_flutterwave_banks("NG")
+
+    # Fallback only if API bank list is unavailable.
+    #
+    # IMPORTANT:
+    # This is only a fallback, not the primary source.
+
+    if not banks:
+
+        banks = [
+            {
+                "code": "044",
+                "name": "Access Bank"
+            },
+            {
+                "code": "050",
+                "name": "Ecobank Nigeria"
+            },
+            {
+                "code": "011",
+                "name": "First Bank of Nigeria"
+            },
+            {
+                "code": "214",
+                "name": "First City Monument Bank"
+            },
+            {
+                "code": "070",
+                "name": "Fidelity Bank"
+            },
+            {
+                "code": "058",
+                "name": "Guaranty Trust Bank"
+            },
+            {
+                "code": "082",
+                "name": "Keystone Bank"
+            },
+            {
+                "code": "076",
+                "name": "Polaris Bank"
+            },
+            {
+                "code": "221",
+                "name": "Stanbic IBTC Bank"
+            },
+            {
+                "code": "068",
+                "name": "Standard Chartered Bank"
+            },
+            {
+                "code": "232",
+                "name": "Sterling Bank"
+            },
+            {
+                "code": "100",
+                "name": "Suntrust Bank"
+            },
+            {
+                "code": "032",
+                "name": "Union Bank of Nigeria"
+            },
+            {
+                "code": "033",
+                "name": "United Bank for Africa"
+            },
+            {
+                "code": "215",
+                "name": "Unity Bank"
+            },
+            {
+                "code": "035",
+                "name": "Wema Bank"
+            },
+            {
+                "code": "057",
+                "name": "Zenith Bank"
+            },
+        ]
+
+    # ------------------------------------------------------
+    # POST
+    # ------------------------------------------------------
 
     if request.method == "POST":
 
-        # --------------------------------------------------
-        # AMOUNT
-        # --------------------------------------------------
-
-        raw_amount = (
-            request.form.get(
-                "amount",
-                ""
-            )
-            or ""
-        ).strip()
-
-
         try:
 
-            amount = float(
-                raw_amount
+            _check_csrf()
+
+            amount_raw = str(
+                request.form.get(
+                    "amount",
+                    ""
+                )
+            ).strip()
+
+            bank_code = str(
+                request.form.get(
+                    "bank_code",
+                    ""
+                )
+            ).strip()
+
+            account_number = str(
+                request.form.get(
+                    "account_number",
+                    ""
+                )
+            ).strip()
+
+            if not amount_raw:
+
+                raise ValueError(
+                    "Enter withdrawal amount."
+                )
+
+            try:
+
+                amount = Decimal(
+                    amount_raw
+                )
+
+            except InvalidOperation:
+
+                raise ValueError(
+                    "Invalid withdrawal amount."
+                )
+
+            if not amount.is_finite():
+
+                raise ValueError(
+                    "Invalid withdrawal amount."
+                )
+
+            amount = amount.quantize(
+                Decimal("0.01")
             )
 
-        except Exception:
+            if amount < MINIMUM_WITHDRAWAL:
 
-            return render_template_string(
-
-                WITHDRAWAL_HTML,
-
-                referral_code=referral_code,
-
-                full_name=full_name,
-
-                available_balance=available_balance,
-
-                banks=BANKS,
-
-                error="Enter a valid withdrawal amount."
-
-            )
-
-
-        if not math.isfinite(amount):
-
-            return render_template_string(
-
-                WITHDRAWAL_HTML,
-
-                referral_code=referral_code,
-
-                full_name=full_name,
-
-                available_balance=available_balance,
-
-                banks=BANKS,
-
-                error="Invalid withdrawal amount."
-
-            )
-
-
-        # --------------------------------------------------
-        # MINIMUM
-        # --------------------------------------------------
-
-        if amount < MINIMUM_WITHDRAWAL:
-
-            return render_template_string(
-
-                WITHDRAWAL_HTML,
-
-                referral_code=referral_code,
-
-                full_name=full_name,
-
-                available_balance=available_balance,
-
-                banks=BANKS,
-
-                error=(
+                raise ValueError(
                     f"Minimum withdrawal is "
-                    f"₦{MINIMUM_WITHDRAWAL:,.0f}."
+                    f"₦{MINIMUM_WITHDRAWAL:,.2f}"
                 )
 
-            )
+            if not bank_code:
 
-
-        # --------------------------------------------------
-        # BALANCE
-        # --------------------------------------------------
-
-        if amount > available_balance:
-
-            return render_template_string(
-
-                WITHDRAWAL_HTML,
-
-                referral_code=referral_code,
-
-                full_name=full_name,
-
-                available_balance=available_balance,
-
-                banks=BANKS,
-
-                error="Insufficient available balance."
-
-            )
-
-
-        # --------------------------------------------------
-        # BANK
-        # --------------------------------------------------
-
-        bank_code = (
-            request.form.get(
-                "bank_code",
-                ""
-            )
-            or ""
-        ).strip()
-
-
-        bank_name = BANKS.get(
-            bank_code,
-            ""
-        )
-
-
-        if not bank_code or not bank_name:
-
-            return render_template_string(
-
-                WITHDRAWAL_HTML,
-
-                referral_code=referral_code,
-
-                full_name=full_name,
-
-                available_balance=available_balance,
-
-                banks=BANKS,
-
-                error="Please select a valid bank."
-
-            )
-
-
-        # --------------------------------------------------
-        # ACCOUNT NUMBER
-        # --------------------------------------------------
-
-        account_number = (
-            request.form.get(
-                "account_number",
-                ""
-            )
-            or ""
-        ).strip()
-
-
-        if (
-            len(account_number) != 10
-            or not account_number.isdigit()
-        ):
-
-            return render_template_string(
-
-                WITHDRAWAL_HTML,
-
-                referral_code=referral_code,
-
-                full_name=full_name,
-
-                available_balance=available_balance,
-
-                banks=BANKS,
-
-                error=(
-                    "Account number must contain "
-                    "exactly 10 digits."
+                raise ValueError(
+                    "Please select your bank."
                 )
 
-            )
+            if (
+                not account_number.isdigit()
+                or len(account_number) != 10
+            ):
 
+                raise ValueError(
+                    "Account number must contain 10 digits."
+                )
 
-        # ==================================================
-        # RESOLVE BANK ACCOUNT
-        # ==================================================
-
-        try:
+            # ------------------------------------------
+            # SERVER-SIDE ACCOUNT RESOLVE
+            # ------------------------------------------
 
             resolved = resolve_bank_account(
+                account_number=account_number,
+                bank_code=bank_code,
+            )
+
+            verified_name = str(
+                resolved.get(
+                    "account_name",
+                    ""
+                )
+            ).strip()
+
+            if not verified_name:
+
+                raise ValueError(
+                    "Bank account could not be verified."
+                )
+
+            # ------------------------------------------
+            # CREATE LOCAL WITHDRAWAL
+            # ------------------------------------------
+
+            withdrawal_id = create_withdrawal(
+                promoter_id=promoter_id,
+                amount=amount,
+                bank_name=str(
+                    next(
+                        (
+                            b["name"]
+                            for b in banks
+                            if str(
+                                b["code"]
+                            ) == bank_code
+                        ),
+                        bank_code
+                    )
+                ),
+                bank_code=bank_code,
+                account_name=verified_name,
+                account_number=account_number,
+            )
+
+            # ------------------------------------------
+            # STABLE REFERENCE
+            # ------------------------------------------
+
+            stable_reference = (
+                f"ALHIKAM-WD-{withdrawal_id}"
+            )
+
+            # ------------------------------------------
+            # SAVE REFERENCE BEFORE PROVIDER CALL
+            # ------------------------------------------
+
+            update_withdrawal_transfer(
+                withdrawal_id=withdrawal_id,
+                transfer_reference=stable_reference,
+                transfer_status="PROCESSING",
+                transfer_message=(
+                    "Withdrawal request created."
+                ),
+            )
+
+            # ------------------------------------------
+            # FLUTTERWAVE TRANSFER
+            # ------------------------------------------
+
+            result = create_flutterwave_transfer(
+
+                amount=amount,
 
                 account_number=account_number,
 
                 bank_code=bank_code,
 
-            )
-
-        except Exception:
-
-            logger.exception(
-                "Bank account resolve error."
-            )
-
-            resolved = None
-
-
-        if not resolved:
-
-            return render_template_string(
-
-                WITHDRAWAL_HTML,
-
-                referral_code=referral_code,
-
-                full_name=full_name,
-
-                available_balance=available_balance,
-
-                banks=BANKS,
-
-                error=(
-                    "Unable to verify bank account. "
-                    "Please check the bank and account number."
-                )
-
-            )
-
-
-        resolved_account_name = str(
-
-            resolved.get(
-                "account_name",
-                ""
-            )
-
-            or ""
-
-        ).strip()
-
-
-        resolved_account_number = str(
-
-            resolved.get(
-                "account_number",
-                account_number
-            )
-
-            or account_number
-
-        ).strip()
-
-
-        resolved_bank_code = str(
-
-            resolved.get(
-                "bank_code",
-                bank_code
-            )
-
-            or bank_code
-
-        ).strip()
-
-
-        if not resolved_account_name:
-
-            return render_template_string(
-
-                WITHDRAWAL_HTML,
-
-                referral_code=referral_code,
-
-                full_name=full_name,
-
-                available_balance=available_balance,
-
-                banks=BANKS,
-
-                error="Bank account name could not be verified."
-
-            )
-
-
-        # ==================================================
-        # CREATE LOCAL WITHDRAWAL
-        #
-        # This reserves the promoter balance.
-        # ==================================================
-
-        try:
-
-            withdrawal_id = create_withdrawal(
-
-                promoter_id=promoter_id,
-
-                amount=amount,
-
-                bank_name=bank_name,
-
-                account_name=resolved_account_name,
-
-                account_number=resolved_account_number,
-
-                bank_code=resolved_bank_code,
-
-            )
-
-        except Exception as e:
-
-            logger.exception(
-                "Could not create withdrawal."
-            )
-
-            return render_template_string(
-
-                WITHDRAWAL_HTML,
-
-                referral_code=referral_code,
-
-                full_name=full_name,
-
-                available_balance=available_balance,
-
-                banks=BANKS,
-
-                error=str(e)
-
-            )
-
-
-        logger.info(
-
-            "WITHDRAWAL CREATED | "
-            "ID=%s | PROMOTER=%s | AMOUNT=%s",
-
-            withdrawal_id,
-
-            promoter_id,
-
-            amount
-
-        )
-
-
-        # ==================================================
-        # CREATE FLUTTERWAVE TRANSFER
-        # ==================================================
-
-        try:
-
-            transfer = create_flutterwave_transfer(
-
-                amount=amount,
-
-                account_number=resolved_account_number,
-
-                bank_code=resolved_bank_code,
-
-                account_name=resolved_account_name,
+                account_name=verified_name,
 
                 narration=(
-                    "ALHIKAM Referral Commission"
+                    "Alhikam Learning Center "
+                    "promoter withdrawal"
                 ),
 
-            )
-
-        except Exception as e:
-
-            logger.exception(
-                "Flutterwave transfer exception."
-            )
-
-            # ----------------------------------------------
-            # IMPORTANT:
-            # Transfer creation failed.
-            # Refund reserved balance.
-            # ----------------------------------------------
-
-            try:
-
-                process_transfer_result(
-
-                    withdrawal_id=withdrawal_id,
-
-                    transfer_status="FAILED",
-
-                    transfer_message=str(e),
-
-                )
-
-            except Exception:
-
-                logger.exception(
-                    "Could not refund failed withdrawal."
-                )
-
-
-            return render_template_string(
-
-                WITHDRAWAL_RESULT_HTML,
-
-                referral_code=referral_code,
-
-                withdrawal_id=withdrawal_id,
-
-                amount=money(amount),
-
-                status="FAILED",
-
-                message=(
-                    "Flutterwave could not create the transfer. "
-                    "Your reserved balance has been returned."
+                callback_url=(
+                    f"{APP_URL}"
+                    "/flutterwave/transfer-callback"
                 ),
 
+                reference=stable_reference,
             )
 
-
-        # ==================================================
-        # CHECK TRANSFER RESPONSE
-        # ==================================================
-
-        if not transfer or not transfer.get(
-            "success",
-            False
-        ):
-
-            message = str(
-
-                transfer.get(
-                    "message",
-                    "Flutterwave transfer could not be created."
-                )
-
-                if transfer
-
-                else
-                "Flutterwave transfer could not be created."
-
+            transfer_id = result.get(
+                "transfer_id"
             )
 
-
-            try:
-
-                process_transfer_result(
-
-                    withdrawal_id=withdrawal_id,
-
-                    transfer_status="FAILED",
-
-                    transfer_message=message,
-
-                )
-
-            except Exception:
-
-                logger.exception(
-                    "Could not refund failed transfer."
-                )
-
-
-            return render_template_string(
-
-                WITHDRAWAL_RESULT_HTML,
-
-                referral_code=referral_code,
-
-                withdrawal_id=withdrawal_id,
-
-                amount=money(amount),
-
-                status="FAILED",
-
-                message=message,
-
-            )
-
-
-        # ==================================================
-        # TRANSFER DATA
-        # ==================================================
-
-        transfer_id = transfer.get(
-            "transfer_id"
-        )
-
-        transfer_reference = transfer.get(
-            "reference"
-        )
-
-        transfer_status = str(
-
-            transfer.get(
-                "status",
-                "NEW"
-            )
-
-            or "NEW"
-
-        ).upper().strip()
-
-
-        transfer_message = transfer.get(
-            "message"
-        )
-
-
-        # ==================================================
-        # SAVE TRANSFER DATA
-        # ==================================================
-
-        try:
-
-            update_withdrawal_transfer(
-
-                withdrawal_id=withdrawal_id,
-
-                transfer_reference=transfer_reference,
-
-                transfer_id=transfer_id,
-
-                transfer_status=transfer_status,
-
-                transfer_message=transfer_message,
-
-            )
-
-        except Exception:
-
-            logger.exception(
-                "Could not save transfer information."
-            )
-
-
-        # ==================================================
-        # PROCESS RESULT
-        # ==================================================
-
-        try:
-
-            process_transfer_result(
-
-                withdrawal_id=withdrawal_id,
-
-                transfer_status=transfer_status,
-
-                transfer_id=transfer_id,
-
-                transfer_reference=transfer_reference,
-
-                transfer_message=transfer_message,
-
-            )
-
-        except Exception as e:
-
-            logger.exception(
-                "Could not process transfer result."
-            )
-
-            return render_template_string(
-
-                WITHDRAWAL_RESULT_HTML,
-
-                referral_code=referral_code,
-
-                withdrawal_id=withdrawal_id,
-
-                amount=money(amount),
-
-                status="PROCESSING",
-
-                message=(
-                    "Transfer was created but its final "
-                    "status is still being processed."
-                ),
-
-            )
-
-
-        # ==================================================
-        # SUCCESS
-        # ==================================================
-
-        if transfer_status in {
-
-            "SUCCESSFUL",
-            "SUCCESS",
-            "COMPLETED"
-
-        }:
-
-            final_status = "SUCCESSFUL"
-
-            final_message = (
-                "Withdrawal was successfully sent "
-                "to the bank account."
-            )
-
-
-        # ==================================================
-        # FAILED
-        # ==================================================
-
-        elif transfer_status in {
-
-            "FAILED",
-            "CANCELLED",
-            "CANCELED"
-
-        }:
-
-            final_status = "FAILED"
-
-            final_message = (
-
-                transfer_message
-
-                or
-                "Flutterwave transfer failed. "
-                "Your balance has been restored."
-
-            )
-
-
-        # ==================================================
-        # NEW / PENDING / PROCESSING
-        # ==================================================
-
-        else:
-
-            final_status = "PROCESSING"
-
-            final_message = (
-
-                "Withdrawal request has been created. "
-                "Flutterwave is processing the transfer. "
-                "Your balance remains reserved until the "
-                "final transfer status is known."
-
-            )
-
-
-        # ==================================================
-        # RESULT
-        # ==================================================
-
-        return render_template_string(
-
-            WITHDRAWAL_RESULT_HTML,
-
-            referral_code=referral_code,
-
-            withdrawal_id=withdrawal_id,
-
-            amount=money(amount),
-
-            status=final_status,
-
-            message=final_message,
-
-        )
-
-
-    # ======================================================
-    # GET
-    # ======================================================
-
-    return render_template_string(
-
-        WITHDRAWAL_HTML,
-
-        referral_code=referral_code,
-
-        full_name=full_name,
-
-        available_balance=available_balance,
-
-        banks=BANKS,
-
-        error="",
-
-    )
-
-
-# ==========================================================
-# WITHDRAWAL STATUS PAGE
-# ==========================================================
-
-def withdrawal_status_page(
-    withdrawal_id,
-    referral_code
-):
-
-    referral_code = (
-        referral_code or ""
-    ).strip()
-
-
-    if not referral_code:
-
-        return (
-            "Referral code is required.",
-            400
-        )
-
-
-    # ======================================================
-    # PROMOTER
-    # ======================================================
-
-    try:
-
-        promoter = (
-            get_promoter_by_referral_code(
-                referral_code
-            )
-        )
-
-    except Exception:
-
-        logger.exception(
-            "Could not verify promoter."
-        )
-
-        return (
-            "Unable to verify referral account.",
-            500
-        )
-
-
-    if not promoter:
-
-        return (
-            "Invalid referral code.",
-            404
-        )
-
-
-    promoter_id = row_value(
-        promoter,
-        "id",
-        0
-    )
-
-
-    # ======================================================
-    # WITHDRAWAL
-    # ======================================================
-
-    try:
-
-        withdrawal = (
-            get_withdrawal_by_id(
-                withdrawal_id
-            )
-        )
-
-    except Exception:
-
-        logger.exception(
-            "Could not load withdrawal."
-        )
-
-        return (
-            "Unable to load withdrawal.",
-            500
-        )
-
-
-    if not withdrawal:
-
-        return (
-            "Withdrawal not found.",
-            404
-        )
-
-
-    # ======================================================
-    # SECURITY:
-    # MAKE SURE THIS WITHDRAWAL BELONGS
-    # TO THIS PROMOTER.
-    # ======================================================
-
-    if int(
-        withdrawal["promoter_id"]
-    ) != int(promoter_id):
-
-        return (
-            "You are not authorized to view this withdrawal.",
-            403
-        )
-
-
-    # ======================================================
-    # AUTO REFRESH FLUTTERWAVE STATUS
-    # ======================================================
-
-    current_status = str(
-
-        withdrawal["status"]
-
-        or ""
-
-    ).lower().strip()
-
-
-    transfer_id = withdrawal["transfer_id"]
-
-
-    if (
-        current_status == "processing"
-        and transfer_id
-    ):
-
-        try:
-
-            result = get_flutterwave_transfer_status(
-
-                transfer_id
-
-            )
-
-        except Exception:
-
-            logger.exception(
-                "Could not refresh Flutterwave transfer."
-            )
-
-            result = None
-
-
-        if result and result.get(
-            "success",
-            False
-        ):
-
-            transfer_status = str(
-
-                result.get(
-                    "status",
-                    ""
-                )
-
-                or ""
-
-            ).upper().strip()
-
-
-            transfer_reference = result.get(
+            returned_reference = result.get(
                 "reference"
             )
 
-            transfer_message = result.get(
-                "message"
-            )
+            provider_status = str(
+                result.get(
+                    "status",
+                    "PROCESSING"
+                )
+            ).upper()
 
+            message = str(
+                result.get(
+                    "message",
+                    ""
+                )
+            )[:300]
 
-            try:
+            # ------------------------------------------
+            # REFERENCE MUST MATCH
+            # ------------------------------------------
 
-                process_transfer_result(
+            if (
+                returned_reference
+                and returned_reference
+                != stable_reference
+            ):
 
+                logger.error(
+                    "Transfer reference mismatch. "
+                    "Withdrawal=%s",
+                    withdrawal_id,
+                )
+
+                update_withdrawal_transfer(
                     withdrawal_id=withdrawal_id,
-
-                    transfer_status=transfer_status,
-
                     transfer_id=transfer_id,
-
-                    transfer_reference=transfer_reference,
-
-                    transfer_message=transfer_message,
-
+                    transfer_reference=stable_reference,
+                    transfer_status="PROCESSING",
+                    transfer_message=(
+                        "Reference mismatch. "
+                        "Manual verification required."
+                    ),
                 )
 
-            except Exception:
-
-                logger.exception(
-                    "Could not update withdrawal from "
-                    "Flutterwave status."
+                return redirect(
+                    url_for(
+                        "withdrawal_status",
+                        withdrawal_id=withdrawal_id
+                    )
                 )
 
+            # ------------------------------------------
+            # SAVE PROVIDER DATA
+            # ------------------------------------------
 
-            withdrawal = (
-                get_withdrawal_by_id(
-                    withdrawal_id
+            update_withdrawal_transfer(
+                withdrawal_id=withdrawal_id,
+                transfer_id=transfer_id,
+                transfer_reference=stable_reference,
+                transfer_status=provider_status,
+                transfer_message=message,
+            )
+
+            # ------------------------------------------
+            # FINAL STATUS
+            # ------------------------------------------
+
+            if transfer_id:
+
+                verified = (
+                    get_flutterwave_transfer_status(
+                        transfer_id
+                    )
+                )
+
+                verified_reference = str(
+                    verified.get(
+                        "reference"
+                    ) or ""
+                ).strip()
+
+                if (
+                    verified_reference
+                    and verified_reference
+                    != stable_reference
+                ):
+
+                    logger.error(
+                        "Verified transfer reference "
+                        "does not match local reference."
+                    )
+
+                else:
+
+                    process_transfer_result(
+                        withdrawal_id=withdrawal_id,
+
+                        flutterwave_status=verified.get(
+                            "status"
+                        ),
+
+                        transfer_id=verified.get(
+                            "transfer_id"
+                        ) or transfer_id,
+
+                        transfer_reference=(
+                            verified.get(
+                                "reference"
+                            )
+                            or stable_reference
+                        ),
+
+                        message=verified.get(
+                            "message"
+                        ),
+                    )
+
+            else:
+
+                # IMPORTANT:
+                # No transfer ID does NOT mean failed.
+                # Keep it processing.
+
+                update_withdrawal_transfer(
+                    withdrawal_id=withdrawal_id,
+                    transfer_reference=stable_reference,
+                    transfer_status="PROCESSING",
+                    transfer_message=(
+                        "Transfer is being verified."
+                    ),
+                )
+
+            return redirect(
+                url_for(
+                    "withdrawal_status",
+                    withdrawal_id=withdrawal_id
                 )
             )
 
+        except ValueError as exc:
 
-    # ======================================================
-    # FINAL DATA
-    # ======================================================
+            error = str(exc)
 
-    status = str(
+        except Exception:
 
-        withdrawal["status"]
+            logger.exception(
+                "Withdrawal processing error."
+            )
 
-        or "pending"
-
-    ).lower().strip()
-
-
-    transfer_status = str(
-
-        withdrawal["transfer_status"]
-
-        or ""
-
-    ).upper().strip()
-
-
-    message = (
-
-        withdrawal["transfer_message"]
-
-        or ""
-
-    )
-
-
-    if status == "successful":
-
-        title = "Withdrawal Successful"
-
-        message = (
-            message
-            or
-            "The money has been successfully sent "
-            "to the bank account."
-        )
-
-
-    elif status in {
-        "failed",
-        "cancelled"
-    }:
-
-        title = "Withdrawal Failed"
-
-        message = (
-            message
-            or
-            "The transfer failed and your balance "
-            "has been restored."
-        )
-
-
-    elif status == "processing":
-
-        title = "Withdrawal Processing"
-
-        message = (
-            message
-            or
-            "Flutterwave is still processing your transfer."
-        )
-
-
-    else:
-
-        title = "Withdrawal Pending"
-
-        message = (
-            message
-            or
-            "Your withdrawal request is pending."
-        )
-
-
-    # ======================================================
-    # HTML
-    # ======================================================
+            error = (
+                "Withdrawal could not be completed "
+                "right now. Please check the status "
+                "before trying again."
+            )
 
     return render_template_string(
-
-        WITHDRAWAL_STATUS_HTML,
-
-        title=title,
-
-        referral_code=referral_code,
-
-        withdrawal_id=withdrawal_id,
-
-        amount=money(
-            withdrawal["amount"]
-        ),
-
-        bank_name=withdrawal["bank_name"],
-
-        account_name=withdrawal["account_name"],
-
-        account_number=withdrawal["account_number"],
-
-        status=status.upper(),
-
-        transfer_status=transfer_status,
-
-        transfer_id=withdrawal["transfer_id"] or "",
-
-        transfer_reference=(
-            withdrawal["transfer_reference"]
-            or ""
-        ),
-
-        message=message,
-
-    )
-
-
-# ==========================================================
-# WITHDRAWAL FORM HTML
-# ==========================================================
-
-WITHDRAWAL_HTML = """
-
-<!DOCTYPE html>
-
+        """
+<!doctype html>
 <html>
 
 <head>
 
-<meta name="viewport"
-      content="width=device-width, initial-scale=1">
+<meta charset="utf-8">
 
-<title>Withdraw Commission</title>
+<meta name="viewport"
+      content="width=device-width,initial-scale=1">
+
+<title>Withdraw - Alhikam</title>
 
 <style>
 
 body {
-
-    margin: 0;
-
-    padding: 20px;
-
-    background: #f4f7fb;
-
     font-family: Arial, sans-serif;
-
-}
-
-.container {
-
-    max-width: 600px;
-
-    margin: auto;
-
+    background: #f5f7fb;
+    padding: 20px;
 }
 
 .box {
-
+    max-width: 500px;
+    margin: auto;
     background: white;
-
-    padding: 22px;
-
-    border-radius: 18px;
-
-    box-shadow:
-        0 5px 20px rgba(0,0,0,.07);
-
+    padding: 25px;
+    border-radius: 14px;
 }
 
-h1 {
-
-    margin-top: 0;
-
-}
-
-.balance {
-
-    background: #ecfdf5;
-
-    padding: 15px;
-
-    border-radius: 12px;
-
-    margin-bottom: 18px;
-
-}
-
-.error {
-
-    background: #fef2f2;
-
-    color: #991b1b;
-
-    padding: 13px;
-
-    border-radius: 10px;
-
-    margin-bottom: 15px;
-
-}
-
-label {
-
-    display: block;
-
-    font-weight: bold;
-
-    margin-top: 15px;
-
-    margin-bottom: 7px;
-
-}
-
-input,
-select {
-
+input, select {
     width: 100%;
-
     box-sizing: border-box;
-
     padding: 13px;
-
-    border: 1px solid #d1d5db;
-
-    border-radius: 10px;
-
-    font-size: 16px;
-
+    margin: 7px 0 15px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
 }
 
 button {
-
     width: 100%;
-
-    margin-top: 20px;
-
     padding: 14px;
-
     border: 0;
-
-    border-radius: 10px;
-
-    background: #047857;
-
+    border-radius: 8px;
+    background: #111827;
     color: white;
-
-    font-size: 16px;
-
     font-weight: bold;
-
 }
 
-.back {
-
-    display: inline-block;
-
-    margin-top: 15px;
-
-    text-decoration: none;
-
-    color: #111827;
-
+.error {
+    background: #fee2e2;
+    color: #991b1b;
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 15px;
 }
 
-.small {
-
-    color: #6b7280;
-
-    font-size: 13px;
-
-    margin-top: 5px;
-
+.info {
+    background: #eff6ff;
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 15px;
 }
 
 </style>
 
 </head>
 
-
 <body>
-
-
-<div class="container">
-
 
 <div class="box">
 
+<h2>
+    Withdraw Earnings
+</h2>
 
-<h1>
-Withdraw Commission
-</h1>
-
-
-<p>
-Welcome, <strong>{{ full_name }}</strong>
-</p>
-
-
-<div class="balance">
+<div class="info">
 
 Available Balance:
-
 <strong>
-₦{{ "{:,.2f}".format(available_balance) }}
+    {{ balance }}
 </strong>
 
-<br>
+<br><br>
 
-<span class="small">
-Minimum withdrawal: ₦200
-</span>
+Minimum Withdrawal:
+<strong>
+    {{ minimum }}
+</strong>
 
 </div>
-
 
 {% if error %}
 
 <div class="error">
-{{ error }}
+    {{ error }}
 </div>
 
 {% endif %}
 
-
 <form method="POST">
 
-
 <input
-type="hidden"
-name="referral_code"
-value="{{ referral_code }}"
+    type="hidden"
+    name="csrf_token"
+    value="{{ csrf }}"
 >
 
-
 <label>
-Withdrawal Amount
+    Amount
 </label>
 
 <input
-type="number"
-name="amount"
-min="200"
-step="0.01"
-placeholder="Enter amount"
-required
+    type="number"
+    name="amount"
+    min="200"
+    step="0.01"
+    placeholder="Enter amount"
+    required
 >
 
-
 <label>
-Bank
+    Bank
 </label>
 
 <select
-name="bank_code"
-required
+    name="bank_code"
+    required
 >
 
 <option value="">
-Select Bank
+    Select Bank
 </option>
 
-{% for code, name in banks.items() %}
+{% for bank in banks %}
 
-<option value="{{ code }}">
-{{ name }}
+<option value="{{ bank.code }}">
+    {{ bank.name }}
 </option>
 
 {% endfor %}
 
 </select>
 
-
 <label>
-Account Number
+    Account Number
 </label>
 
 <input
-type="text"
-name="account_number"
-inputmode="numeric"
-maxlength="10"
-placeholder="10 digit account number"
-required
+    type="text"
+    name="account_number"
+    inputmode="numeric"
+    maxlength="10"
+    placeholder="10-digit account number"
+    required
 >
 
-
 <button type="submit">
-Submit Withdrawal
+    Withdraw
 </button>
-
 
 </form>
 
-
-<a
-class="back"
-href="/referral/dashboard?ref={{ referral_code }}"
->
-← Back to Dashboard
-</a>
-
-
-</div>
-
-</div>
-
-
-</body>
-
-</html>
-
-"""
-
-
-# ==========================================================
-# WITHDRAWAL RESULT HTML
-# ==========================================================
-
-WITHDRAWAL_RESULT_HTML = """
-
-<!DOCTYPE html>
-
-<html>
-
-<head>
-
-<meta name="viewport"
-      content="width=device-width, initial-scale=1">
-
-<title>Withdrawal Result</title>
-
-<style>
-
-body {
-
-    margin: 0;
-
-    padding: 20px;
-
-    background: #f4f7fb;
-
-    font-family: Arial, sans-serif;
-
-}
-
-.box {
-
-    max-width: 600px;
-
-    margin: 40px auto;
-
-    background: white;
-
-    padding: 25px;
-
-    border-radius: 18px;
-
-    text-align: center;
-
-    box-shadow:
-        0 5px 20px rgba(0,0,0,.07);
-
-}
-
-.status {
-
-    font-size: 25px;
-
-    font-weight: bold;
-
-    margin: 15px 0;
-
-}
-
-.message {
-
-    line-height: 1.6;
-
-    color: #4b5563;
-
-}
-
-a {
-
-    display: inline-block;
-
-    margin-top: 20px;
-
-    padding: 13px 18px;
-
-    background: #111827;
-
-    color: white;
-
-    text-decoration: none;
-
-    border-radius: 10px;
-
-}
-
-</style>
-
-</head>
-
-
-<body>
-
-
-<div class="box">
-
-
-<h1>
-Alhikam Learning Center
-</h1>
-
-
-<div class="status">
-{{ status }}
-</div>
-
-
-<p>
-Withdrawal ID:
-<strong>
-#{{ withdrawal_id }}
-</strong>
-</p>
-
-
-<p>
-Amount:
-<strong>
-{{ amount }}
-</strong>
-</p>
-
-
-<p class="message">
-{{ message }}
-</p>
-
-
-<a
-href="/referral/withdraw/status/{{ withdrawal_id }}?ref={{ referral_code }}"
->
-Check Withdrawal Status
-</a>
-
-
 <br>
 
-
-<a
-href="/referral/dashboard?ref={{ referral_code }}"
->
-Back to Dashboard
+<a href="{{ url_for('referral_dashboard') }}">
+    ← Back to Dashboard
 </a>
 
-
 </div>
-
 
 </body>
 
 </html>
+        """,
 
-"""
+        csrf=csrf,
+
+        balance=_safe_money(
+            _row_get(
+                promoter,
+                "available_balance",
+                0
+            )
+        ),
+
+        minimum=_safe_money(
+            MINIMUM_WITHDRAWAL
+        ),
+
+        banks=banks,
+
+        error=error,
+    )
 
 
 # ==========================================================
-# WITHDRAWAL STATUS HTML
+# WITHDRAWAL STATUS
 # ==========================================================
 
-WITHDRAWAL_STATUS_HTML = """
+def withdrawal_status_page(
+    withdrawal_id,
+    referral_code=None
+):
 
-<!DOCTYPE html>
+    promoter = _current_promoter()
 
+    if not promoter:
+
+        return redirect(
+            url_for(
+                "promoter_login",
+                ref=referral_code
+                if referral_code
+                else ""
+            )
+        )
+
+    try:
+
+        withdrawal_id = int(
+            withdrawal_id
+        )
+
+    except (
+        ValueError,
+        TypeError,
+    ):
+
+        abort(404)
+
+    withdrawal = get_withdrawal_by_id(
+        withdrawal_id
+    )
+
+    if not withdrawal:
+
+        abort(404)
+
+    promoter_id = _row_get(
+        promoter,
+        "id"
+    )
+
+    # ======================================================
+    # OWNERSHIP CHECK
+    # ======================================================
+
+    if int(
+        _row_get(
+            withdrawal,
+            "promoter_id",
+            -1
+        )
+    ) != int(promoter_id):
+
+        abort(403)
+
+    status = str(
+        _row_get(
+            withdrawal,
+            "status",
+            ""
+        )
+    ).lower()
+
+    transfer_id = _row_get(
+        withdrawal,
+        "transfer_id"
+    )
+
+    transfer_reference = _row_get(
+        withdrawal,
+        "transfer_reference"
+    )
+
+    # ======================================================
+    # VERIFY PROCESSING TRANSFER
+    # ======================================================
+
+    if (
+        status == "processing"
+        and (
+            transfer_id
+            or transfer_reference
+        )
+    ):
+
+        try:
+
+            if transfer_id:
+
+                verified = (
+                    get_flutterwave_transfer_status(
+                        transfer_id
+                    )
+                )
+
+            else:
+
+                verified = (
+                    get_flutterwave_transfer_status_by_reference(
+                        transfer_reference
+                    )
+                )
+
+            verified_reference = str(
+                verified.get(
+                    "reference"
+                ) or ""
+            ).strip()
+
+            # ----------------------------------------------
+            # NEVER ACCEPT WRONG REFERENCE
+            # ----------------------------------------------
+
+            if (
+                verified_reference
+                and verified_reference
+                != str(
+                    transfer_reference
+                    or ""
+                ).strip()
+            ):
+
+                logger.error(
+                    "Transfer reference mismatch "
+                    "during status verification. "
+                    "Withdrawal=%s",
+                    withdrawal_id,
+                )
+
+            else:
+
+                process_transfer_result(
+
+                    withdrawal_id=withdrawal_id,
+
+                    flutterwave_status=verified.get(
+                        "status"
+                    ),
+
+                    transfer_id=verified.get(
+                        "transfer_id"
+                    ) or transfer_id,
+
+                    transfer_reference=(
+                        verified_reference
+                        or transfer_reference
+                    ),
+
+                    message=verified.get(
+                        "message"
+                    ),
+                )
+
+                withdrawal = (
+                    get_withdrawal_by_id(
+                        withdrawal_id
+                    )
+                )
+
+        except Exception:
+
+            logger.exception(
+                "Withdrawal status verification failed. "
+                "Withdrawal=%s",
+                withdrawal_id,
+            )
+
+            # IMPORTANT:
+            # Do not refund because verification failed.
+
+    # ======================================================
+    # DISPLAY
+    # ======================================================
+
+    display_status = str(
+        _row_get(
+            withdrawal,
+            "status",
+            "pending"
+        )
+    ).upper()
+
+    amount = _safe_money(
+        _row_get(
+            withdrawal,
+            "amount",
+            0
+        )
+    )
+
+    bank_name = _row_get(
+        withdrawal,
+        "bank_name",
+        ""
+    )
+
+    account_number = _mask_account(
+        _row_get(
+            withdrawal,
+            "account_number",
+            ""
+        )
+    )
+
+    account_name = _row_get(
+        withdrawal,
+        "account_name",
+        ""
+    )
+
+    transfer_status = _row_get(
+        withdrawal,
+        "transfer_status",
+        ""
+    )
+
+    transfer_message = _row_get(
+        withdrawal,
+        "transfer_message",
+        ""
+    )
+
+    return render_template_string(
+        """
+<!doctype html>
 <html>
 
 <head>
 
-<meta name="viewport"
-      content="width=device-width, initial-scale=1">
+<meta charset="utf-8">
 
-<title>{{ title }}</title>
+<meta name="viewport"
+      content="width=device-width,initial-scale=1">
+
+<title>Withdrawal Status</title>
 
 <style>
 
 body {
-
-    margin: 0;
-
-    padding: 20px;
-
-    background: #f4f7fb;
-
     font-family: Arial, sans-serif;
-
+    background: #f5f7fb;
+    padding: 20px;
 }
 
 .box {
-
-    max-width: 650px;
-
-    margin: 30px auto;
-
+    max-width: 550px;
+    margin: auto;
     background: white;
-
-    padding: 24px;
-
-    border-radius: 18px;
-
-    box-shadow:
-        0 5px 20px rgba(0,0,0,.07);
-
+    padding: 25px;
+    border-radius: 14px;
+    box-shadow: 0 5px 20px rgba(0,0,0,.06);
 }
 
 .row {
-
-    display: flex;
-
-    justify-content: space-between;
-
-    gap: 15px;
-
     padding: 12px 0;
-
     border-bottom: 1px solid #eee;
-
 }
 
-.label {
-
-    color: #6b7280;
-
-}
-
-.value {
-
+.status {
+    font-size: 22px;
     font-weight: bold;
-
-    text-align: right;
-
-    word-break: break-word;
-
 }
 
-.message {
-
-    margin-top: 20px;
-
-    padding: 15px;
-
-    background: #f3f4f6;
-
-    border-radius: 10px;
-
-    line-height: 1.6;
-
+.successful {
+    color: #166534;
 }
 
-.button {
+.processing,
+.pending {
+    color: #92400e;
+}
 
+.failed,
+.cancelled {
+    color: #991b1b;
+}
+
+button, a {
     display: inline-block;
-
     margin-top: 20px;
-
-    padding: 13px 18px;
-
-    background: #111827;
-
-    color: white;
-
+    padding: 12px 16px;
+    border-radius: 8px;
     text-decoration: none;
+}
 
-    border-radius: 10px;
-
+a {
+    background: #111827;
+    color: white;
 }
 
 </style>
 
 </head>
 
-
 <body>
-
 
 <div class="box">
 
-
-<h1>
-{{ title }}
-</h1>
-
+<h2>
+    Withdrawal #{{ withdrawal_id }}
+</h2>
 
 <div class="row">
-
-<span class="label">
-Withdrawal ID
-</span>
-
-<span class="value">
-#{{ withdrawal_id }}
-</span>
-
+    Amount:
+    <strong>{{ amount }}</strong>
 </div>
 
-
 <div class="row">
-
-<span class="label">
-Amount
-</span>
-
-<span class="value">
-{{ amount }}
-</span>
-
+    Bank:
+    <strong>{{ bank_name }}</strong>
 </div>
 
-
 <div class="row">
-
-<span class="label">
-Bank
-</span>
-
-<span class="value">
-{{ bank_name }}
-</span>
-
+    Account Name:
+    <strong>{{ account_name }}</strong>
 </div>
 
-
 <div class="row">
-
-<span class="label">
-Account Name
-</span>
-
-<span class="value">
-{{ account_name }}
-</span>
-
+    Account Number:
+    <strong>{{ account_number }}</strong>
 </div>
 
-
 <div class="row">
-
-<span class="label">
-Account Number
-</span>
-
-<span class="value">
-{{ account_number }}
-</span>
-
+    Status:
+    <div class="status {{ status|lower }}">
+        {{ status }}
+    </div>
 </div>
 
+{% if transfer_status %}
 
 <div class="row">
-
-<span class="label">
-Withdrawal Status
-</span>
-
-<span class="value">
-{{ status }}
-</span>
-
-</div>
-
-
-<div class="row">
-
-<span class="label">
-Flutterwave Status
-</span>
-
-<span class="value">
-{{ transfer_status }}
-</span>
-
-</div>
-
-
-{% if transfer_id %}
-
-<div class="row">
-
-<span class="label">
-Transfer ID
-</span>
-
-<span class="value">
-{{ transfer_id }}
-</span>
-
+    Transfer Status:
+    <strong>
+        {{ transfer_status }}
+    </strong>
 </div>
 
 {% endif %}
 
-
-{% if transfer_reference %}
+{% if transfer_message %}
 
 <div class="row">
-
-<span class="label">
-Transfer Reference
-</span>
-
-<span class="value">
-{{ transfer_reference }}
-</span>
-
+    Message:
+    {{ transfer_message }}
 </div>
 
 {% endif %}
 
-
-<div class="message">
-{{ message }}
-</div>
-
-
-<a
-class="button"
-href="/referral/withdraw/status/{{ withdrawal_id }}?ref={{ referral_code }}"
->
-Refresh Status
+<a href="{{ url_for('referral_dashboard') }}">
+    ← Back to Dashboard
 </a>
 
+{% if status in ["PROCESSING", "PENDING"] %}
 
-<a
-class="button"
-href="/referral/dashboard?ref={{ referral_code }}"
->
-Dashboard
+<a href="{{ url_for(
+    'withdrawal_status',
+    withdrawal_id=withdrawal_id
+) }}">
+    Check Status Again
 </a>
 
+{% endif %}
 
 </div>
-
 
 </body>
 
 </html>
+        """,
 
-"""
+        withdrawal_id=withdrawal_id,
+
+        amount=amount,
+
+        bank_name=bank_name,
+
+        account_name=account_name,
+
+        account_number=account_number,
+
+        status=display_status,
+
+        transfer_status=transfer_status,
+
+        transfer_message=transfer_message,
+    )
