@@ -542,6 +542,7 @@ def verify_promoter_password(promoter_id, password):
         return False
 
     try:
+
         return check_password_hash(
             password_hash,
             password
@@ -582,6 +583,7 @@ def add_promoter(
         )
 
     if password:
+
         password = str(password)
 
         if len(password) < 8:
@@ -595,6 +597,7 @@ def add_promoter(
         )
 
     else:
+
         password_hash = None
 
     conn = get_connection()
@@ -605,7 +608,9 @@ def add_promoter(
 
             if referral_code:
 
-                code = str(referral_code).strip()
+                code = str(
+                    referral_code
+                ).strip()
 
             else:
 
@@ -634,8 +639,8 @@ def add_promoter(
                         phone,
                         email,
                         code,
-                        float(commission_rate),
                         password_hash,
+                        float(commission_rate),
                         utc_now(),
                     )
                 )
@@ -647,6 +652,7 @@ def add_promoter(
             except sqlite3.IntegrityError:
 
                 if referral_code:
+
                     raise ValueError(
                         "Referral code already exists."
                     )
@@ -654,6 +660,693 @@ def add_promoter(
         raise RuntimeError(
             "Could not generate unique referral code."
         )
+
+    finally:
+        conn.close()
+
+
+# ==========================================================
+# PAYMENT
+# ==========================================================
+
+def save_payment(data):
+
+    if not isinstance(data, dict):
+        raise ValueError(
+            "Payment data must be a dictionary."
+        )
+
+    tx_ref = str(
+        data.get("tx_ref") or ""
+    ).strip()
+
+    if not tx_ref:
+        raise ValueError(
+            "Transaction reference is required."
+        )
+
+    amount = money(
+        data.get("amount", 0)
+    )
+
+    if amount < 0:
+        raise ValueError(
+            "Payment amount cannot be negative."
+        )
+
+    transaction_id = data.get(
+        "transaction_id"
+    )
+
+    payment_plan = (
+        data.get("payment_plan")
+        or data.get("plan_name")
+        or ""
+    )
+
+    status = str(
+        data.get("status")
+        or "pending"
+    ).strip().lower()
+
+    referral_code = data.get(
+        "referral_code"
+    )
+
+    promoter_id = data.get(
+        "promoter_id"
+    )
+
+    commission = money(
+        data.get("commission", 0)
+    )
+
+    telegram_username = data.get(
+        "telegram_username"
+    )
+
+    telegram_id = data.get(
+        "telegram_id"
+    )
+
+    conn = get_connection()
+
+    try:
+
+        conn.execute("BEGIN IMMEDIATE")
+
+        existing = conn.execute(
+            """
+            SELECT id
+            FROM payments
+            WHERE tx_ref = ?
+            LIMIT 1
+            """,
+            (tx_ref,)
+        ).fetchone()
+
+        if existing:
+
+            conn.execute(
+                """
+                UPDATE payments
+
+                SET
+                    transaction_id =
+                        COALESCE(
+                            ?,
+                            transaction_id
+                        ),
+
+                    payment_plan =
+                        CASE
+                            WHEN ? != ''
+                            THEN ?
+                            ELSE payment_plan
+                        END,
+
+                    amount = ?,
+
+                    status = ?,
+
+                    referral_code =
+                        COALESCE(
+                            ?,
+                            referral_code
+                        ),
+
+                    promoter_id =
+                        COALESCE(
+                            ?,
+                            promoter_id
+                        ),
+
+                    commission = ?,
+
+                    telegram_username =
+                        COALESCE(
+                            ?,
+                            telegram_username
+                        ),
+
+                    telegram_id =
+                        COALESCE(
+                            ?,
+                            telegram_id
+                        )
+
+                WHERE tx_ref = ?
+                """,
+                (
+                    transaction_id,
+
+                    payment_plan,
+                    payment_plan,
+
+                    float(amount),
+
+                    status,
+
+                    referral_code,
+                    promoter_id,
+
+                    float(commission),
+
+                    telegram_username,
+                    telegram_id,
+
+                    tx_ref,
+                )
+            )
+
+            conn.commit()
+
+            return existing["id"]
+
+        cursor = conn.execute(
+            """
+            INSERT INTO payments (
+                tx_ref,
+                transaction_id,
+                payment_plan,
+                amount,
+                status,
+                referral_code,
+                promoter_id,
+                commission,
+                telegram_username,
+                telegram_id,
+                registration_completed,
+                created_at
+            )
+            VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?
+            )
+            """,
+            (
+                tx_ref,
+                transaction_id,
+                payment_plan,
+                float(amount),
+                status,
+                referral_code,
+                promoter_id,
+                float(commission),
+                telegram_username,
+                telegram_id,
+                utc_now(),
+            )
+        )
+
+        conn.commit()
+
+        return cursor.lastrowid
+
+    except Exception:
+
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()
+
+
+def get_payment_by_tx_ref(tx_ref):
+
+    if not tx_ref:
+        return None
+
+    conn = get_connection()
+
+    try:
+
+        return conn.execute(
+            """
+            SELECT *
+            FROM payments
+            WHERE tx_ref = ?
+            LIMIT 1
+            """,
+            (str(tx_ref).strip(),)
+        ).fetchone()
+
+    finally:
+        conn.close()
+
+
+def update_payment_status(
+    tx_ref,
+    status,
+    transaction_id=None,
+):
+
+    if not tx_ref:
+        raise ValueError(
+            "Transaction reference is required."
+        )
+
+    status = str(
+        status or ""
+    ).strip().lower()
+
+    if not status:
+        raise ValueError(
+            "Payment status is required."
+        )
+
+    conn = get_connection()
+
+    try:
+
+        cursor = conn.execute(
+            """
+            UPDATE payments
+
+            SET
+                status = ?,
+
+                transaction_id =
+                    COALESCE(
+                        ?,
+                        transaction_id
+                    )
+
+            WHERE tx_ref = ?
+            """,
+            (
+                status,
+                transaction_id,
+                str(tx_ref).strip(),
+            )
+        )
+
+        conn.commit()
+
+        return cursor.rowcount > 0
+
+    finally:
+        conn.close()
+
+
+# ==========================================================
+# PAYMENT REGISTRATION
+# ==========================================================
+
+def mark_payment_registration_completed(
+    tx_ref
+):
+
+    if not tx_ref:
+        raise ValueError(
+            "Transaction reference is required."
+        )
+
+    conn = get_connection()
+
+    try:
+
+        cursor = conn.execute(
+            """
+            UPDATE payments
+
+            SET registration_completed = 1
+
+            WHERE tx_ref = ?
+            """,
+            (str(tx_ref).strip(),)
+        )
+
+        conn.commit()
+
+        return cursor.rowcount > 0
+
+    finally:
+        conn.close()
+
+
+def payment_registration_completed(tx_ref):
+
+    if not tx_ref:
+        return False
+
+    conn = get_connection()
+
+    try:
+
+        row = conn.execute(
+            """
+            SELECT registration_completed
+            FROM payments
+            WHERE tx_ref = ?
+            LIMIT 1
+            """,
+            (str(tx_ref).strip(),)
+        ).fetchone()
+
+        if not row:
+            return False
+
+        return bool(
+            row["registration_completed"]
+        )
+
+    finally:
+        conn.close()
+
+
+# ==========================================================
+# STUDENTS
+# ==========================================================
+
+def add_student(data):
+
+    if not isinstance(data, dict):
+        raise ValueError(
+            "Student data must be a dictionary."
+        )
+
+    tx_ref = data.get("tx_ref")
+
+    if tx_ref:
+        tx_ref = str(tx_ref).strip()
+
+    full_name = str(
+        data.get("full_name") or ""
+    ).strip()
+
+    phone = data.get("phone")
+    email = data.get("email")
+
+    telegram_username = data.get(
+        "telegram_username"
+    )
+
+    telegram_id = data.get(
+        "telegram_id"
+    )
+
+    payment_plan = (
+        data.get("payment_plan")
+        or data.get("plan_name")
+        or ""
+    )
+
+    amount_paid = money(
+        data.get(
+            "amount_paid",
+            data.get("amount", 0)
+        )
+    )
+
+    payment_status = str(
+        data.get("payment_status")
+        or data.get("status")
+        or "successful"
+    ).strip().lower()
+
+    payment_token = data.get(
+        "payment_token"
+    )
+
+    referral_code = data.get(
+        "referral_code"
+    )
+
+    promoter_id = data.get(
+        "promoter_id"
+    )
+
+    conn = get_connection()
+
+    try:
+
+        conn.execute("BEGIN IMMEDIATE")
+
+        if tx_ref:
+
+            existing = conn.execute(
+                """
+                SELECT *
+                FROM students
+                WHERE tx_ref = ?
+                LIMIT 1
+                """,
+                (tx_ref,)
+            ).fetchone()
+
+            if existing:
+
+                conn.commit()
+
+                return existing["id"]
+
+        cursor = conn.execute(
+            """
+            INSERT INTO students (
+                payment_token,
+                tx_ref,
+                full_name,
+                phone,
+                email,
+                telegram_username,
+                telegram_id,
+                payment_plan,
+                amount_paid,
+                payment_status,
+                registration_completed,
+                referral_code,
+                promoter_id,
+                created_at
+            )
+            VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?
+            )
+            """,
+            (
+                payment_token,
+                tx_ref,
+                full_name,
+                phone,
+                email,
+                telegram_username,
+                telegram_id,
+                payment_plan,
+                float(amount_paid),
+                payment_status,
+                referral_code,
+                promoter_id,
+                utc_now(),
+            )
+        )
+
+        student_id = cursor.lastrowid
+
+        conn.commit()
+
+        return student_id
+
+    except Exception:
+
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()
+
+
+def get_student_by_tx_ref(tx_ref):
+
+    if not tx_ref:
+        return None
+
+    conn = get_connection()
+
+    try:
+
+        return conn.execute(
+            """
+            SELECT *
+            FROM students
+            WHERE tx_ref = ?
+            LIMIT 1
+            """,
+            (str(tx_ref).strip(),)
+        ).fetchone()
+
+    finally:
+        conn.close()
+
+
+def create_or_get_student(data):
+
+    if not isinstance(data, dict):
+        raise ValueError(
+            "Student data must be a dictionary."
+        )
+
+    tx_ref = data.get("tx_ref")
+
+    if tx_ref:
+        tx_ref = str(tx_ref).strip()
+
+    conn = get_connection()
+
+    try:
+
+        conn.execute("BEGIN IMMEDIATE")
+
+        if tx_ref:
+
+            existing = conn.execute(
+                """
+                SELECT *
+                FROM students
+                WHERE tx_ref = ?
+                LIMIT 1
+                """,
+                (tx_ref,)
+            ).fetchone()
+
+            if existing:
+
+                conn.commit()
+
+                return existing, False
+
+        payment_token = data.get(
+            "payment_token"
+        )
+
+        full_name = str(
+            data.get("full_name") or ""
+        ).strip()
+
+        phone = data.get("phone")
+        email = data.get("email")
+
+        telegram_username = data.get(
+            "telegram_username"
+        )
+
+        telegram_id = data.get(
+            "telegram_id"
+        )
+
+        payment_plan = (
+            data.get("payment_plan")
+            or data.get("plan_name")
+            or ""
+        )
+
+        amount_paid = money(
+            data.get(
+                "amount_paid",
+                data.get("amount", 0)
+            )
+        )
+
+        payment_status = str(
+            data.get("payment_status")
+            or data.get("status")
+            or "successful"
+        ).strip().lower()
+
+        referral_code = data.get(
+            "referral_code"
+        )
+
+        promoter_id = data.get(
+            "promoter_id"
+        )
+
+        cursor = conn.execute(
+            """
+            INSERT INTO students (
+                payment_token,
+                tx_ref,
+                full_name,
+                phone,
+                email,
+                telegram_username,
+                telegram_id,
+                payment_plan,
+                amount_paid,
+                payment_status,
+                registration_completed,
+                referral_code,
+                promoter_id,
+                created_at
+            )
+            VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?
+            )
+            """,
+            (
+                payment_token,
+                tx_ref,
+                full_name,
+                phone,
+                email,
+                telegram_username,
+                telegram_id,
+                payment_plan,
+                float(amount_paid),
+                payment_status,
+                referral_code,
+                promoter_id,
+                utc_now(),
+            )
+        )
+
+        student_id = cursor.lastrowid
+
+        student = conn.execute(
+            """
+            SELECT *
+            FROM students
+            WHERE id = ?
+            LIMIT 1
+            """,
+            (student_id,)
+        ).fetchone()
+
+        conn.commit()
+
+        return student, True
+
+    except Exception:
+
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()
+
+
+# ==========================================================
+# COMMISSION CHECK
+# ==========================================================
+
+def commission_exists(tx_ref):
+
+    if not tx_ref:
+        return False
+
+    conn = get_connection()
+
+    try:
+
+        row = conn.execute(
+            """
+            SELECT id
+            FROM commissions
+            WHERE tx_ref = ?
+            LIMIT 1
+            """,
+            (str(tx_ref).strip(),)
+        ).fetchone()
+
+        return row is not None
 
     finally:
         conn.close()
@@ -673,27 +1366,37 @@ def create_commission(
 ):
 
     if not tx_ref:
-        raise ValueError("Transaction reference required.")
+        raise ValueError(
+            "Transaction reference required."
+        )
 
-    payment_amount = money(payment_amount)
-    commission_rate = money(commission_rate)
-    commission_amount = money(commission_amount)
+    payment_amount = money(
+        payment_amount
+    )
+
+    commission_rate = money(
+        commission_rate
+    )
+
+    commission_amount = money(
+        commission_amount
+    )
 
     if payment_amount <= 0:
-        raise ValueError("Invalid payment amount.")
+        raise ValueError(
+            "Invalid payment amount."
+        )
 
     if commission_amount < 0:
-        raise ValueError("Invalid commission amount.")
+        raise ValueError(
+            "Invalid commission amount."
+        )
 
     conn = get_connection()
 
     try:
 
         conn.execute("BEGIN IMMEDIATE")
-
-        # ----------------------------------------------
-        # DUPLICATE PROTECTION
-        # ----------------------------------------------
 
         existing = conn.execute(
             """
@@ -706,12 +1409,10 @@ def create_commission(
         ).fetchone()
 
         if existing:
-            conn.commit()
-            return existing["id"]
 
-        # ----------------------------------------------
-        # PROMOTER
-        # ----------------------------------------------
+            conn.commit()
+
+            return existing["id"]
 
         promoter = conn.execute(
             """
@@ -725,14 +1426,12 @@ def create_commission(
         ).fetchone()
 
         if not promoter:
+
             conn.rollback()
+
             raise ValueError(
                 "Promoter is not active."
             )
-
-        # ----------------------------------------------
-        # COMMISSION
-        # ----------------------------------------------
 
         cursor = conn.execute(
             """
@@ -759,13 +1458,10 @@ def create_commission(
             )
         )
 
-        # ----------------------------------------------
-        # ATOMIC BALANCE UPDATE
-        # ----------------------------------------------
-
         conn.execute(
             """
             UPDATE promoters
+
             SET
                 total_sales =
                     total_sales + ?,
@@ -815,23 +1511,42 @@ def create_withdrawal(
     amount = money(amount)
 
     if amount < MINIMUM_WITHDRAWAL:
+
         raise ValueError(
-            f"Minimum withdrawal is ₦{MINIMUM_WITHDRAWAL:,.2f}"
+            f"Minimum withdrawal is "
+            f"₦{MINIMUM_WITHDRAWAL:,.2f}"
         )
 
-    bank_name = str(bank_name or "").strip()
-    bank_code = str(bank_code or "").strip()
-    account_name = str(account_name or "").strip()
-    account_number = str(account_number or "").strip()
+    bank_name = str(
+        bank_name or ""
+    ).strip()
+
+    bank_code = str(
+        bank_code or ""
+    ).strip()
+
+    account_name = str(
+        account_name or ""
+    ).strip()
+
+    account_number = str(
+        account_number or ""
+    ).strip()
 
     if not bank_name:
-        raise ValueError("Bank name is required.")
+        raise ValueError(
+            "Bank name is required."
+        )
 
     if not bank_code:
-        raise ValueError("Bank code is required.")
+        raise ValueError(
+            "Bank code is required."
+        )
 
     if not account_name:
-        raise ValueError("Account name is required.")
+        raise ValueError(
+            "Account name is required."
+        )
 
     if not account_number.isdigit():
         raise ValueError(
@@ -861,7 +1576,9 @@ def create_withdrawal(
         ).fetchone()
 
         if not promoter:
+
             conn.rollback()
+
             raise ValueError(
                 "Promoter account is not active."
             )
@@ -871,18 +1588,21 @@ def create_withdrawal(
         )
 
         if amount > available:
+
             conn.rollback()
+
             raise ValueError(
                 "Insufficient available balance."
             )
 
-        # ----------------------------------------------
+        # --------------------------------------------------
         # RESERVE BALANCE
-        # ----------------------------------------------
+        # --------------------------------------------------
 
         cursor = conn.execute(
             """
             UPDATE promoters
+
             SET available_balance =
                 available_balance - ?
 
@@ -905,9 +1625,9 @@ def create_withdrawal(
                 "Withdrawal balance could not be reserved."
             )
 
-        # ----------------------------------------------
+        # --------------------------------------------------
         # CREATE WITHDRAWAL
-        # ----------------------------------------------
+        # --------------------------------------------------
 
         cursor = conn.execute(
             """
@@ -965,6 +1685,7 @@ def get_all_withdrawals():
                 w.*,
                 p.full_name AS promoter_name,
                 p.referral_code
+
             FROM withdrawals w
 
             JOIN promoters p
@@ -998,7 +1719,9 @@ def get_withdrawal_by_id(withdrawal_id):
         conn.close()
 
 
-def get_withdrawal_by_transfer_id(transfer_id):
+def get_withdrawal_by_transfer_id(
+    transfer_id
+):
 
     if not transfer_id:
         return None
@@ -1046,7 +1769,9 @@ def get_withdrawal_by_transfer_reference(
         conn.close()
 
 
-def get_promoter_withdrawals(promoter_id):
+def get_promoter_withdrawals(
+    promoter_id
+):
 
     conn = get_connection()
 
@@ -1096,7 +1821,9 @@ def update_withdrawal_transfer(
         ).fetchone()
 
         if not withdrawal:
+
             conn.rollback()
+
             raise ValueError(
                 "Withdrawal not found."
             )
@@ -1108,11 +1835,12 @@ def update_withdrawal_transfer(
         }:
 
             conn.commit()
+
             return False
 
-        # ----------------------------------------------
+        # --------------------------------------------------
         # TRANSFER ID COLLISION
-        # ----------------------------------------------
+        # --------------------------------------------------
 
         if transfer_id:
 
@@ -1135,12 +1863,13 @@ def update_withdrawal_transfer(
                 conn.rollback()
 
                 raise ValueError(
-                    "Transfer ID already belongs to another withdrawal."
+                    "Transfer ID already belongs "
+                    "to another withdrawal."
                 )
 
-        # ----------------------------------------------
+        # --------------------------------------------------
         # REFERENCE COLLISION
-        # ----------------------------------------------
+        # --------------------------------------------------
 
         if transfer_reference:
 
@@ -1163,7 +1892,8 @@ def update_withdrawal_transfer(
                 conn.rollback()
 
                 raise ValueError(
-                    "Transfer reference already belongs to another withdrawal."
+                    "Transfer reference already "
+                    "belongs to another withdrawal."
                 )
 
         new_status = withdrawal["status"]
@@ -1177,16 +1907,28 @@ def update_withdrawal_transfer(
 
             SET
                 transfer_id =
-                    COALESCE(?, transfer_id),
+                    COALESCE(
+                        ?,
+                        transfer_id
+                    ),
 
                 transfer_reference =
-                    COALESCE(?, transfer_reference),
+                    COALESCE(
+                        ?,
+                        transfer_reference
+                    ),
 
                 transfer_status =
-                    COALESCE(?, transfer_status),
+                    COALESCE(
+                        ?,
+                        transfer_status
+                    ),
 
                 transfer_message =
-                    COALESCE(?, transfer_message),
+                    COALESCE(
+                        ?,
+                        transfer_message
+                    ),
 
                 status = ?
 
@@ -1263,18 +2005,19 @@ def mark_withdrawal_successful(
                 "Withdrawal not found."
             )
 
-        # ----------------------------------------------
+        # --------------------------------------------------
         # IDEMPOTENT SUCCESS
-        # ----------------------------------------------
+        # --------------------------------------------------
 
         if withdrawal["status"] == "successful":
 
             conn.commit()
+
             return True
 
-        # ----------------------------------------------
+        # --------------------------------------------------
         # NEVER RESURRECT FAILED/CANCELLED
-        # ----------------------------------------------
+        # --------------------------------------------------
 
         if withdrawal["status"] in {
             "failed",
@@ -1284,7 +2027,8 @@ def mark_withdrawal_successful(
             conn.rollback()
 
             raise ValueError(
-                "A failed or cancelled withdrawal cannot become successful."
+                "A failed or cancelled withdrawal "
+                "cannot become successful."
             )
 
         conn.execute(
@@ -1295,15 +2039,24 @@ def mark_withdrawal_successful(
                 status = 'successful',
 
                 transfer_id =
-                    COALESCE(?, transfer_id),
+                    COALESCE(
+                        ?,
+                        transfer_id
+                    ),
 
                 transfer_reference =
-                    COALESCE(?, transfer_reference),
+                    COALESCE(
+                        ?,
+                        transfer_reference
+                    ),
 
                 transfer_status = 'SUCCESSFUL',
 
                 transfer_message =
-                    COALESCE(?, transfer_message)
+                    COALESCE(
+                        ?,
+                        transfer_message
+                    )
 
             WHERE id = ?
             """,
@@ -1324,10 +2077,10 @@ def mark_withdrawal_successful(
             )
         )
 
-        # ----------------------------------------------
+        # --------------------------------------------------
         # MONEY WAS ALREADY RESERVED.
         # ONLY INCREMENT WITHDRAWN AMOUNT.
-        # ----------------------------------------------
+        # --------------------------------------------------
 
         conn.execute(
             """
@@ -1340,7 +2093,9 @@ def mark_withdrawal_successful(
             """,
             (
                 float(
-                    money(withdrawal["amount"])
+                    money(
+                        withdrawal["amount"]
+                    )
                 ),
                 withdrawal["promoter_id"],
             )
@@ -1404,9 +2159,9 @@ def refund_withdrawal(
                 "Withdrawal not found."
             )
 
-        # ----------------------------------------------
+        # --------------------------------------------------
         # ALREADY FINAL
-        # ----------------------------------------------
+        # --------------------------------------------------
 
         if withdrawal["status"] in {
             "failed",
@@ -1414,6 +2169,7 @@ def refund_withdrawal(
         }:
 
             conn.commit()
+
             return True
 
         if withdrawal["status"] == "successful":
@@ -1428,9 +2184,9 @@ def refund_withdrawal(
             withdrawal["amount"]
         )
 
-        # ----------------------------------------------
+        # --------------------------------------------------
         # RETURN RESERVED MONEY
-        # ----------------------------------------------
+        # --------------------------------------------------
 
         conn.execute(
             """
@@ -1447,9 +2203,9 @@ def refund_withdrawal(
             )
         )
 
-        # ----------------------------------------------
+        # --------------------------------------------------
         # FINAL STATUS
-        # ----------------------------------------------
+        # --------------------------------------------------
 
         conn.execute(
             """
@@ -1459,15 +2215,24 @@ def refund_withdrawal(
                 status = ?,
 
                 transfer_id =
-                    COALESCE(?, transfer_id),
+                    COALESCE(
+                        ?,
+                        transfer_id
+                    ),
 
                 transfer_reference =
-                    COALESCE(?, transfer_reference),
+                    COALESCE(
+                        ?,
+                        transfer_reference
+                    ),
 
                 transfer_status = ?,
 
                 transfer_message =
-                    COALESCE(?, transfer_message)
+                    COALESCE(
+                        ?,
+                        transfer_message
+                    )
 
             WHERE id = ?
             """,
@@ -1517,7 +2282,9 @@ def update_withdrawal_status(
     message=None,
 ):
 
-    status = str(status or "").upper()
+    status = str(
+        status or ""
+    ).upper()
 
     if status in {
         "SUCCESS",
@@ -1555,10 +2322,6 @@ def update_withdrawal_status(
             transfer_reference=transfer_reference,
             transfer_message=message,
         )
-
-    # ----------------------------------------------
-    # PROCESSING / PENDING / NEW
-    # ----------------------------------------------
 
     return update_withdrawal_transfer(
         withdrawal_id=withdrawal_id,
@@ -1595,13 +2358,14 @@ def process_transfer_result(
     ).strip().upper()
 
     if not status:
+
         raise ValueError(
             "Flutterwave transfer status is required."
         )
 
-    # ----------------------------------------------
+    # --------------------------------------------------
     # SUCCESS
-    # ----------------------------------------------
+    # --------------------------------------------------
 
     if status in {
         "SUCCESS",
@@ -1616,9 +2380,9 @@ def process_transfer_result(
             transfer_message=message,
         )
 
-    # ----------------------------------------------
+    # --------------------------------------------------
     # FAILED
-    # ----------------------------------------------
+    # --------------------------------------------------
 
     if status in {
         "FAILED",
@@ -1644,9 +2408,9 @@ def process_transfer_result(
             transfer_message=message,
         )
 
-    # ----------------------------------------------
+    # --------------------------------------------------
     # UNKNOWN / PROCESSING
-    # ----------------------------------------------
+    # --------------------------------------------------
 
     return update_withdrawal_transfer(
         withdrawal_id=withdrawal_id,
