@@ -69,12 +69,13 @@ def admin_logged_in():
 
 
 def admin_required(view):
+
     @wraps(view)
     def wrapped(*args, **kwargs):
 
         if not admin_logged_in():
             return redirect(
-                url_for("admin_login")
+                url_for("admin_referral_login")
             )
 
         return view(*args, **kwargs)
@@ -87,11 +88,18 @@ def admin_required(view):
 # ==========================================================
 
 def get_admin_csrf():
-    token = session.get(ADMIN_CSRF_KEY)
+
+    token = session.get(
+        ADMIN_CSRF_KEY
+    )
 
     if not token:
+
         token = secrets.token_urlsafe(32)
-        session[ADMIN_CSRF_KEY] = token
+
+        session[
+            ADMIN_CSRF_KEY
+        ] = token
 
     return token
 
@@ -160,10 +168,6 @@ def admin_login_page():
             )
         ):
 
-            # Do NOT use session.clear()
-            # because other application sessions
-            # may contain payment/registration data.
-
             session.pop(
                 ADMIN_SESSION_KEY,
                 None
@@ -194,7 +198,8 @@ def admin_login_page():
         )
 
     return render_template_string(
-        ADMIN_LOGIN_HTML
+        ADMIN_LOGIN_HTML,
+        error=None
     )
 
 
@@ -218,7 +223,7 @@ def admin_logout_page():
     )
 
     return redirect(
-        url_for("admin_login")
+        url_for("admin_referral_login")
     )
 
 
@@ -230,6 +235,7 @@ def admin_logout_page():
 def admin_referral_page():
 
     promoters = get_all_promoters()
+
     withdrawals = get_all_withdrawals()
 
     csrf_token = get_admin_csrf()
@@ -240,11 +246,11 @@ def admin_referral_page():
 
         item = dict(withdrawal)
 
-        item["masked_account_number"] = (
-            mask_account_number(
-                withdrawal.get(
-                    "account_number"
-                )
+        item[
+            "masked_account_number"
+        ] = mask_account_number(
+            withdrawal.get(
+                "account_number"
             )
         )
 
@@ -297,6 +303,7 @@ def create_promoter_page():
     # ------------------------------------------------------
 
     if not full_name:
+
         return redirect(
             url_for(
                 "admin_referral",
@@ -305,6 +312,7 @@ def create_promoter_page():
         )
 
     if len(full_name) > 100:
+
         return redirect(
             url_for(
                 "admin_referral",
@@ -317,6 +325,7 @@ def create_promoter_page():
     # ------------------------------------------------------
 
     if len(password) < 8:
+
         return redirect(
             url_for(
                 "admin_referral",
@@ -328,6 +337,7 @@ def create_promoter_page():
         )
 
     if len(password) > 200:
+
         return redirect(
             url_for(
                 "admin_referral",
@@ -340,6 +350,7 @@ def create_promoter_page():
     # ------------------------------------------------------
 
     try:
+
         commission_rate = float(
             commission_rate_raw
         )
@@ -381,7 +392,6 @@ def create_promoter_page():
             commission_rate=commission_rate,
         )
 
-        # Password is hashed inside database.py
         set_promoter_password(
             promoter_id,
             password
@@ -395,7 +405,9 @@ def create_promoter_page():
         return redirect(
             url_for(
                 "admin_referral",
-                success="Promoter created successfully."
+                success=(
+                    "Promoter created successfully."
+                )
             )
         )
 
@@ -426,7 +438,11 @@ def refresh_withdrawal_status(
     )
 
     if not withdrawal:
-        return False, "Withdrawal not found."
+
+        return (
+            False,
+            "Withdrawal not found."
+        )
 
     transfer_id = withdrawal.get(
         "transfer_id"
@@ -434,7 +450,8 @@ def refresh_withdrawal_status(
 
     if not transfer_id:
 
-        return False, (
+        return (
+            False,
             "This withdrawal does not "
             "have a Flutterwave transfer ID."
         )
@@ -455,21 +472,30 @@ def refresh_withdrawal_status(
             withdrawal_id
         )
 
-        return False, (
+        return (
+            False,
             "Unable to verify transfer status."
         )
 
     if not result:
-        return False, (
+
+        return (
+            False,
             "Flutterwave returned no status."
         )
 
     status = str(
-        result.get("status", "")
+        result.get(
+            "status",
+            ""
+        )
     ).upper().strip()
 
     message = str(
-        result.get("message", "")
+        result.get(
+            "message",
+            ""
+        )
     ).strip()
 
     # ------------------------------------------------------
@@ -492,7 +518,8 @@ def refresh_withdrawal_status(
                 transfer_message=message,
             )
 
-            return True, (
+            return (
+                True,
                 "Withdrawal confirmed successful."
             )
 
@@ -504,7 +531,8 @@ def refresh_withdrawal_status(
                 withdrawal_id
             )
 
-            return False, (
+            return (
+                False,
                 "Database update failed."
             )
 
@@ -528,7 +556,8 @@ def refresh_withdrawal_status(
                 transfer_message=message,
             )
 
-            return True, (
+            return (
+                True,
                 "Withdrawal failed and balance "
                 "was returned according to "
                 "the withdrawal state."
@@ -541,7 +570,8 @@ def refresh_withdrawal_status(
                 withdrawal_id
             )
 
-            return False, (
+            return (
+                False,
                 "Database update failed."
             )
 
@@ -566,11 +596,13 @@ def refresh_withdrawal_status(
             withdrawal_id
         )
 
-        return False, (
+        return (
+            False,
             "Database update failed."
         )
 
-    return True, (
+    return (
+        True,
         f"Transfer is still processing ({status})."
     )
 
@@ -623,11 +655,7 @@ def admin_withdrawal_status_page():
         )
 
     # ------------------------------------------------------
-    # IMPORTANT:
-    # ADMIN MUST NOT MANUALLY CLAIM SUCCESS.
-    #
-    # SUCCESS/FAILED PAYOUTS MUST BE VERIFIED
-    # AGAINST FLUTTERWAVE.
+    # SUCCESS
     # ------------------------------------------------------
 
     if new_status in (
@@ -711,13 +739,6 @@ def admin_withdrawal_status_page():
     # ------------------------------------------------------
     # CANCELLED
     # ------------------------------------------------------
-    #
-    # Do NOT allow arbitrary cancellation from the
-    # browser because cancellation may trigger a refund.
-    #
-    # It should only be done through a dedicated,
-    # explicitly authorized workflow.
-    # ------------------------------------------------------
 
     if new_status == "cancelled":
 
@@ -748,6 +769,7 @@ ADMIN_LOGIN_HTML = """
 <!doctype html>
 
 <html>
+
 <head>
 
     <meta charset="utf-8">
@@ -820,7 +842,7 @@ ADMIN_LOGIN_HTML = """
     {% endif %}
 
     <form method="POST"
-          action="{{ url_for('admin_login') }}">
+          action="{{ url_for('admin_referral_login') }}">
 
         <label>Admin Password</label>
 
@@ -840,6 +862,7 @@ ADMIN_LOGIN_HTML = """
 </div>
 
 </body>
+
 </html>
 """
 
@@ -852,6 +875,7 @@ ADMIN_DASHBOARD_HTML = """
 <!doctype html>
 
 <html>
+
 <head>
 
     <meta charset="utf-8">
@@ -1303,5 +1327,6 @@ ADMIN_DASHBOARD_HTML = """
 </main>
 
 </body>
+
 </html>
 """
