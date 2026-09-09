@@ -1,10 +1,7 @@
-ALHIKAM Learning Center Bot
-
-Updated flow:
-
-Flutterwave Payment -> Verified Payment -> Telegram Login -> Registration
-
--> Google Sheets -> Unique Telegram Invite -> Bot sends invite directly
+# ALHIKAM Learning Center Bot
+# Updated flow:
+# Flutterwave Payment -> Verified Payment -> Telegram Login -> Registration
+# -> Google Sheets -> Unique Telegram Invite -> Bot sends invite directly
 
 import os
 import uuid
