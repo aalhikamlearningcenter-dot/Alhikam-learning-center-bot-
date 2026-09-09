@@ -7,8 +7,9 @@
 # - Admin Password Protection
 # - CSRF Protection
 # - Create Promoter
-# - Payment Link
-# - Referral Link
+# - Main Payment Link
+# - Individual Referral Link
+# - Individual Referral Payment Link
 # - Promoter Dashboard Link
 # - Copy Buttons
 # - Withdrawal Status Refresh
@@ -53,22 +54,15 @@ logger = logging.getLogger(__name__)
 # ADMIN PASSWORD
 # ============================================================
 
-ADMIN_PASSWORD = os.getenv(
-    "ADMIN_PASSWORD"
-)
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 
 
 # ============================================================
 # SESSION KEYS
 # ============================================================
 
-ADMIN_SESSION_KEY = (
-    "alhikam_admin_logged_in"
-)
-
-ADMIN_CSRF_KEY = (
-    "alhikam_admin_csrf"
-)
+ADMIN_SESSION_KEY = "alhikam_admin_logged_in"
+ADMIN_CSRF_KEY = "alhikam_admin_csrf"
 
 
 # ============================================================
@@ -122,24 +116,18 @@ def get_admin_csrf():
 
     if not token:
 
-        token = secrets.token_urlsafe(
-            32
-        )
+        token = secrets.token_urlsafe(32)
 
-        session[
-            ADMIN_CSRF_KEY
-        ] = token
+        session[ADMIN_CSRF_KEY] = token
 
     return token
 
 
 def check_admin_csrf():
 
-    submitted = (
-        request.form.get(
-            "csrf_token",
-            ""
-        )
+    submitted = request.form.get(
+        "csrf_token",
+        ""
     )
 
     expected = session.get(
@@ -161,9 +149,7 @@ def check_admin_csrf():
 # MASK ACCOUNT NUMBER
 # ============================================================
 
-def mask_account_number(
-    account_number
-):
+def mask_account_number(account_number):
 
     value = str(
         account_number or ""
@@ -180,7 +166,7 @@ def mask_account_number(
 
 
 # ============================================================
-# ADMIN LOGIN PAGE
+# ADMIN LOGIN HTML
 # ============================================================
 
 ADMIN_LOGIN_HTML = """
@@ -194,11 +180,13 @@ ADMIN_LOGIN_HTML = """
 <meta name="viewport"
       content="width=device-width, initial-scale=1">
 
-<title>
-ALHIKAM Admin Login
-</title>
+<title>ALHIKAM Admin Login</title>
 
 <style>
+
+*{
+    box-sizing:border-box;
+}
 
 body{
 
@@ -234,13 +222,23 @@ h1{
 
     color:#087f5b;
 
+    margin-top:0;
+
+}
+
+.subtitle{
+
+    text-align:center;
+
+    color:#666;
+
+    margin-bottom:25px;
+
 }
 
 input{
 
     width:100%;
-
-    box-sizing:border-box;
 
     padding:14px;
 
@@ -278,6 +276,12 @@ button{
 
 }
 
+button:hover{
+
+    opacity:.9;
+
+}
+
 .error{
 
     background:#ffe8e8;
@@ -294,7 +298,7 @@ button{
 
 .security{
 
-    margin-top:18px;
+    margin-top:20px;
 
     text-align:center;
 
@@ -316,9 +320,9 @@ button{
 🔐 ALHIKAM ADMIN
 </h1>
 
-<p style="text-align:center;">
+<div class="subtitle">
 Secure Administrator Login
-</p>
+</div>
 
 {% if error %}
 
@@ -388,26 +392,22 @@ def admin_login_page():
             )
         )
 
-
     if request.method == "GET":
 
         return render_template_string(
 
             ADMIN_LOGIN_HTML,
 
-            csrf_token=
-                get_admin_csrf(),
+            csrf_token=get_admin_csrf(),
 
             error="",
 
-            next_url=
-                request.args.get(
-                    "next",
-                    "",
-                ),
+            next_url=request.args.get(
+                "next",
+                "",
+            ),
 
         )
-
 
     if not ADMIN_PASSWORD:
 
@@ -416,13 +416,9 @@ def admin_login_page():
         )
 
         return (
-
             "Admin password is not configured.",
-
             500,
-
         )
-
 
     if not check_admin_csrf():
 
@@ -430,28 +426,24 @@ def admin_login_page():
 
             ADMIN_LOGIN_HTML,
 
-            csrf_token=
-                get_admin_csrf(),
+            csrf_token=get_admin_csrf(),
 
-            error=
-                "Invalid security token. Please refresh and try again.",
+            error=(
+                "Invalid security token. "
+                "Please refresh and try again."
+            ),
 
-            next_url=
-                request.form.get(
-                    "next",
-                    "",
-                ),
+            next_url=request.form.get(
+                "next",
+                "",
+            ),
 
         ), 400
 
-
-    password = (
-        request.form.get(
-            "password",
-            ""
-        )
+    password = request.form.get(
+        "password",
+        ""
     )
-
 
     if not secrets.compare_digest(
         password,
@@ -462,20 +454,16 @@ def admin_login_page():
 
             ADMIN_LOGIN_HTML,
 
-            csrf_token=
-                get_admin_csrf(),
+            csrf_token=get_admin_csrf(),
 
-            error=
-                "❌ Incorrect admin password.",
+            error="❌ Incorrect admin password.",
 
-            next_url=
-                request.form.get(
-                    "next",
-                    "",
-                ),
+            next_url=request.form.get(
+                "next",
+                "",
+            ),
 
         ), 401
-
 
     session[
         ADMIN_SESSION_KEY
@@ -483,35 +471,22 @@ def admin_login_page():
 
     session[
         ADMIN_CSRF_KEY
-    ] = secrets.token_urlsafe(
-        32
-    )
+    ] = secrets.token_urlsafe(32)
 
     session.permanent = True
 
-
-    next_url = (
-        request.form.get(
-            "next",
-            ""
-        )
+    next_url = request.form.get(
+        "next",
+        ""
     ).strip()
 
-
     if (
-
         next_url
-
         and next_url.startswith("/")
-
         and not next_url.startswith("//")
-
     ):
 
-        return redirect(
-            next_url
-        )
-
+        return redirect(next_url)
 
     return redirect(
         url_for(
@@ -545,7 +520,7 @@ def admin_logout_page():
 
 
 # ============================================================
-# DASHBOARD HTML
+# ADMIN DASHBOARD HTML
 # ============================================================
 
 ADMIN_DASHBOARD_HTML = """
@@ -565,6 +540,10 @@ ALHIKAM Learning Center Admin
 
 <style>
 
+*{
+    box-sizing:border-box;
+}
+
 body{
 
     font-family:Arial,sans-serif;
@@ -579,7 +558,7 @@ body{
 
 .container{
 
-    max-width:1200px;
+    max-width:1250px;
 
     margin:auto;
 
@@ -617,6 +596,16 @@ body{
 
 }
 
+.header-subtitle{
+
+    color:#666;
+
+    margin-top:5px;
+
+    font-size:13px;
+
+}
+
 .logout{
 
     margin:0;
@@ -626,6 +615,8 @@ body{
 .logout button{
 
     background:#c62828;
+
+    width:auto;
 
 }
 
@@ -651,7 +642,14 @@ body{
 
 }
 
-input,select{
+.link-card{
+
+    border-left:5px solid #087f5b;
+
+}
+
+input,
+select{
 
     width:100%;
 
@@ -664,6 +662,8 @@ input,select{
     border:1px solid #ddd;
 
     border-radius:8px;
+
+    font-size:15px;
 
 }
 
@@ -727,6 +727,18 @@ button:hover{
 
     color:#666;
 
+    line-height:1.5;
+
+}
+
+.code{
+
+    font-weight:bold;
+
+    color:#087f5b;
+
+    word-break:break-all;
+
 }
 
 .table-wrap{
@@ -741,11 +753,12 @@ table{
 
     border-collapse:collapse;
 
-    min-width:900px;
+    min-width:1150px;
 
 }
 
-th,td{
+th,
+td{
 
     padding:11px;
 
@@ -777,13 +790,29 @@ th{
 
 .referral-links{
 
-    min-width:330px;
+    min-width:390px;
 
 }
 
-.global-link{
+.link-section{
 
-    margin-bottom:20px;
+    margin-bottom:16px;
+
+}
+
+.link-section:last-child{
+
+    margin-bottom:0;
+
+}
+
+.link-title{
+
+    font-size:13px;
+
+    font-weight:bold;
+
+    margin-bottom:6px;
 
 }
 
@@ -815,11 +844,65 @@ th{
 
 }
 
-@media(max-width:600px){
+.info{
+
+    background:#e3f2fd;
+
+    color:#0d47a1;
+
+    padding:12px;
+
+    border-radius:8px;
+
+    margin-bottom:15px;
+
+}
+
+.form-grid{
+
+    display:grid;
+
+    grid-template-columns:1fr 1fr;
+
+    gap:15px;
+
+}
+
+.form-group{
+
+    min-width:0;
+
+}
+
+.form-full{
+
+    grid-column:1 / -1;
+
+}
+
+.create-btn{
+
+    margin-top:5px;
+
+}
+
+@media(max-width:700px){
 
     body{
 
         padding:10px;
+
+    }
+
+    .form-grid{
+
+        grid-template-columns:1fr;
+
+    }
+
+    .form-full{
+
+        grid-column:auto;
 
     }
 
@@ -832,6 +915,12 @@ th{
     }
 
     .link-box button{
+
+        width:100%;
+
+    }
+
+    .logout button{
 
         width:100%;
 
@@ -853,41 +942,63 @@ function copyLink(inputId, button) {
     const text =
         input.value;
 
-    if (navigator.clipboard) {
+    if (
+        navigator.clipboard &&
+        window.isSecureContext
+    ) {
 
-        navigator.clipboard.writeText(text)
+        navigator.clipboard
+            .writeText(text)
             .then(function(){
 
-                const oldText =
-                    button.innerText;
-
-                button.innerText =
-                    "✅ Copied!";
-
-                setTimeout(function(){
-
-                    button.innerText =
-                        oldText;
-
-                }, 1500);
+                showCopied(button);
 
             })
             .catch(function(){
 
-                fallbackCopy(input, button);
+                fallbackCopy(
+                    input,
+                    button
+                );
 
             });
 
     } else {
 
-        fallbackCopy(input, button);
+        fallbackCopy(
+            input,
+            button
+        );
 
     }
 
 }
 
 
-function fallbackCopy(input, button) {
+function showCopied(button) {
+
+    const oldText =
+        button.innerText;
+
+    button.innerText =
+        "✅ Copied!";
+
+    setTimeout(function(){
+
+        button.innerText =
+            oldText;
+
+    }, 1500);
+
+}
+
+
+function fallbackCopy(
+    input,
+    button
+) {
+
+    input.focus();
 
     input.select();
 
@@ -902,18 +1013,7 @@ function fallbackCopy(input, button) {
             "copy"
         );
 
-        const oldText =
-            button.innerText;
-
-        button.innerText =
-            "✅ Copied!";
-
-        setTimeout(function(){
-
-            button.innerText =
-                oldText;
-
-        }, 1500);
+        showCopied(button);
 
     } catch (e) {
 
@@ -933,6 +1033,11 @@ function fallbackCopy(input, button) {
 
 <div class="container">
 
+
+<!-- ===================================================== -->
+<!-- HEADER -->
+<!-- ===================================================== -->
+
 <div class="header">
 
 <div>
@@ -941,7 +1046,7 @@ function fallbackCopy(input, button) {
 🎓 ALHIKAM Learning Center
 </h1>
 
-<div class="small">
+<div class="header-subtitle">
 Admin Referral Dashboard
 </div>
 
@@ -970,20 +1075,21 @@ Admin Referral Dashboard
 <!-- MAIN PAYMENT LINK -->
 <!-- ===================================================== -->
 
-<div class="card global-link">
+<div class="card link-card">
 
 <h2>
-💳 Payment Link
+💳 Main Payment Link
 </h2>
 
 <p class="small">
-Share this link with students who want to pay for ALHIKAM Learning Center classes.
+This is the general payment page for ALHIKAM Learning Center.
+Use this when no promoter referral is required.
 </p>
 
 <div class="link-box">
 
 <input
-    id="payment-link"
+    id="main-payment-link"
     type="text"
     value="{{ payment_link }}"
     readonly
@@ -992,7 +1098,10 @@ Share this link with students who want to pay for ALHIKAM Learning Center classe
 <button
     type="button"
     class="copy-btn"
-    onclick="copyLink('payment-link', this)"
+    onclick="copyLink(
+        'main-payment-link',
+        this
+    )"
 >
 📋 Copy Payment Link
 </button>
@@ -1006,20 +1115,21 @@ Share this link with students who want to pay for ALHIKAM Learning Center classe
 <!-- PROMOTER DASHBOARD LINK -->
 <!-- ===================================================== -->
 
-<div class="card global-link">
+<div class="card link-card">
 
 <h2>
-📊 Promoter Dashboard Link
+📊 Promoter Dashboard
 </h2>
 
 <p class="small">
-Promoters can use this page to access their promoter dashboard.
+General promoter login/dashboard page.
+A promoter can use their referral credentials to access their account.
 </p>
 
 <div class="link-box">
 
 <input
-    id="dashboard-link"
+    id="promoter-dashboard-link"
     type="text"
     value="{{ promoter_dashboard_link }}"
     readonly
@@ -1028,7 +1138,10 @@ Promoters can use this page to access their promoter dashboard.
 <button
     type="button"
     class="copy-btn"
-    onclick="copyLink('dashboard-link', this)"
+    onclick="copyLink(
+        'promoter-dashboard-link',
+        this
+    )"
 >
 📋 Copy Dashboard Link
 </button>
@@ -1045,8 +1158,12 @@ Promoters can use this page to access their promoter dashboard.
 <div class="card">
 
 <h2>
-👤 Create Promoter
+👤 Create New Promoter
 </h2>
+
+<div class="info">
+After creating a promoter, the system will generate a unique referral code for that promoter.
+</div>
 
 <form method="POST"
       action="{{ url_for('admin_create_promoter') }}">
@@ -1056,6 +1173,10 @@ Promoters can use this page to access their promoter dashboard.
     name="csrf_token"
     value="{{ csrf_token }}"
 >
+
+<div class="form-grid">
+
+<div class="form-group">
 
 <label>
 <strong>Full Name</strong>
@@ -1068,6 +1189,11 @@ Promoters can use this page to access their promoter dashboard.
     required
 >
 
+</div>
+
+
+<div class="form-group">
+
 <label>
 <strong>Phone</strong>
 </label>
@@ -1079,6 +1205,11 @@ Promoters can use this page to access their promoter dashboard.
     required
 >
 
+</div>
+
+
+<div class="form-group">
+
 <label>
 <strong>Email</strong>
 </label>
@@ -1089,6 +1220,11 @@ Promoters can use this page to access their promoter dashboard.
     placeholder="Email address"
     required
 >
+
+</div>
+
+
+<div class="form-group">
 
 <label>
 <strong>Commission Rate (%)</strong>
@@ -1104,6 +1240,11 @@ Promoters can use this page to access their promoter dashboard.
     required
 >
 
+</div>
+
+
+<div class="form-group form-full">
+
 <label>
 <strong>Promoter Password</strong>
 </label>
@@ -1112,10 +1253,18 @@ Promoters can use this page to access their promoter dashboard.
     type="password"
     name="password"
     placeholder="Set promoter dashboard password"
+    minlength="6"
     required
 >
 
-<button type="submit">
+</div>
+
+</div>
+
+<button
+    type="submit"
+    class="create-btn"
+>
 ➕ Create Promoter
 </button>
 
@@ -1177,7 +1326,9 @@ Promoters can use this page to access their promoter dashboard.
 </td>
 
 <td>
+<strong>
 {{ promoter["full_name"] }}
+</strong>
 </td>
 
 <td>
@@ -1189,9 +1340,11 @@ Promoters can use this page to access their promoter dashboard.
 </td>
 
 <td>
-<strong>
+
+<div class="code">
 {{ promoter["referral_code"] }}
-</strong>
+</div>
+
 </td>
 
 <td>
@@ -1218,16 +1371,21 @@ Promoters can use this page to access their promoter dashboard.
 
 <td class="referral-links">
 
+
+<!-- ================================================= -->
+<!-- PROMOTER REFERRAL LINK -->
+<!-- ================================================= -->
+
 {% set referral_link =
     base_url
     + "/referral/"
     + promoter["referral_code"]
 %}
 
-<div class="small">
-<strong>
-🔗 Referral Link
-</strong>
+<div class="link-section">
+
+<div class="link-title">
+🔗 Promoter Referral Link
 </div>
 
 <div class="link-box">
@@ -1252,12 +1410,27 @@ Promoters can use this page to access their promoter dashboard.
 
 </div>
 
-<br>
+<p class="small">
+Used for promoter login/referral access.
+</p>
 
-<div class="small">
-<strong>
-💳 Referral Payment Link
-</strong>
+</div>
+
+
+<!-- ================================================= -->
+<!-- DIRECT REFERRAL PAYMENT LINK -->
+<!-- ================================================= -->
+
+{% set payment_referral_link =
+    base_url
+    + "/pay?ref="
+    + promoter["referral_code"]
+%}
+
+<div class="link-section">
+
+<div class="link-title">
+💳 Direct Referral Payment Link
 </div>
 
 <div class="link-box">
@@ -1265,7 +1438,7 @@ Promoters can use this page to access their promoter dashboard.
 <input
     id="payment-ref-{{ promoter['id'] }}"
     type="text"
-    value="{{ referral_link }}"
+    value="{{ payment_referral_link }}"
     readonly
 >
 
@@ -1277,14 +1450,53 @@ Promoters can use this page to access their promoter dashboard.
         this
     )"
 >
-📋 Copy
+📋 Copy Payment Link
 </button>
 
 </div>
 
 <p class="small">
-Students who open this referral link will be taken to the promoter login page.
+Students can open this link directly to pay.
+The promoter referral code is automatically included.
 </p>
+
+</div>
+
+
+<!-- ================================================= -->
+<!-- COPY REFERRAL CODE -->
+<!-- ================================================= -->
+
+<div class="link-section">
+
+<div class="link-title">
+🏷️ Referral Code
+</div>
+
+<div class="link-box">
+
+<input
+    id="code-{{ promoter['id'] }}"
+    type="text"
+    value="{{ promoter['referral_code'] }}"
+    readonly
+>
+
+<button
+    type="button"
+    class="copy-btn"
+    onclick="copyLink(
+        'code-{{ promoter['id'] }}',
+        this
+    )"
+>
+📋 Copy Code
+</button>
+
+</div>
+
+</div>
+
 
 </td>
 
@@ -1294,8 +1506,10 @@ Students who open this referral link will be taken to the promoter login page.
 
 <tr>
 
-<td colspan="10"
-    style="text-align:center;">
+<td
+    colspan="10"
+    style="text-align:center;"
+>
 
 No promoters found.
 
@@ -1421,8 +1635,10 @@ No promoters found.
 
 <tr>
 
-<td colspan="8"
-    style="text-align:center;">
+<td
+    colspan="8"
+    style="text-align:center;"
+>
 
 No withdrawal requests found.
 
@@ -1461,19 +1677,17 @@ def admin_referral_page():
 
     withdrawals = get_all_withdrawals()
 
-
     base_url = request.url_root.rstrip("/")
 
-
+    # General payment link
     payment_link = (
         f"{base_url}/pay"
     )
 
-
+    # General promoter dashboard
     promoter_dashboard_link = (
         f"{base_url}/referral/dashboard"
     )
-
 
     return render_template_string(
 
@@ -1514,14 +1728,12 @@ def create_promoter_page():
             )
         )
 
-
     if not check_admin_csrf():
 
         return (
             "Invalid security token.",
             400,
         )
-
 
     full_name = (
         request.form.get(
@@ -1531,7 +1743,6 @@ def create_promoter_page():
         .strip()
     )
 
-
     phone = (
         request.form.get(
             "phone",
@@ -1539,7 +1750,6 @@ def create_promoter_page():
         )
         .strip()
     )
-
 
     email = (
         request.form.get(
@@ -1549,14 +1759,10 @@ def create_promoter_page():
         .strip()
     )
 
-
-    password = (
-        request.form.get(
-            "password",
-            ""
-        )
+    password = request.form.get(
+        "password",
+        ""
     )
-
 
     try:
 
@@ -1571,14 +1777,12 @@ def create_promoter_page():
 
         commission_rate = 10.0
 
-
     if not full_name:
 
         return (
             "Full name is required.",
             400,
         )
-
 
     if not phone:
 
@@ -1587,14 +1791,12 @@ def create_promoter_page():
             400,
         )
 
-
     if not email:
 
         return (
             "Email address is required.",
             400,
         )
-
 
     if len(password) < 6:
 
@@ -1603,14 +1805,12 @@ def create_promoter_page():
             400,
         )
 
-
     if commission_rate < 0:
 
         return (
             "Commission rate cannot be negative.",
             400,
         )
-
 
     if commission_rate > 100:
 
@@ -1619,25 +1819,19 @@ def create_promoter_page():
             400,
         )
 
-
     try:
 
         promoter = add_promoter(
 
-            full_name=
-                full_name,
+            full_name=full_name,
 
-            phone=
-                phone,
+            phone=phone,
 
-            email=
-                email,
+            email=email,
 
-            commission_rate=
-                commission_rate,
+            commission_rate=commission_rate,
 
         )
-
 
     except TypeError:
 
@@ -1666,7 +1860,6 @@ def create_promoter_page():
                 500,
             )
 
-
     except Exception as e:
 
         logger.exception(
@@ -1678,7 +1871,6 @@ def create_promoter_page():
             500,
         )
 
-
     if not promoter:
 
         return (
@@ -1686,18 +1878,18 @@ def create_promoter_page():
             500,
         )
 
-
     try:
 
-        promoter_id = (
-            promoter["id"]
-            if isinstance(
-                promoter,
-                dict
-            )
-            else promoter
-        )
+        if isinstance(
+            promoter,
+            dict
+        ):
 
+            promoter_id = promoter["id"]
+
+        else:
+
+            promoter_id = promoter
 
         set_promoter_password(
 
@@ -1717,7 +1909,6 @@ def create_promoter_page():
             "Promoter was created but password could not be saved.",
             500,
         )
-
 
     return redirect(
         url_for(
@@ -1741,7 +1932,6 @@ def admin_withdrawal_status_page():
             )
         )
 
-
     if not check_admin_csrf():
 
         return (
@@ -1749,14 +1939,13 @@ def admin_withdrawal_status_page():
             400,
         )
 
-
     withdrawal_id = (
         request.form.get(
             "withdrawal_id",
             ""
         )
-    ).strip()
-
+        .strip()
+    )
 
     if not withdrawal_id:
 
@@ -1764,7 +1953,6 @@ def admin_withdrawal_status_page():
             "Withdrawal ID is required.",
             400,
         )
-
 
     try:
 
@@ -1779,11 +1967,9 @@ def admin_withdrawal_status_page():
             400,
         )
 
-
     withdrawal = get_withdrawal_by_id(
         withdrawal_id
     )
-
 
     if not withdrawal:
 
@@ -1792,16 +1978,12 @@ def admin_withdrawal_status_page():
             404,
         )
 
-
     transfer_id = str(
-
         withdrawal.get(
             "transfer_id"
         )
         or ""
-
     ).strip()
-
 
     if not transfer_id:
 
@@ -1810,7 +1992,6 @@ def admin_withdrawal_status_page():
                 "admin_referral"
             )
         )
-
 
     try:
 
@@ -1828,29 +2009,21 @@ def admin_withdrawal_status_page():
 
         result = None
 
-
     if result:
 
         update_withdrawal_status(
 
-            withdrawal_id=
+            withdrawal_id=withdrawal_id,
 
-                withdrawal_id,
+            status=result.get(
+                "status"
+            ),
 
-            status=
-
-                result.get(
-                    "status"
-                ),
-
-            message=
-
-                result.get(
-                    "message"
-                ),
+            message=result.get(
+                "message"
+            ),
 
         )
-
 
     return redirect(
         url_for(
