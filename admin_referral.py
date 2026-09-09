@@ -1,1708 +1,1291 @@
-# ==========================================================
-# ALHIKAM LEARNING CENTER V2
-# admin_referral.py
-#
-# ADMIN LOGIN
-# ADMIN PROMOTER CREATION
-# ADMIN PROMOTER LIST
-# ADMIN WITHDRAWAL MANAGEMENT
-# REFERRAL LINK + DASHBOARD LINK
-# COPY BUTTONS
-# ==========================================================
+==========================================================
 
+ALHIKAM LEARNING CENTER V2
+
+admin_referral.py
+
+
+
+SECURE ADMIN REFERRAL MANAGEMENT
+
+==========================================================
+
+import os
 import secrets
-import string
+import logging
+from functools import wraps
 
 from flask import (
-    request,
-    render_template_string,
-    session,
-    redirect,
+request,
+redirect,
+url_for,
+render_template_string,
+session,
+abort,
 )
 
 from database import (
-    get_connection,
-    add_promoter,
-    get_promoter_by_referral_code,
-    update_withdrawal_status,
+get_all_promoters,
+get_all_withdrawals,
+add_promoter,
+get_withdrawal_by_id,
+update_withdrawal_status,
+set_promoter_password,
 )
 
-from config import APP_URL
+from transfer import (
+get_flutterwave_transfer_status,
+)
 
+==========================================================
 
-# ==========================================================
-# ADMIN SESSION
-# ==========================================================
+LOGGING
+
+==========================================================
+
+logger = logging.getLogger(name)
+
+==========================================================
+
+CONFIG
+
+==========================================================
+
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 
 ADMIN_SESSION_KEY = "alhikam_admin_logged_in"
+ADMIN_CSRF_KEY = "alhikam_admin_csrf"
 
+==========================================================
 
-# ==========================================================
-# GENERATE UNIQUE REFERRAL CODE
-# ==========================================================
+ADMIN PASSWORD CONFIG CHECK
 
-def generate_referral_code():
+==========================================================
 
-    characters = (
-        string.ascii_uppercase
-        + string.digits
-    )
+if not ADMIN_PASSWORD:
+logger.warning(
+"ADMIN_PASSWORD is not configured."
+)
 
-    while True:
+==========================================================
 
-        random_part = "".join(
-            secrets.choice(characters)
-            for _ in range(6)
-        )
+ADMIN SESSION CHECK
 
-        referral_code = (
-            f"ALHIKAM-{random_part}"
-        )
-
-        existing = get_promoter_by_referral_code(
-            referral_code
-        )
-
-        if not existing:
-            return referral_code
-
-
-# ==========================================================
-# ADMIN LOGIN HTML
-# ==========================================================
-
-ADMIN_LOGIN_HTML = """
-
-<!DOCTYPE html>
-
-<html>
-
-<head>
-
-<meta name="viewport"
-content="width=device-width, initial-scale=1">
-
-<title>ALHIKAM Admin Login</title>
-
-<style>
-
-*{
-    box-sizing:border-box;
-}
-
-body{
-    font-family:Arial,sans-serif;
-    background:#f5f7f9;
-    padding:20px;
-    margin:0;
-}
-
-.container{
-    max-width:450px;
-    margin:60px auto;
-}
-
-.card{
-    background:white;
-    padding:25px;
-    border-radius:15px;
-    box-shadow:0 3px 12px rgba(0,0,0,.08);
-}
-
-h2{
-    color:#087f5b;
-    margin-top:0;
-}
-
-input{
-    width:100%;
-    padding:14px;
-    border:1px solid #ccc;
-    border-radius:8px;
-    font-size:16px;
-    margin-top:10px;
-}
-
-button{
-    width:100%;
-    padding:15px;
-    margin-top:18px;
-    background:#087f5b;
-    color:white;
-    border:none;
-    border-radius:10px;
-    font-size:17px;
-    font-weight:bold;
-}
-
-.error{
-    background:#ffe8e8;
-    color:#a00000;
-    padding:12px;
-    border-radius:8px;
-    margin-bottom:15px;
-}
-
-</style>
-
-</head>
-
-<body>
-
-<div class="container">
-
-<div class="card">
-
-<h2>
-🔐 ALHIKAM Admin
-</h2>
-
-<p>
-Enter admin password to continue.
-</p>
-
-{% if error %}
-
-<div class="error">
-{{ error }}
-</div>
-
-{% endif %}
-
-<form method="POST">
-
-<input
-type="password"
-name="password"
-placeholder="Admin Password"
-required
->
-
-<button type="submit">
-🔓 LOGIN
-</button>
-
-</form>
-
-</div>
-
-</div>
-
-</body>
-
-</html>
-
-"""
-
-
-# ==========================================================
-# ADMIN PANEL HTML
-# ==========================================================
-
-ADMIN_PANEL_HTML = """
-
-<!DOCTYPE html>
-
-<html>
-
-<head>
-
-<meta name="viewport"
-content="width=device-width, initial-scale=1">
-
-<title>ALHIKAM Admin Referral</title>
-
-<style>
-
-*{
-    box-sizing:border-box;
-}
-
-body{
-    font-family:Arial,sans-serif;
-    background:#f5f7f9;
-    padding:15px;
-    margin:0;
-}
-
-.container{
-    max-width:1050px;
-    margin:auto;
-}
-
-.header{
-    background:#087f5b;
-    color:white;
-    padding:22px;
-    border-radius:15px;
-    margin-bottom:15px;
-}
-
-.header h2{
-    margin:0 0 8px 0;
-}
-
-.card{
-    background:white;
-    padding:20px;
-    border-radius:15px;
-    margin-bottom:15px;
-    box-shadow:0 3px 10px rgba(0,0,0,.07);
-}
-
-input{
-    width:100%;
-    padding:13px;
-    border:1px solid #ccc;
-    border-radius:8px;
-    font-size:16px;
-}
-
-label{
-    display:block;
-    font-weight:bold;
-    margin-top:12px;
-    margin-bottom:6px;
-}
-
-button{
-    padding:12px 16px;
-    background:#087f5b;
-    color:white;
-    border:none;
-    border-radius:8px;
-    font-weight:bold;
-    cursor:pointer;
-}
-
-.logout{
-    display:inline-block;
-    background:#dc2626;
-    color:white;
-    text-decoration:none;
-    padding:10px 15px;
-    border-radius:8px;
-    margin-top:10px;
-}
-
-.success{
-    background:#e8f7ef;
-    color:#075c43;
-    padding:15px;
-    border-radius:10px;
-    margin-bottom:15px;
-    word-break:break-word;
-}
-
-.error{
-    background:#ffe8e8;
-    color:#a00000;
-    padding:15px;
-    border-radius:10px;
-    margin-bottom:15px;
-    word-break:break-word;
-}
-
-.code{
-    background:#eef8f4;
-    padding:12px;
-    border-radius:8px;
-    word-break:break-all;
-    font-weight:bold;
-}
-
-.link-box{
-    background:#f4f4f4;
-    padding:10px;
-    border-radius:8px;
-    word-break:break-all;
-    font-size:13px;
-    margin-top:6px;
-}
-
-.copy-button{
-    background:#2563eb;
-    margin-top:7px;
-    padding:8px 12px;
-    font-size:13px;
-}
-
-.copy-button.copied{
-    background:#087f5b;
-}
-
-.table-wrap{
-    overflow-x:auto;
-}
-
-table{
-    width:100%;
-    border-collapse:collapse;
-    min-width:850px;
-}
-
-th,
-td{
-    padding:11px;
-    border-bottom:1px solid #eee;
-    text-align:left;
-    vertical-align:top;
-}
-
-th{
-    background:#f7f7f7;
-}
-
-.status{
-    font-weight:bold;
-}
-
-.pending{
-    color:#d97706;
-}
-
-.processing{
-    color:#2563eb;
-}
-
-.successful{
-    color:#087f5b;
-}
-
-.failed,
-.cancelled{
-    color:#dc2626;
-}
-
-.small{
-    color:#666;
-    font-size:13px;
-    line-height:1.5;
-}
-
-.stat-grid{
-    display:grid;
-    grid-template-columns:repeat(4, 1fr);
-    gap:12px;
-}
-
-.stat{
-    background:#f8faf9;
-    padding:15px;
-    border-radius:10px;
-}
-
-.stat-number{
-    font-size:22px;
-    font-weight:bold;
-}
-
-.withdraw-form{
-    display:inline-block;
-}
-
-.withdraw-form select{
-    padding:8px;
-    border:1px solid #ccc;
-    border-radius:7px;
-}
-
-.withdraw-form button{
-    padding:8px 10px;
-}
-
-.create-button{
-    margin-top:15px;
-}
-
-.link-title{
-    margin-top:8px;
-    font-weight:bold;
-    font-size:13px;
-}
-
-@media(max-width:700px){
-
-    .stat-grid{
-        grid-template-columns:1fr 1fr;
-    }
-
-    .card{
-        padding:15px;
-    }
-
-}
-
-</style>
-
-</head>
-
-<body>
-
-<div class="container">
-
-
-<!-- =====================================================
-     HEADER
-====================================================== -->
-
-<div class="header">
-
-<h2>
-🎯 ALHIKAM Referral Admin
-</h2>
-
-<div>
-Promoter & Withdrawal Management
-</div>
-
-<a
-class="logout"
-href="/admin/referral/logout"
->
-🚪 Logout
-</a>
-
-</div>
-
-
-<!-- =====================================================
-     MESSAGES
-====================================================== -->
-
-{% if error %}
-
-<div class="error">
-{{ error }}
-</div>
-
-{% endif %}
-
-
-{% if success %}
-
-<div class="success">
-{{ success|replace('\n', '<br>')|safe }}
-</div>
-
-{% endif %}
-
-
-<!-- =====================================================
-     CREATE PROMOTER
-====================================================== -->
-
-<div class="card">
-
-<h3>
-➕ Create New Promoter
-</h3>
-
-<form method="POST"
-action="/admin/referral/create-promoter">
-
-<label>
-Full Name
-</label>
-
-<input
-type="text"
-name="full_name"
-placeholder="Promoter full name"
-required
->
-
-<label>
-Phone Number
-</label>
-
-<input
-type="text"
-name="phone"
-placeholder="08012345678"
->
-
-<label>
-Email
-</label>
-
-<input
-type="email"
-name="email"
-placeholder="example@gmail.com"
->
-
-<label>
-Commission Rate (%)
-</label>
-
-<input
-type="number"
-name="commission_rate"
-value="20"
-min="0"
-max="100"
-step="0.01"
-required
->
-
-<button
-class="create-button"
-type="submit"
->
-➕ CREATE PROMOTER
-</button>
-
-</form>
-
-</div>
-
-
-<!-- =====================================================
-     SUMMARY
-====================================================== -->
-
-<div class="card">
-
-<h3>
-📊 Summary
-</h3>
-
-<div class="stat-grid">
-
-<div class="stat">
-
-<div class="small">
-Promoters
-</div>
-
-<div class="stat-number">
-{{ promoters|length }}
-</div>
-
-</div>
-
-
-<div class="stat">
-
-<div class="small">
-Withdrawal Requests
-</div>
-
-<div class="stat-number">
-{{ withdrawals|length }}
-</div>
-
-</div>
-
-
-<div class="stat">
-
-<div class="small">
-Pending Withdrawals
-</div>
-
-<div class="stat-number">
-{{ pending_count }}
-</div>
-
-</div>
-
-
-<div class="stat">
-
-<div class="small">
-Pending Amount
-</div>
-
-<div class="stat-number">
-₦{{ pending_amount }}
-</div>
-
-</div>
-
-</div>
-
-</div>
-
-
-<!-- =====================================================
-     PROMOTERS
-====================================================== -->
-
-<div class="card">
-
-<h3>
-👥 Promoters
-</h3>
-
-{% if promoters %}
-
-<div class="table-wrap">
-
-<table>
-
-<thead>
-
-<tr>
-
-<th>ID</th>
-<th>Name</th>
-<th>Referral Code</th>
-<th>Sales</th>
-<th>Earned</th>
-<th>Balance</th>
-<th>Withdrawn</th>
-<th>Status</th>
-
-</tr>
-
-</thead>
-
-<tbody>
-
-{% for promoter in promoters %}
-
-<tr>
-
-<td>
-{{ promoter["id"] }}
-</td>
-
-<td>
-
-<b>
-{{ promoter["full_name"] }}
-</b>
-
-<br>
-
-<span class="small">
-{{ promoter["phone"] or "" }}
-</span>
-
-</td>
-
-
-<td>
-
-<div class="code">
-{{ promoter["referral_code"] }}
-</div>
-
-
-<div class="link-title">
-💳 Payment Link
-</div>
-
-<div
-class="link-box"
-id="payment-link-{{ promoter['id'] }}"
->
-{{ app_url }}/payment?ref={{ promoter['referral_code'] }}
-</div>
-
-<button
-type="button"
-class="copy-button"
-onclick="copyText(
-'payment-link-{{ promoter['id'] }}',
-this
-)"
->
-📋 COPY PAYMENT LINK
-</button>
-
-
-<div class="link-title">
-📊 Dashboard Link
-</div>
-
-<div
-class="link-box"
-id="dashboard-link-{{ promoter['id'] }}"
->
-{{ app_url }}/referral/dashboard?ref={{ promoter['referral_code'] }}
-</div>
-
-<button
-type="button"
-class="copy-button"
-onclick="copyText(
-'dashboard-link-{{ promoter['id'] }}',
-this
-)"
->
-📋 COPY DASHBOARD LINK
-</button>
-
-</td>
-
-
-<td>
-{{ promoter["total_sales"] or 0 }}
-</td>
-
-
-<td>
-₦{{ "{:,.0f}".format(promoter["total_earned"] or 0) }}
-</td>
-
-
-<td>
-₦{{ "{:,.0f}".format(promoter["available_balance"] or 0) }}
-</td>
-
-
-<td>
-₦{{ "{:,.0f}".format(promoter["withdrawn_amount"] or 0) }}
-</td>
-
-
-<td>
-{{ promoter["status"]|capitalize }}
-</td>
-
-</tr>
-
-{% endfor %}
-
-</tbody>
-
-</table>
-
-</div>
-
-{% else %}
-
-<p class="small">
-No promoters yet.
-</p>
-
-{% endif %}
-
-</div>
-
-
-<!-- =====================================================
-     WITHDRAWALS
-====================================================== -->
-
-<div class="card">
-
-<h3>
-💸 Withdrawal Requests
-</h3>
-
-{% if withdrawals %}
-
-<div class="table-wrap">
-
-<table>
-
-<thead>
-
-<tr>
-
-<th>ID</th>
-<th>Promoter</th>
-<th>Amount</th>
-<th>Bank Details</th>
-<th>Status</th>
-<th>Action</th>
-<th>Date</th>
-
-</tr>
-
-</thead>
-
-<tbody>
-
-{% for withdrawal in withdrawals %}
-
-<tr>
-
-<td>
-#{{ withdrawal["id"] }}
-</td>
-
-<td>
-
-<b>
-{{ withdrawal["promoter_name"] }}
-</b>
-
-<br>
-
-<span class="small">
-{{ withdrawal["referral_code"] }}
-</span>
-
-</td>
-
-
-<td>
-
-<b>
-₦{{ "{:,.0f}".format(withdrawal["amount"] or 0) }}
-</b>
-
-</td>
-
-
-<td>
-
-{{ withdrawal["bank_name"] }}
-
-<br>
-
-{{ withdrawal["account_name"] }}
-
-<br>
-
-<b>
-{{ withdrawal["account_number"] }}
-</b>
-
-</td>
-
-
-<td>
-
-<span class="status {{ withdrawal['status']|lower }}">
-
-{{ withdrawal["status"]|capitalize }}
-
-</span>
-
-</td>
-
-
-<td>
-
-{% if withdrawal["status"] not in
-["successful", "failed", "cancelled"] %}
-
-<form
-class="withdraw-form"
-method="POST"
-action="/admin/referral/withdrawal-status"
->
-
-<input
-type="hidden"
-name="withdrawal_id"
-value="{{ withdrawal['id'] }}"
->
-
-<select name="status">
-
-<option value="processing">
-Processing
-</option>
-
-<option value="successful">
-Successful
-</option>
-
-<option value="failed">
-Failed
-</option>
-
-<option value="cancelled">
-Cancelled
-</option>
-
-</select>
-
-<button type="submit">
-UPDATE
-</button>
-
-</form>
-
-{% else %}
-
-<span class="small">
-Final
-</span>
-
-{% endif %}
-
-</td>
-
-
-<td>
-{{ withdrawal["created_at"] }}
-</td>
-
-</tr>
-
-{% endfor %}
-
-</tbody>
-
-</table>
-
-</div>
-
-{% else %}
-
-<p class="small">
-No withdrawal request yet.
-</p>
-
-{% endif %}
-
-</div>
-
-
-</div>
-
-
-<!-- =====================================================
-     COPY JAVASCRIPT
-====================================================== -->
-
-<script>
-
-function copyText(elementId, button){
-
-    const element =
-        document.getElementById(elementId);
-
-    if(!element){
-        return;
-    }
-
-    const text =
-        element.innerText.trim();
-
-    if(
-        navigator.clipboard &&
-        window.isSecureContext
-    ){
-
-        navigator.clipboard
-        .writeText(text)
-        .then(function(){
-
-            showCopied(button);
-
-        })
-        .catch(function(){
-
-            fallbackCopy(text, button);
-
-        });
-
-    }else{
-
-        fallbackCopy(text, button);
-
-    }
-}
-
-
-function fallbackCopy(text, button){
-
-    const textarea =
-        document.createElement("textarea");
-
-    textarea.value = text;
-
-    textarea.style.position =
-        "fixed";
-
-    textarea.style.left =
-        "-9999px";
-
-    document.body.appendChild(
-        textarea
-    );
-
-    textarea.focus();
-
-    textarea.select();
-
-    try{
-
-        document.execCommand(
-            "copy"
-        );
-
-        showCopied(button);
-
-    }catch(error){
-
-        alert(
-            "Copy failed. Please copy the link manually."
-        );
-
-    }
-
-    document.body.removeChild(
-        textarea
-    );
-}
-
-
-function showCopied(button){
-
-    const oldText =
-        button.innerText;
-
-    button.innerText =
-        "✅ COPIED!";
-
-    button.classList.add(
-        "copied"
-    );
-
-    setTimeout(function(){
-
-        button.innerText =
-            oldText;
-
-        button.classList.remove(
-            "copied"
-        );
-
-    }, 1800);
-}
-
-</script>
-
-
-</body>
-
-</html>
-
-"""
-
-
-# ==========================================================
-# ADMIN LOGIN CHECK
-# ==========================================================
+==========================================================
 
 def admin_logged_in():
+return session.get(ADMIN_SESSION_KEY) is True
 
-    return bool(
-        session.get(
-            ADMIN_SESSION_KEY,
-            False
-        )
+def admin_required(view):
+@wraps(view)
+def wrapped(*args, **kwargs):
+
+if not admin_logged_in():  
+        return redirect(  
+            url_for("admin_login")  
+        )  
+
+    return view(*args, **kwargs)  
+
+return wrapped
+
+==========================================================
+
+CSRF
+
+==========================================================
+
+def get_admin_csrf():
+token = session.get(ADMIN_CSRF_KEY)
+
+if not token:  
+    token = secrets.token_urlsafe(32)  
+    session[ADMIN_CSRF_KEY] = token  
+
+return token
+
+def verify_admin_csrf():
+
+token = request.form.get(  
+    "csrf_token",  
+    ""  
+)  
+
+expected = session.get(  
+    ADMIN_CSRF_KEY  
+)  
+
+if not expected or not token:  
+    abort(403)  
+
+if not secrets.compare_digest(  
+    str(token),  
+    str(expected)  
+):  
+    abort(403)
+
+==========================================================
+
+MASK ACCOUNT NUMBER
+
+==========================================================
+
+def mask_account_number(account_number):
+
+account_number = str(  
+    account_number or ""  
+).strip()  
+
+if not account_number:  
+    return "**********"  
+
+if len(account_number) <= 4:  
+    return "*" * len(account_number)  
+
+return (  
+    "*" * (len(account_number) - 4)  
+    + account_number[-4:]  
+)
+
+==========================================================
+
+ADMIN LOGIN
+
+==========================================================
+
+def admin_login_page():
+
+if request.method == "POST":  
+
+    password = request.form.get(  
+        "password",  
+        ""  
+    ).strip()  
+
+    if (  
+        ADMIN_PASSWORD  
+        and secrets.compare_digest(  
+            password,  
+            ADMIN_PASSWORD  
+        )  
+    ):  
+
+        # Do NOT use session.clear()  
+        # because other application sessions  
+        # may contain payment/registration data.  
+
+        session.pop(  
+            ADMIN_SESSION_KEY,  
+            None  
+        )  
+
+        session.pop(  
+            ADMIN_CSRF_KEY,  
+            None  
+        )  
+
+        session[  
+            ADMIN_SESSION_KEY  
+        ] = True  
+
+        session[  
+            ADMIN_CSRF_KEY  
+        ] = secrets.token_urlsafe(32)  
+
+        session.permanent = True  
+
+        return redirect(  
+            url_for("admin_referral")  
+        )  
+
+    return render_template_string(  
+        ADMIN_LOGIN_HTML,  
+        error="Invalid admin password."  
+    )  
+
+return render_template_string(  
+    ADMIN_LOGIN_HTML  
+)
+
+==========================================================
+
+ADMIN LOGOUT
+
+==========================================================
+
+@admin_required
+def admin_logout_page():
+
+verify_admin_csrf()  
+
+session.pop(  
+    ADMIN_SESSION_KEY,  
+    None  
+)  
+
+session.pop(  
+    ADMIN_CSRF_KEY,  
+    None  
+)  
+
+return redirect(  
+    url_for("admin_login")  
+)
+
+==========================================================
+
+ADMIN DASHBOARD
+
+==========================================================
+
+@admin_required
+def admin_referral_page():
+
+promoters = get_all_promoters()  
+withdrawals = get_all_withdrawals()  
+
+csrf_token = get_admin_csrf()  
+
+safe_withdrawals = []  
+
+for withdrawal in withdrawals:  
+
+    item = dict(withdrawal)  
+
+    item["masked_account_number"] = (  
+        mask_account_number(  
+            withdrawal.get(  
+                "account_number"  
+            )  
+        )  
+    )  
+
+    safe_withdrawals.append(item)  
+
+return render_template_string(  
+    ADMIN_DASHBOARD_HTML,  
+    promoters=promoters,  
+    withdrawals=safe_withdrawals,  
+    csrf_token=csrf_token,  
+)
+
+==========================================================
+
+CREATE PROMOTER
+
+==========================================================
+
+@admin_required
+def create_promoter_page():
+
+verify_admin_csrf()  
+
+full_name = request.form.get(  
+    "full_name",  
+    ""  
+).strip()  
+
+phone = request.form.get(  
+    "phone",  
+    ""  
+).strip()  
+
+email = request.form.get(  
+    "email",  
+    ""  
+).strip()  
+
+commission_rate_raw = request.form.get(  
+    "commission_rate",  
+    "20"  
+).strip()  
+
+password = request.form.get(  
+    "password",  
+    ""  
+)  
+
+# ------------------------------------------------------  
+# VALIDATE NAME  
+# ------------------------------------------------------  
+
+if not full_name:  
+    return redirect(  
+        url_for(  
+            "admin_referral",  
+            error="Full name is required."  
+        )  
+    )  
+
+if len(full_name) > 100:  
+    return redirect(  
+        url_for(  
+            "admin_referral",  
+            error="Full name is too long."  
+        )  
+    )  
+
+# ------------------------------------------------------  
+# VALIDATE PASSWORD  
+# ------------------------------------------------------  
+
+if len(password) < 8:  
+    return redirect(  
+        url_for(  
+            "admin_referral",  
+            error=(  
+                "Promoter password must be "  
+                "at least 8 characters."  
+            )  
+        )  
+    )  
+
+if len(password) > 200:  
+    return redirect(  
+        url_for(  
+            "admin_referral",  
+            error="Password is too long."  
+        )  
+    )  
+
+# ------------------------------------------------------  
+# VALIDATE COMMISSION  
+# ------------------------------------------------------  
+
+try:  
+    commission_rate = float(  
+        commission_rate_raw  
+    )  
+except (TypeError, ValueError):  
+
+    return redirect(  
+        url_for(  
+            "admin_referral",  
+            error="Invalid commission rate."  
+        )  
+    )  
+
+if (  
+    commission_rate < 0  
+    or commission_rate > 100  
+):  
+
+    return redirect(  
+        url_for(  
+            "admin_referral",  
+            error=(  
+                "Commission rate must "  
+                "be between 0 and 100."  
+            )  
+        )  
+    )  
+
+# ------------------------------------------------------  
+# CREATE PROMOTER  
+# ------------------------------------------------------  
+
+try:  
+
+    promoter_id = add_promoter(  
+        full_name=full_name,  
+        phone=phone,  
+        email=email,  
+        commission_rate=commission_rate,  
+    )  
+
+    # Password is hashed inside database.py  
+    set_promoter_password(  
+        promoter_id,  
+        password  
+    )  
+
+    logger.info(  
+        "Promoter created successfully: id=%s",  
+        promoter_id  
+    )  
+
+    return redirect(  
+        url_for(  
+            "admin_referral",  
+            success="Promoter created successfully."  
+        )  
+    )  
+
+except Exception as exc:  
+
+    logger.exception(  
+        "Failed to create promoter"  
+    )  
+
+    return redirect(  
+        url_for(  
+            "admin_referral",  
+            error="Unable to create promoter."  
+        )  
     )
 
+==========================================================
 
-# ==========================================================
-# LOGIN PAGE
-# ==========================================================
+REFRESH FLUTTERWAVE WITHDRAWAL STATUS
 
-def admin_login_page(error=""):
+==========================================================
 
-    return render_template_string(
-        ADMIN_LOGIN_HTML,
-        error=error
-    )
-
-
-# ==========================================================
-# LOGIN
-# ==========================================================
-
-def admin_login(password, correct_password):
-
-    if not password:
-        return False
-
-    if not correct_password:
-        return False
-
-    if password != correct_password:
-        return False
-
-    session[
-        ADMIN_SESSION_KEY
-    ] = True
-
-    return True
-
-
-# ==========================================================
-# LOGOUT
-# ==========================================================
-
-def admin_logout():
-
-    session.pop(
-        ADMIN_SESSION_KEY,
-        None
-    )
-
-    return redirect(
-        "/admin/referral"
-    )
-
-
-# ==========================================================
-# GET ALL PROMOTERS
-# ==========================================================
-
-def get_all_promoters():
-
-    conn = get_connection()
-
-    try:
-
-        cursor = conn.cursor()
-
-        cursor.execute("""
-        SELECT *
-        FROM promoters
-        ORDER BY id DESC
-        """)
-
-        return cursor.fetchall()
-
-    finally:
-
-        conn.close()
-
-
-# ==========================================================
-# GET ALL WITHDRAWALS
-# ==========================================================
-
-def get_all_withdrawals():
-
-    conn = get_connection()
-
-    try:
-
-        cursor = conn.cursor()
-
-        cursor.execute("""
-        SELECT
-
-            withdrawals.*,
-
-            promoters.full_name
-                AS promoter_name,
-
-            promoters.referral_code
-                AS referral_code
-
-        FROM withdrawals
-
-        INNER JOIN promoters
-            ON promoters.id =
-               withdrawals.promoter_id
-
-        ORDER BY withdrawals.id DESC
-        """)
-
-        return cursor.fetchall()
-
-    finally:
-
-        conn.close()
-
-
-# ==========================================================
-# CALCULATE WITHDRAWAL SUMMARY
-# ==========================================================
-
-def calculate_withdrawal_summary(withdrawals):
-
-    pending_count = 0
-    pending_amount = 0.0
-
-    for withdrawal in withdrawals:
-
-        status = str(
-            withdrawal["status"] or ""
-        ).lower().strip()
-
-        if status in {
-            "pending",
-            "processing"
-        }:
-
-            pending_count += 1
-
-            try:
-
-                pending_amount += float(
-                    withdrawal["amount"] or 0
-                )
-
-            except Exception:
-
-                pass
-
-    return (
-        pending_count,
-        pending_amount
-    )
-
-
-# ==========================================================
-# ADMIN PANEL
-# ==========================================================
-
-def admin_referral_page(
-    error="",
-    success=""
+def refresh_withdrawal_status(
+withdrawal_id
 ):
 
-    if not admin_logged_in():
+withdrawal = get_withdrawal_by_id(  
+    withdrawal_id  
+)  
+
+if not withdrawal:  
+    return False, "Withdrawal not found."  
+
+transfer_id = withdrawal.get(  
+    "transfer_id"  
+)  
+
+if not transfer_id:  
+
+    return False, (  
+        "This withdrawal does not "  
+        "have a Flutterwave transfer ID."  
+    )  
+
+try:  
+
+    result = (  
+        get_flutterwave_transfer_status(  
+            transfer_id  
+        )  
+    )  
+
+except Exception:  
+
+    logger.exception(  
+        "Flutterwave status check failed "  
+        "for withdrawal %s",  
+        withdrawal_id  
+    )  
+
+    return False, (  
+        "Unable to verify transfer status."  
+    )  
+
+if not result:  
+    return False, (  
+        "Flutterwave returned no status."  
+    )  
+
+status = str(  
+    result.get("status", "")  
+).upper().strip()  
+
+message = str(  
+    result.get("message", "")  
+).strip()  
+
+# ------------------------------------------------------  
+# SUCCESS  
+# ------------------------------------------------------  
+
+if status in (  
+    "SUCCESSFUL",  
+    "SUCCESS",  
+    "COMPLETED",  
+):  
+
+    try:  
+
+        update_withdrawal_status(  
+            withdrawal_id,  
+            "successful",  
+            transfer_id=transfer_id,  
+            transfer_status=status,  
+            transfer_message=message,  
+        )  
+
+        return True, (  
+            "Withdrawal confirmed successful."  
+        )  
+
+    except Exception:  
+
+        logger.exception(  
+            "Failed to mark withdrawal %s "  
+            "successful",  
+            withdrawal_id  
+        )  
+
+        return False, (  
+            "Database update failed."  
+        )  
+
+# ------------------------------------------------------  
+# FAILED  
+# ------------------------------------------------------  
+
+if status in (  
+    "FAILED",  
+    "CANCELLED",  
+    "REVERSED",  
+):  
+
+    try:  
+
+        update_withdrawal_status(  
+            withdrawal_id,  
+            "failed",  
+            transfer_id=transfer_id,  
+            transfer_status=status,  
+            transfer_message=message,  
+        )  
+
+        return True, (  
+            "Withdrawal failed and balance "  
+            "was returned according to "  
+            "the withdrawal state."  
+        )  
+
+    except Exception:  
+
+        logger.exception(  
+            "Failed to process failed withdrawal %s",  
+            withdrawal_id  
+        )  
+
+        return False, (  
+            "Database update failed."  
+        )  
+
+# ------------------------------------------------------  
+# PROCESSING  
+# ------------------------------------------------------  
+
+try:  
+
+    update_withdrawal_status(  
+        withdrawal_id,  
+        "processing",  
+        transfer_id=transfer_id,  
+        transfer_status=status,  
+        transfer_message=message,  
+    )  
+
+except Exception:  
+
+    logger.exception(  
+        "Failed to update processing withdrawal %s",  
+        withdrawal_id  
+    )  
+
+    return False, (  
+        "Database update failed."  
+    )  
+
+return True, (  
+    f"Transfer is still processing ({status})."  
+)
+
+==========================================================
+
+ADMIN WITHDRAWAL STATUS
+
+==========================================================
+
+@admin_required
+def admin_withdrawal_status_page():
+
+verify_admin_csrf()  
+
+withdrawal_id_raw = request.form.get(  
+    "withdrawal_id",  
+    ""  
+).strip()  
+
+new_status = request.form.get(  
+    "status",  
+    ""  
+).strip().lower()  
+
+try:  
+    withdrawal_id = int(  
+        withdrawal_id_raw  
+    )  
+except (TypeError, ValueError):  
+
+    return redirect(  
+        url_for(  
+            "admin_referral",  
+            error="Invalid withdrawal ID."  
+        )  
+    )  
+
+withdrawal = get_withdrawal_by_id(  
+    withdrawal_id  
+)  
+
+if not withdrawal:  
+
+    return redirect(  
+        url_for(  
+            "admin_referral",  
+            error="Withdrawal not found."  
+        )  
+    )  
+
+# ------------------------------------------------------  
+# IMPORTANT:  
+# ADMIN MUST NOT MANUALLY CLAIM SUCCESS.  
+#  
+# SUCCESS/FAILED PAYOUTS MUST BE VERIFIED  
+# AGAINST FLUTTERWAVE.  
+# ------------------------------------------------------  
+
+if new_status in (  
+    "successful",  
+    "success",  
+):  
+
+    ok, message = (  
+        refresh_withdrawal_status(  
+            withdrawal_id  
+        )  
+    )  
+
+    return redirect(  
+        url_for(  
+            "admin_referral",  
+            success=message if ok else None,  
+            error=None if ok else message,  
+        )  
+    )  
+
+# ------------------------------------------------------  
+# FAILED  
+# ------------------------------------------------------  
+
+if new_status == "failed":  
+
+    ok, message = (  
+        refresh_withdrawal_status(  
+            withdrawal_id  
+        )  
+    )  
+
+    return redirect(  
+        url_for(  
+            "admin_referral",  
+            success=message if ok else None,  
+            error=None if ok else message,  
+        )  
+    )  
+
+# ------------------------------------------------------  
+# PROCESSING  
+# ------------------------------------------------------  
+
+if new_status == "processing":  
+
+    try:  
+
+        update_withdrawal_status(  
+            withdrawal_id,  
+            "processing"  
+        )  
+
+        return redirect(  
+            url_for(  
+                "admin_referral",  
+                success=(  
+                    "Withdrawal marked as processing."  
+                )  
+            )  
+        )  
+
+    except Exception:  
+
+        logger.exception(  
+            "Failed to mark withdrawal "  
+            "%s as processing",  
+            withdrawal_id  
+        )  
+
+        return redirect(  
+            url_for(  
+                "admin_referral",  
+                error=(  
+                    "Unable to update withdrawal."  
+                )  
+            )  
+        )  
+
+# ------------------------------------------------------  
+# CANCELLED  
+# ------------------------------------------------------  
+#  
+# Do NOT allow arbitrary cancellation from the  
+# browser because cancellation may trigger a refund.  
+#  
+# It should only be done through a dedicated,  
+# explicitly authorized workflow.  
+# ------------------------------------------------------  
+
+if new_status == "cancelled":  
+
+    return redirect(  
+        url_for(  
+            "admin_referral",  
+            error=(  
+                "Manual cancellation is disabled. "  
+                "Verify the Flutterwave transfer status "  
+                "before changing the withdrawal."  
+            )  
+        )  
+    )  
+
+return redirect(  
+    url_for(  
+        "admin_referral",  
+        error="Invalid withdrawal status."  
+    )  
+)
+
+==========================================================
+
+HTML: ADMIN LOGIN
+
+==========================================================
+
+ADMIN_LOGIN_HTML = """
+<!doctype html>
+
+<html>  
+<head>  
+    <meta charset="utf-8">  
+    <meta name="viewport"  
+          content="width=device-width, initial-scale=1">  <title>Alhikam Admin Login</title>  
+
+<style>  
+    body {  
+        font-family: Arial, sans-serif;  
+        background: #f4f6f8;  
+        margin: 0;  
+        padding: 30px;  
+    }  
+
+    .box {  
+        max-width: 420px;  
+        margin: 80px auto;  
+        background: white;  
+        padding: 25px;  
+        border-radius: 12px;  
+        box-shadow: 0 5px 25px rgba(0,0,0,.08);  
+    }  
+
+    input {  
+        width: 100%;  
+        box-sizing: border-box;  
+        padding: 12px;  
+        margin: 8px 0 15px;  
+        border: 1px solid #ddd;  
+        border-radius: 8px;  
+    }  
+
+    button {  
+        width: 100%;  
+        padding: 12px;  
+        border: 0;  
+        border-radius: 8px;  
+        cursor: pointer;  
+    }  
+
+    .error {  
+        background: #ffe5e5;  
+        padding: 10px;  
+        border-radius: 8px;  
+        margin-bottom: 15px;  
+    }  
+</style>
+
+</head>  <body>  <div class="box">  <h2>Alhikam Learning Center</h2>  
+<h3>Admin Login</h3>  
+
+{% if error %}  
+    <div class="error">  
+        {{ error }}  
+    </div>  
+{% endif %}  
+
+<form method="POST"  
+      action="{{ url_for('admin_login') }}">  
+
+    <label>Admin Password</label>  
+
+    <input  
+        type="password"  
+        name="password"  
+        required  
+        autocomplete="current-password"  
+    >  
+
+    <button type="submit">  
+        Login  
+    </button>  
+
+</form>
+
+</div>  </body>  
+</html>  
+"""  ==========================================================
+
+HTML: ADMIN DASHBOARD
+
+==========================================================
+
+ADMIN_DASHBOARD_HTML = """
+<!doctype html>
+
+<html>  
+<head>  <meta charset="utf-8">  
+
+<meta name="viewport"  
+      content="width=device-width, initial-scale=1">  
+
+<title>Alhikam Referral Admin</title>  
+
+<style>  
+
+    body {  
+        font-family: Arial, sans-serif;  
+        margin: 0;  
+        background: #f5f7fa;  
+        color: #222;  
+    }  
+
+    header {  
+        background: #111827;  
+        color: white;  
+        padding: 18px;  
+    }  
+
+    main {  
+        max-width: 1200px;  
+        margin: auto;  
+        padding: 20px;  
+    }  
+
+    .card {  
+        background: white;  
+        padding: 20px;  
+        margin-bottom: 20px;  
+        border-radius: 12px;  
+        box-shadow: 0 3px 15px rgba(0,0,0,.06);  
+    }  
+
+    input,  
+    select {  
+        width: 100%;  
+        box-sizing: border-box;  
+        padding: 10px;  
+        margin: 6px 0 12px;  
+        border: 1px solid #ddd;  
+        border-radius: 7px;  
+    }  
+
+    button {  
+        padding: 10px 15px;  
+        border: 0;  
+        border-radius: 7px;  
+        cursor: pointer;  
+    }  
+
+    table {  
+        width: 100%;  
+        border-collapse: collapse;  
+        overflow-x: auto;  
+    }  
+
+    th,  
+    td {  
+        padding: 10px;  
+        border-bottom: 1px solid #eee;  
+        text-align: left;  
+    }  
+
+    .success {  
+        background: #e8f8ed;  
+        padding: 12px;  
+        border-radius: 8px;  
+        margin-bottom: 15px;  
+    }  
+
+    .error {  
+        background: #ffe7e7;  
+        padding: 12px;  
+        border-radius: 8px;  
+        margin-bottom: 15px;  
+    }  
+
+    .logout {  
+        background: white;  
+        color: #111827;  
+    }  
+
+    @media(max-width:700px) {  
+
+        table {  
+            display: block;  
+            overflow-x: auto;  
+            white-space: nowrap;  
+        }  
+
+    }  
+
+</style>
+
+</head>  <body>  <header>  <div style="  
+    max-width:1200px;  
+    margin:auto;  
+    display:flex;  
+    justify-content:space-between;  
+    align-items:center;  
+    gap:10px;  
+">  
+
+    <strong>  
+        ALHIKAM LEARNING CENTER  
+    </strong>  
+
+    <form method="POST"  
+          action="{{ url_for('admin_logout') }}">  
+
+        <input  
+            type="hidden"  
+            name="csrf_token"  
+            value="{{ csrf_token }}"  
+        >  
+
+        <button class="logout"  
+                type="submit">  
+
+            Logout  
+
+        </button>  
+
+    </form>  
+
+</div>
+
+</header>  <main>  {% if request.args.get('success') %}  
+
+    <div class="success">  
+        {{ request.args.get('success') }}  
+    </div>  
+
+{% endif %}  
+
+
+{% if request.args.get('error') %}  
+
+    <div class="error">  
+        {{ request.args.get('error') }}  
+    </div>  
+
+{% endif %}  
+
+
+<!-- ================================================== -->  
+<!-- CREATE PROMOTER -->  
+<!-- ================================================== -->  
+
+<div class="card">  
+
+    <h2>Create Promoter</h2>  
+
+    <form method="POST"  
+          action="{{ url_for('create_promoter') }}">  
+
+        <input  
+            type="hidden"  
+            name="csrf_token"  
+            value="{{ csrf_token }}"  
+        >  
+
+        <label>Full Name</label>  
+
+        <input  
+            type="text"  
+            name="full_name"  
+            required  
+            maxlength="100"  
+        >  
+
+
+        <label>Phone</label>  
+
+        <input  
+            type="text"  
+            name="phone"  
+        >  
+
+
+        <label>Email</label>  
+
+        <input  
+            type="email"  
+            name="email"  
+        >  
+
+
+        <label>Commission Rate (%)</label>  
+
+        <input  
+            type="number"  
+            name="commission_rate"  
+            value="20"  
+            min="0"  
+            max="100"  
+            step="0.01"  
+        >  
+
+
+        <label>Promoter Password</label>  
+
+        <input  
+            type="password"  
+            name="password"  
+            minlength="8"  
+            required  
+            autocomplete="new-password"  
+        >  
+
+
+        <button type="submit">  
+            Create Promoter  
+        </button>  
+
+    </form>  
+
+</div>  
+
+
+<!-- ================================================== -->  
+<!-- PROMOTERS -->  
+<!-- ================================================== -->  
+
+<div class="card">  
+
+    <h2>Promoters</h2>  
+
+    <div style="overflow-x:auto;">  
+
+        <table>  
+
+            <thead>  
+
+                <tr>  
+                    <th>ID</th>  
+                    <th>Name</th>  
+                    <th>Phone</th>  
+                    <th>Referral Code</th>  
+                    <th>Sales</th>  
+                    <th>Earned</th>  
+                    <th>Available</th>  
+                    <th>Status</th>  
+                </tr>  
+
+            </thead>  
+
+            <tbody>  
+
+            {% for promoter in promoters %}  
+
+                <tr>  
+
+                    <td>  
+                        {{ promoter["id"] }}  
+                    </td>  
+
+                    <td>  
+                        {{ promoter["full_name"] }}  
+                    </td>  
+
+                    <td>  
+                        {{ promoter["phone"] or "" }}  
+                    </td>  
+
+                    <td>  
+                        {{ promoter["referral_code"] }}  
+                    </td>  
+
+                    <td>  
+                        {{ promoter["total_sales"] }}  
+                    </td>  
+
+                    <td>  
+                        ₦{{ "%.2f"|format(  
+                            promoter["total_earned"] or 0  
+                        ) }}  
+                    </td>  
+
+                    <td>  
+                        ₦{{ "%.2f"|format(  
+                            promoter["available_balance"] or 0  
+                        ) }}  
+                    </td>  
+
+                    <td>  
+                        {{ promoter["status"] }}  
+                    </td>  
+
+                </tr>  
+
+            {% else %}  
+
+                <tr>  
+                    <td colspan="8">  
+                        No promoters found.  
+                    </td>  
+                </tr>  
+
+            {% endfor %}  
+
+            </tbody>  
+
+        </table>  
+
+    </div>  
+
+</div>  
+
+
+<!-- ================================================== -->  
+<!-- WITHDRAWALS -->  
+<!-- ================================================== -->  
+
+<div class="card">  
+
+    <h2>Withdrawals</h2>  
+
+    <div style="overflow-x:auto;">  
 
-        return admin_login_page()
+        <table>  
 
+            <thead>  
 
-    try:
+                <tr>  
+                    <th>ID</th>  
+                    <th>Promoter</th>  
+                    <th>Amount</th>  
+                    <th>Bank</th>  
+                    <th>Account</th>  
+                    <th>Status</th>  
+                    <th>Transfer</th>  
+                    <th>Action</th>  
+                </tr>  
 
-        promoters = get_all_promoters()
+            </thead>  
 
-    except Exception as e:
+            <tbody>  
 
-        print(
-            "ADMIN PROMOTER LIST ERROR:",
-            repr(e)
-        )
+            {% for withdrawal in withdrawals %}  
 
-        promoters = []
+                <tr>  
 
-        if not error:
+                    <td>  
+                        {{ withdrawal["id"] }}  
+                    </td>  
 
-            error = (
-                "Unable to load promoters."
-            )
+                    <td>  
+                        {{ withdrawal["promoter_id"] }}  
+                    </td>  
 
+                    <td>  
+                        ₦{{ "%.2f"|format(  
+                            withdrawal["amount"] or 0  
+                        ) }}  
+                    </td>  
 
-    try:
+                    <td>  
+                        {{ withdrawal["bank_name"] or "" }}  
+                    </td>  
 
-        withdrawals = get_all_withdrawals()
+                    <td>  
+                        {{ withdrawal["masked_account_number"] }}  
+                    </td>  
 
-    except Exception as e:
+                    <td>  
+                        {{ withdrawal["status"] }}  
+                    </td>  
 
-        print(
-            "ADMIN WITHDRAWAL LIST ERROR:",
-            repr(e)
-        )
+                    <td>  
+                        {{ withdrawal["transfer_status"] or "" }}  
+                    </td>  
 
-        withdrawals = []
+                    <td>  
 
-        if not error:
+                        <form method="POST"  
+                              action="{{ url_for(  
+                                  'admin_withdrawal_status'  
+                              ) }}">  
 
-            error = (
-                "Unable to load withdrawals."
-            )
+                            <input  
+                                type="hidden"  
+                                name="csrf_token"  
+                                value="{{ csrf_token }}"  
+                            >  
 
+                            <input  
+                                type="hidden"  
+                                name="withdrawal_id"  
+                                value="{{ withdrawal['id'] }}"  
+                            >  
 
-    (
-        pending_count,
-        pending_amount
-    ) = calculate_withdrawal_summary(
-        withdrawals
-    )
+                            <select name="status">  
 
+                                <option value="processing">  
+                                    Check Processing  
+                                </option>  
 
-    return render_template_string(
+                                <option value="successful">  
+                                    Verify Success  
+                                </option>  
 
-        ADMIN_PANEL_HTML,
+                                <option value="failed">  
+                                    Verify Failed  
+                                </option>  
 
-        promoters=promoters,
+                            </select>  
 
-        withdrawals=withdrawals,
+                            <button type="submit">  
+                                Update  
+                            </button>  
 
-        pending_count=pending_count,
+                        </form>  
 
-        pending_amount=(
-            f"{pending_amount:,.0f}"
-        ),
+                    </td>  
 
-        app_url=APP_URL,
+                </tr>  
 
-        error=error,
+            {% else %}  
 
-        success=success
+                <tr>  
+                    <td colspan="8">  
+                        No withdrawals found.  
+                    </td>  
+                </tr>  
 
-    )
+            {% endfor %}  
 
+            </tbody>  
 
-# ==========================================================
-# CREATE PROMOTER
-# ==========================================================
+        </table>  
 
-def create_promoter_admin():
+    </div>  
 
-    if not admin_logged_in():
+</div>
 
-        return redirect(
-            "/admin/referral"
-        )
-
-
-    full_name = (
-        request.form.get(
-            "full_name",
-            ""
-        )
-        or ""
-    ).strip()
-
-
-    phone = (
-        request.form.get(
-            "phone",
-            ""
-        )
-        or ""
-    ).strip()
-
-
-    email = (
-        request.form.get(
-            "email",
-            ""
-        )
-        or ""
-    ).strip()
-
-
-    commission_rate_raw = (
-        request.form.get(
-            "commission_rate",
-            "20"
-        )
-        or "20"
-    ).strip()
-
-
-    # ======================================================
-    # VALIDATE NAME
-    # ======================================================
-
-    if not full_name:
-
-        return admin_referral_page(
-            error="Full name is required."
-        )
-
-
-    # ======================================================
-    # VALIDATE COMMISSION
-    # ======================================================
-
-    try:
-
-        commission_rate = float(
-            commission_rate_raw
-        )
-
-    except Exception:
-
-        return admin_referral_page(
-            error="Invalid commission rate."
-        )
-
-
-    if (
-        commission_rate < 0
-        or commission_rate > 100
-    ):
-
-        return admin_referral_page(
-            error=(
-                "Commission rate must be "
-                "between 0 and 100."
-            )
-        )
-
-
-    # ======================================================
-    # CREATE PROMOTER
-    # ======================================================
-
-    try:
-
-        referral_code = (
-            generate_referral_code()
-        )
-
-
-        promoter_id = add_promoter(
-
-            full_name=full_name,
-
-            phone=phone,
-
-            email=email,
-
-            referral_code=referral_code,
-
-            commission_rate=commission_rate
-
-        )
-
-
-        referral_link = (
-            f"{APP_URL}/payment"
-            f"?ref={referral_code}"
-        )
-
-
-        dashboard_link = (
-            f"{APP_URL}/referral/dashboard"
-            f"?ref={referral_code}"
-        )
-
-
-        success_message = (
-            "✅ PROMOTER CREATED SUCCESSFULLY\n\n"
-            f"Promoter ID: {promoter_id}\n"
-            f"Name: {full_name}\n"
-            f"Commission: {commission_rate:g}%\n"
-            f"Referral Code: {referral_code}\n\n"
-            f"Payment Link:\n{referral_link}\n\n"
-            f"Dashboard Link:\n{dashboard_link}"
-        )
-
-
-        return admin_referral_page(
-            success=success_message
-        )
-
-
-    except Exception as e:
-
-        print(
-            "ADMIN CREATE PROMOTER ERROR:",
-            repr(e)
-        )
-
-        return admin_referral_page(
-            error=(
-                "Unable to create promoter. "
-                "Please check the Railway logs."
-            )
-        )
-
-
-# ==========================================================
-# UPDATE WITHDRAWAL
-# ==========================================================
-
-def admin_update_withdrawal():
-
-    if not admin_logged_in():
-
-        return redirect(
-            "/admin/referral"
-        )
-
-    withdrawal_id_raw = (
-        request.form.get(
-            "withdrawal_id",
-            ""
-        )
-        or ""
-    ).strip()
-
-    action = (
-        request.form.get(
-            "status",
-            ""
-        )
-        or ""
-    ).strip().lower()
-
-    try:
-
-        withdrawal_id = int(
-            withdrawal_id_raw
-        )
-
-    except Exception:
-
-        return redirect(
-            "/admin/referral"
-        )
-
-    # ======================================================
-    # GET WITHDRAWAL
-    # ======================================================
-
-    try:
-
-        from database import (
-            get_withdrawal_by_id
-        )
-
-        withdrawal = get_withdrawal_by_id(
-            withdrawal_id
-        )
-
-    except Exception as e:
-
-        print(
-            "GET WITHDRAWAL ERROR:",
-            repr(e)
-        )
-
-        return redirect(
-            "/admin/referral"
-        )
-
-    if not withdrawal:
-
-        print(
-            "WITHDRAWAL NOT FOUND:",
-            withdrawal_id
-        )
-
-        return redirect(
-            "/admin/referral"
-        )
-
-    # ======================================================
-    # DO NOT MANUALLY MARK SUCCESSFUL
-    #
-    # Flutterwave must confirm it.
-    # ======================================================
-
-    if action == "successful":
-
-        try:
-
-            from referral_dashboard import (
-                refresh_withdrawal_status
-            )
-
-            refreshed = (
-                refresh_withdrawal_status(
-                    withdrawal_id
-                )
-            )
-
-            final_status = str(
-                refreshed["status"]
-                if refreshed
-                else ""
-            ).lower().strip()
-
-            print(
-                "WITHDRAWAL REFRESH | ID=%s | STATUS=%s",
-                withdrawal_id,
-                final_status
-            )
-
-        except Exception as e:
-
-            print(
-                "WITHDRAWAL FLUTTERWAVE STATUS ERROR:",
-                repr(e)
-            )
-
-        return redirect(
-            "/admin/referral"
-        )
-
-    # ======================================================
-    # PROCESSING
-    # ======================================================
-
-    if action == "processing":
-
-        try:
-
-            update_withdrawal_status(
-                withdrawal_id,
-                "processing"
-            )
-
-        except Exception as e:
-
-            print(
-                "PROCESSING UPDATE ERROR:",
-                repr(e)
-            )
-
-        return redirect(
-            "/admin/referral"
-        )
-
-    # ======================================================
-    # FAILED
-    #
-    # We should NOT blindly mark it failed unless
-    # Flutterwave confirms failure.
-    # ======================================================
-
-    if action == "failed":
-
-        try:
-
-            from referral_dashboard import (
-                refresh_withdrawal_status
-            )
-
-            refreshed = (
-                refresh_withdrawal_status(
-                    withdrawal_id
-                )
-            )
-
-            final_status = str(
-                refreshed["status"]
-                if refreshed
-                else ""
-            ).lower().strip()
-
-            print(
-                "WITHDRAWAL CHECK BEFORE FAILED | "
-                "ID=%s | STATUS=%s",
-                withdrawal_id,
-                final_status
-            )
-
-        except Exception as e:
-
-            print(
-                "WITHDRAWAL FAILURE CHECK ERROR:",
-                repr(e)
-            )
-
-        return redirect(
-            "/admin/referral"
-        )
-
-    # ======================================================
-    # CANCELLED
-    # ======================================================
-
-    if action == "cancelled":
-
-        try:
-
-            update_withdrawal_status(
-                withdrawal_id,
-                "cancelled"
-            )
-
-        except Exception as e:
-
-            print(
-                "CANCEL UPDATE ERROR:",
-                repr(e)
-            )
-
-        return redirect(
-            "/admin/referral"
-        )
-
-    return redirect(
-        "/admin/referral"
-    )
+</main>  </body>  
+</html>  
+"""
