@@ -951,6 +951,34 @@ def get_promoter_by_referral_code(
     finally:
 
         conn.close()
+# ==========================================================
+# GET ALL PROMOTERS
+#
+# COMPATIBILITY FUNCTION
+#
+# Used by admin_referral.py
+# ==========================================================
+
+def get_all_promoters():
+
+    conn = get_connection()
+
+    try:
+
+        return conn.execute(
+            """
+            SELECT *
+
+            FROM promoters
+
+            ORDER BY id DESC
+            """
+        ).fetchall()
+
+    finally:
+
+        conn.close()
+
 
 
 # ==========================================================
