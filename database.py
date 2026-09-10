@@ -993,14 +993,6 @@ def add_promoter(
 
                 conn.commit()
 
-                # --------------------------------------------------
-                # IMPORTANT:
-                # Return promoter ID AND generated withdrawal code.
-                #
-                # Existing code that only expects an integer may need
-                # to use the first value.
-                # --------------------------------------------------
-
                 return {
                     "id": cursor.lastrowid,
                     "withdrawal_code": withdrawal_code,
@@ -1570,6 +1562,55 @@ def get_student_by_tx_ref(tx_ref):
             LIMIT 1
             """,
             (str(tx_ref).strip(),)
+        ).fetchone()
+
+    finally:
+
+        conn.close()
+
+
+# ==========================================================
+# GET STUDENT BY TELEGRAM ID
+# ==========================================================
+
+def get_student_by_telegram_id(
+    telegram_id
+):
+
+    """
+    Find a registered student using Telegram user ID.
+
+    Used by bot.py when a student sends /start
+    without a TX_REF.
+    """
+
+    if telegram_id is None:
+        return None
+
+    telegram_id = str(
+        telegram_id
+    ).strip()
+
+    if not telegram_id:
+        return None
+
+    conn = get_connection()
+
+    try:
+
+        return conn.execute(
+            """
+            SELECT *
+
+            FROM students
+
+            WHERE telegram_id = ?
+
+            ORDER BY id DESC
+
+            LIMIT 1
+            """,
+            (telegram_id,)
         ).fetchone()
 
     finally:
