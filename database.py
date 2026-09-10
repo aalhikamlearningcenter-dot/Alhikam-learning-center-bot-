@@ -111,6 +111,69 @@ def verify_password(
     )
 
 
+# ==========================================================
+# VERIFY PROMOTER PASSWORD
+#
+# COMPATIBILITY FUNCTION
+#
+# Used by referral_dashboard.py
+# ==========================================================
+
+def verify_promoter_password(
+    promoter_id,
+    password
+):
+
+    if not promoter_id:
+        return False
+
+    if password is None:
+        return False
+
+    password = str(
+        password
+    )
+
+    if not password:
+        return False
+
+    conn = get_connection()
+
+    try:
+
+        promoter = conn.execute(
+            """
+            SELECT password_hash
+
+            FROM promoters
+
+            WHERE id = ?
+
+            LIMIT 1
+            """,
+            (promoter_id,)
+        ).fetchone()
+
+        if not promoter:
+
+            return False
+
+        stored_hash = promoter["password_hash"]
+
+        if not stored_hash:
+
+            return False
+
+        return verify_password(
+            password,
+            stored_hash
+        )
+
+    finally:
+
+        conn.close()
+
+
 def generate_withdrawal_code():
 
     return secrets.token_hex(4).upper()
@@ -1901,6 +1964,7 @@ def get_promoter_withdrawals(
         promoter_id
     )
 
+
 # ==========================================================
 # UPDATE WITHDRAWAL TRANSFER
 #
@@ -1937,9 +2001,6 @@ def update_withdrawal_transfer(
         if not withdrawal:
 
             return False
-
-        # Keep existing values when a new value
-        # was not supplied.
 
         current_status = (
             withdrawal["status"]
