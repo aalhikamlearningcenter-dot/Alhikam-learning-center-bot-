@@ -431,9 +431,6 @@ def initialize_database():
             "INTEGER"
         )
 
-        # IMPORTANT:
-        # THIS WAS MISSING BEFORE
-
         add_column_if_missing(
             cursor,
             "students",
@@ -643,7 +640,6 @@ def initialize_database():
             """
             CREATE INDEX IF NOT EXISTS
             idx_students_tx_ref
-
             ON students(tx_ref)
             """
         )
@@ -652,7 +648,6 @@ def initialize_database():
             """
             CREATE INDEX IF NOT EXISTS
             idx_students_telegram_id
-
             ON students(telegram_id)
             """
         )
@@ -661,7 +656,6 @@ def initialize_database():
             """
             CREATE INDEX IF NOT EXISTS
             idx_students_faculty
-
             ON students(faculty)
             """
         )
@@ -670,7 +664,6 @@ def initialize_database():
             """
             CREATE INDEX IF NOT EXISTS
             idx_payments_tx_ref
-
             ON payments(tx_ref)
             """
         )
@@ -679,7 +672,6 @@ def initialize_database():
             """
             CREATE INDEX IF NOT EXISTS
             idx_commissions_promoter
-
             ON commissions(promoter_id)
             """
         )
@@ -688,7 +680,6 @@ def initialize_database():
             """
             CREATE INDEX IF NOT EXISTS
             idx_withdrawals_promoter
-
             ON withdrawals(promoter_id)
             """
         )
@@ -1052,14 +1043,7 @@ def add_student(
 
     add_student(database_data)
 
-    and old positional style:
-
-    add_student(
-        payment_token,
-        tx_ref,
-        full_name,
-        ...
-    )
+    and old positional style.
     """
 
     # ======================================================
@@ -1158,9 +1142,6 @@ def add_student(
             )
         )
 
-        # IMPORTANT:
-        # registration.py uses faculty.
-        # It also sends course=faculty.
         faculty = (
             data.get("faculty")
             or data.get("course")
@@ -1770,10 +1751,11 @@ def create_withdrawal(
             amount
         )
 
-        if amount <= 0:
+        if amount < MINIMUM_WITHDRAWAL:
 
             raise ValueError(
-                "Invalid withdrawal amount."
+                f"Minimum withdrawal is "
+                f"NGN {MINIMUM_WITHDRAWAL}."
             )
 
         if amount > available:
@@ -1842,6 +1824,10 @@ def create_withdrawal(
         conn.close()
 
 
+# ==========================================================
+# GET WITHDRAWAL BY ID
+# ==========================================================
+
 def get_withdrawal_by_id(
     withdrawal_id
 ):
@@ -1868,6 +1854,10 @@ def get_withdrawal_by_id(
         conn.close()
 
 
+# ==========================================================
+# GET WITHDRAWALS BY PROMOTER
+# ==========================================================
+
 def get_withdrawals_by_promoter(
     promoter_id
 ):
@@ -1892,6 +1882,24 @@ def get_withdrawals_by_promoter(
     finally:
 
         conn.close()
+
+
+# ==========================================================
+# GET PROMOTER WITHDRAWALS
+#
+# COMPATIBILITY FUNCTION
+#
+# referral_dashboard.py uses:
+# get_promoter_withdrawals()
+# ==========================================================
+
+def get_promoter_withdrawals(
+    promoter_id
+):
+
+    return get_withdrawals_by_promoter(
+        promoter_id
+    )
 
 
 # ==========================================================
