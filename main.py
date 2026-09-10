@@ -13,7 +13,6 @@ import threading
 import requests
 import logging
 import secrets
-import time
 from datetime import datetime, timedelta, timezone
 from markupsafe import escape
 
@@ -382,39 +381,36 @@ def _commission_for_amount(amount):
 
 def find_flutterwave_transaction_by_tx_ref(tx_ref):
     """
-    Find a Flutterwave transaction using our merchant tx_ref.
+    Find the exact Flutterwave transaction for our merchant reference.
 
-    Flutterwave Standard may redirect the customer back with
-    tx_ref and transaction_id. If transaction_id is missing,
-    we use tx_ref to find the transaction first, then verify it
-    using the transaction ID.
+    Flutterwave Standard normally returns transaction_id on the redirect.
+    If the browser does not return it, we use the transactions endpoint and
+    match the exact tx_ref. We deliberately do not trust the lookup result
+    until the transaction is verified again with /{id}/verify.
     """
-
     if not FLW_SECRET_KEY:
         logger.error("FLW_SECRET_KEY is missing.")
         return None
 
     tx_ref = str(tx_ref or "").strip()
-
     if not tx_ref:
         return None
 
     try:
         today = datetime.now(timezone.utc).date()
+        from_date = (today - timedelta(days=7)).isoformat()
+        to_date = (today + timedelta(days=1)).isoformat()
 
-        from_date = (
-            today - timedelta(days=30)
-        ).isoformat()
+        headers = {
+            "Authorization": f"Bearer {FLW_SECRET_KEY}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
 
-        to_date = today.isoformat()
-
+        # First try the documented exact tx_ref filter.
         response = requests.get(
             "https://api.flutterwave.com/v3/transactions",
-            headers={
-                "Authorization": f"Bearer {FLW_SECRET_KEY}",
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-            },
+            headers=headers,
             params={
                 "from": from_date,
                 "to": to_date,
@@ -431,45 +427,57 @@ def find_flutterwave_transaction_by_tx_ref(tx_ref):
             tx_ref,
         )
 
-        if response.status_code != 200:
-            logger.error(
-                "Flutterwave tx_ref lookup failed "
-                "status=%s body=%s",
-                response.status_code,
-                response.text[:1000],
+        if response.status_code == 200:
+            result = response.json() or {}
+            data = result.get("data")
+            if isinstance(data, list):
+                for transaction in data:
+                    if str(transaction.get("tx_ref") or "").strip() == tx_ref:
+                        return transaction
+
+        # Fallback: some account/API responses may not honor tx_ref as a
+        # server-side filter. Fetch recent pages and match exactly.
+        for page in range(1, 6):
+            response = requests.get(
+                "https://api.flutterwave.com/v3/transactions",
+                headers=headers,
+                params={
+                    "from": from_date,
+                    "to": to_date,
+                    "page": page,
+                    "currency": "NGN",
+                },
+                timeout=30,
             )
-            return None
 
-        result = response.json()
-
-        data = result.get("data")
-
-        if not isinstance(data, list):
-            logger.warning(
-                "Flutterwave tx_ref lookup returned unexpected data: %s",
-                result,
-            )
-            return None
-
-        for transaction in data:
-            transaction_tx_ref = str(
-                transaction.get("tx_ref") or ""
-            ).strip()
-
-            if transaction_tx_ref == tx_ref:
-                logger.info(
-                    "Flutterwave transaction found "
-                    "tx_ref=%s transaction_id=%s",
-                    tx_ref,
-                    transaction.get("id"),
+            if response.status_code != 200:
+                logger.error(
+                    "Flutterwave recent transaction lookup failed "
+                    "status=%s body=%s",
+                    response.status_code,
+                    response.text[:1000],
                 )
-                return transaction
+                break
+
+            result = response.json() or {}
+            data = result.get("data")
+            if not isinstance(data, list) or not data:
+                break
+
+            for transaction in data:
+                if str(transaction.get("tx_ref") or "").strip() == tx_ref:
+                    logger.info(
+                        "Flutterwave transaction found by fallback "
+                        "tx_ref=%s transaction_id=%s",
+                        tx_ref,
+                        transaction.get("id"),
+                    )
+                    return transaction
 
         logger.warning(
             "No Flutterwave transaction found for tx_ref=%s",
             tx_ref,
         )
-
         return None
 
     except Exception:
@@ -982,21 +990,10 @@ def payment_complete(payment_token):
     if str(
         payment.get("status") or ""
     ).lower() != "successful":
-        for attempt in range(3):
-            verified = _verify_and_finalize_payment(
-                payment_token,
-                transaction_id,
-            )
-            if verified is not None:
-                payment = verified
-            if (
-                payment
-                and str(payment.get("status") or "").lower()
-                == "successful"
-            ):
-                break
-            if attempt < 2:
-                time.sleep(1)
+        payment = _verify_and_finalize_payment(
+            payment_token,
+            transaction_id,
+        )
 
     # --------------------------------------------------------
     # SUCCESS
@@ -1069,7 +1066,7 @@ def payment_complete(payment_token):
     <head>
     <meta name="viewport"
           content="width=device-width, initial-scale=1">
-    
+    <meta http-equiv="refresh" content="5">
     <title>Payment Verification</title>
 
     <style>
@@ -1130,109 +1127,21 @@ def payment_complete(payment_token):
     Please wait a moment.
     </p>
 
-    <p id="status-message">
-    We are checking your payment status securely.
+    <p>
+    This page will automatically refresh.
     </p>
-
-    <p id="attempt">Checking payment status...</p>
 
     <a
         class="refresh"
         href="/payment-complete/{payment_token}"
     >
-    🔄 Check Again
+    🔄 Refresh Now
     </a>
-
-    <script>
-    const token = {payment_token!r};
-    let attempts = 0;
-    let stopped = false;
-
-    async function checkPaymentStatus() {{
-        if (stopped) return;
-        attempts += 1;
-        const attempt = document.getElementById("attempt");
-        if (attempt) attempt.textContent = "Checking payment status... (" + attempts + ")";
-
-        try {{
-            const response = await fetch("/payment-status/" + encodeURIComponent(token), {{
-                cache: "no-store",
-                headers: {{"Accept": "application/json"}}
-            }});
-            const data = await response.json();
-
-            if (data.status === "successful" && data.redirect) {{
-                stopped = true;
-                document.getElementById("status-message").textContent = "✅ Payment confirmed. Opening registration...";
-                window.location.replace(data.redirect);
-                return;
-            }}
-
-            if (data.status === "failed") {{
-                stopped = true;
-                document.getElementById("status-message").textContent = "❌ Payment was not completed successfully.";
-                document.getElementById("attempt").innerHTML = '<a href="/pay">Try payment again</a>';
-                return;
-            }}
-        }} catch (e) {{
-            // Keep polling; temporary network errors must not break the flow.
-        }}
-
-        if (!stopped) setTimeout(checkPaymentStatus, 3000);
-    }}
-
-    checkPaymentStatus();
-    </script>
 
     </div>
     </body>
     </html>
     """
-
-
-# ============================================================
-# PAYMENT STATUS POLLING
-# ============================================================
-
-@web_app.route("/payment-status/<payment_token>", methods=["GET"])
-def payment_status(payment_token):
-    payment = _payment_from_token(payment_token)
-
-    if not payment:
-        return jsonify({"status": "not_found"}), 404
-
-    if str(payment.get("status") or "").lower() == "successful":
-        return jsonify({
-            "status": "successful",
-            "redirect": f"/register/{payment_token}",
-        })
-
-    transaction_id = (
-        request.args.get("transaction_id")
-        or request.args.get("id")
-        or ""
-    ).strip()
-
-    verified_payment = _verify_and_finalize_payment(
-        payment_token,
-        transaction_id or None,
-    )
-
-    if verified_payment and str(verified_payment.get("status") or "").lower() == "successful":
-        return jsonify({
-            "status": "successful",
-            "redirect": f"/register/{payment_token}",
-        })
-
-    refreshed = _payment_from_token(payment_token) or verified_payment
-
-    if refreshed and str(refreshed.get("status") or "").lower() in {"failed", "cancelled", "canceled"}:
-        return jsonify({"status": "failed"})
-
-    return jsonify({
-        "status": "pending",
-        "message": "Payment is still being verified.",
-    })
 
 
 # ============================================================
