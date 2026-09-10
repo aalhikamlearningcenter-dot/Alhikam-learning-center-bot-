@@ -1121,42 +1121,45 @@ def register():
 
         payment["tx_ref"] = tx_ref
 
-       # ============================================================
-# PAYMENT STATUS CHECK
-# ============================================================
+        # ============================================================
+        # PAYMENT STATUS CHECK
+        # ============================================================
 
-payment_status = str(
-    payment.get(
-        "payment_status",
-        ""
-    )
-    or payment.get(
-        "status",
-        ""
-    )
-    or ""
-).strip().lower()
+        payment_status = str(
+            payment.get(
+                "payment_status",
+                ""
+            )
+            or payment.get(
+                "status",
+                ""
+            )
+            or ""
+        ).strip().lower()
 
-payment["payment_status"] = payment_status
+        payment["payment_status"] = payment_status
 
-# Keep compatibility with older code
-payment["status"] = payment_status
+        # Keep compatibility with older code
+        payment["status"] = payment_status
 
-if payment_status != "successful":
+        if payment_status != "successful":
 
-    logger.warning(
-        "Registration blocked: payment not successful "
-        "tx_ref=%s status=%s",
-        tx_ref,
-        payment_status,
-    )
+            logger.warning(
+                "Registration blocked: payment not successful "
+                "tx_ref=%s status=%s",
+                tx_ref,
+                payment_status,
+            )
 
-    return (
-        "This payment has not been "
-        "successfully verified.",
-        403,
-    ) 
-            
+            return (
+                "This payment has not been "
+                "successfully verified.",
+                403,
+            )
+
+        # ============================================================
+        # PAYMENT SESSION
+        # ============================================================
 
         PAYMENT_SESSIONS[
             tx_ref
@@ -1180,6 +1183,7 @@ if payment_status != "successful":
             "Please contact Alhikam Learning Center.",
             500,
         )
+
 
 # ============================================================
 # PROMOTER LOGIN
