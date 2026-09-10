@@ -446,16 +446,19 @@ def create_flutterwave_payment(
 
     callback_params = {
 
-        "telegram_id":
-            telegram_id or "",
+    "tx_ref":
+        tx_ref,
 
-        "telegram_name":
-            telegram_name or "",
+    "telegram_id":
+        telegram_id or "",
 
-        "telegram_username":
-            telegram_username or "",
+    "telegram_name":
+        telegram_name or "",
 
-    }
+    "telegram_username":
+        telegram_username or "",
+
+}
 
 
     callback_url = (
