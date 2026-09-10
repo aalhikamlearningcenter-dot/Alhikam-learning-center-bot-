@@ -1901,6 +1901,110 @@ def get_promoter_withdrawals(
         promoter_id
     )
 
+# ==========================================================
+# UPDATE WITHDRAWAL TRANSFER
+#
+# COMPATIBILITY FUNCTION
+#
+# Used by referral_dashboard.py
+# ==========================================================
+
+def update_withdrawal_transfer(
+    withdrawal_id,
+    transfer_id=None,
+    transfer_reference=None,
+    status=None,
+    message=None
+):
+
+    conn = get_connection()
+
+    try:
+
+        withdrawal = conn.execute(
+            """
+            SELECT *
+
+            FROM withdrawals
+
+            WHERE id = ?
+
+            LIMIT 1
+            """,
+            (withdrawal_id,)
+        ).fetchone()
+
+        if not withdrawal:
+
+            return False
+
+        # Keep existing values when a new value
+        # was not supplied.
+
+        current_status = (
+            withdrawal["status"]
+            or "pending"
+        )
+
+        new_status = (
+            str(status).strip().lower()
+            if status
+            else current_status
+        )
+
+        conn.execute(
+            """
+            UPDATE withdrawals
+
+            SET
+                transfer_id =
+                    COALESCE(
+                        ?,
+                        transfer_id
+                    ),
+
+                transfer_reference =
+                    COALESCE(
+                        ?,
+                        transfer_reference
+                    ),
+
+                status = ?,
+
+                message =
+                    COALESCE(
+                        ?,
+                        message
+                    ),
+
+                updated_at = ?
+
+            WHERE id = ?
+            """,
+            (
+                transfer_id,
+                transfer_reference,
+                new_status,
+                message,
+                datetime.utcnow().isoformat(),
+                withdrawal_id
+            )
+        )
+
+        conn.commit()
+
+        return True
+
+    except Exception:
+
+        conn.rollback()
+
+        raise
+
+    finally:
+
+        conn.close()
+
 
 # ==========================================================
 # PROCESS TRANSFER RESULT
