@@ -2166,203 +2166,124 @@ def payment_complete(
 # ============================================================
 
 TELEGRAM_LOGIN_HTML = """
-
 <!DOCTYPE html>
-
 <html>
-
 <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Connect Telegram - ALHIKAM Learning Center</title>
 
-<meta
-name="viewport"
-content="width=device-width, initial-scale=1"
->
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f7f6;
+            margin: 0;
+            padding: 30px 20px;
+            text-align: center;
+        }
 
-<title>
-Connect Telegram
-</title>
+        .container {
+            max-width: 520px;
+            margin: 30px auto;
+            background: white;
+            padding: 30px 20px;
+            border-radius: 18px;
+            box-shadow: 0 4px 18px rgba(0,0,0,.10);
+        }
 
-<style>
+        .icon {
+            font-size: 55px;
+            margin-bottom: 10px;
+        }
 
-body{
-    font-family:Arial,sans-serif;
-    background:#f4f7f6;
-    padding:20px;
-}
+        h1 {
+            color: #087f5b;
+            font-size: 25px;
+        }
 
-.container{
-    max-width:520px;
-    margin:30px auto;
-    background:white;
-    padding:25px;
-    border-radius:16px;
-    box-shadow:
-    0 4px 18px rgba(0,0,0,.10);
-    text-align:center;
-}
+        .success {
+            background: #e8f7ef;
+            color: #087f5b;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            font-weight: bold;
+        }
 
-h1{
-    color:#087f5b
-}
+        .warning {
+            background: #fff7df;
+            color: #7a5a00;
+            padding: 14px;
+            border-radius: 10px;
+            margin: 20px 0;
+            font-size: 14px;
+        }
 
-.info{
-    background:#eef8f4;
-    padding:15px;
-    border-radius:10px;
-    margin:20px 0;
-    text-align:left;
-}
+        .telegram-button {
+            margin: 25px 0;
+        }
 
-</style>
-
-
-<script
-async
-src="https://telegram.org/js/telegram-widget.js?22"
-data-telegram-login="{{ bot_username }}"
-data-size="large"
-data-userpic="false"
-data-request-access="write"
-data-onauth="onTelegramAuth(user)"
->
-</script>
-
-
-<script>
-
-function onTelegramAuth(user) {
-
-    const form =
-        document.createElement("form");
-
-    form.method = "POST";
-
-    form.action = "/telegram-auth";
-
-
-    const data = {
-
-        payment_token:
-            "{{ payment_token }}",
-
-        id:
-            user.id,
-
-        first_name:
-            user.first_name || "",
-
-        last_name:
-            user.last_name || "",
-
-        username:
-            user.username || "",
-
-        photo_url:
-            user.photo_url || "",
-
-        auth_date:
-            user.auth_date,
-
-        hash:
-            user.hash
-
-    };
-
-
-    for (
-        const key in data
-    ) {
-
-        const input =
-            document.createElement(
-                "input"
-            );
-
-        input.type =
-            "hidden";
-
-        input.name =
-            key;
-
-        input.value =
-            data[key];
-
-        form.appendChild(
-            input
-        );
-
-    }
-
-
-    document.body.appendChild(
-        form
-    );
-
-    form.submit();
-
-}
-
-</script>
-
+        .small {
+            color: #666;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+    </style>
 </head>
-
 
 <body>
 
 <div class="container">
 
-<h1>
-🔗 Connect Your Telegram
-</h1>
+    <div class="icon">🔗</div>
 
+    <h1>Connect Your Telegram</h1>
 
-<div class="info">
+    <div class="success">
+        Payment Confirmed ✅
+        <br><br>
+        Plan: {{ plan_name }}
+        <br>
+        Amount: ₦{{ "{:,}".format(amount) }}
+    </div>
 
-<strong>
-Payment Confirmed ✅
-</strong>
+    <p>
+        To continue registration, connect the Telegram
+        account you will use to receive your
+        ALHIKAM Learning Center class invite.
+    </p>
 
-<br><br>
+    <div class="warning">
+        ⚠️ <strong>Important:</strong><br>
+        Do not enter your Telegram ID manually.
+        Your Telegram account will be verified automatically.
+    </div>
 
-Plan:
-{{ plan_name }}
+    <p>
+        <strong>Click the button below to connect Telegram:</strong>
+    </p>
 
-<br>
+    <div class="telegram-button">
 
-Amount:
-₦{{ "{:,}".format(amount) }}
+        <script async
+            src="https://telegram.org/js/telegram-widget.js?22"
+            data-telegram-login="{{ bot_username }}"
+            data-size="large"
+            data-auth-url="{{ auth_url }}"
+            data-request-access="write">
+        </script>
 
-</div>
+    </div>
 
-
-<p>
-
-To continue registration,
-connect the Telegram account
-you will use to receive your
-ALHIKAM class invite.
-
-</p>
-
-
-<p>
-<strong>
-⚠️ Do not enter your Telegram ID manually.
-</strong>
-</p>
-
-
-<p>
-Click the Telegram button below
-to connect your account.
-</p>
+    <p class="small">
+        🔐 Your Telegram ID is verified securely by Telegram.
+        <br>
+        We use it only to deliver your ALHIKAM class access.
+    </p>
 
 </div>
 
 </body>
-
 </html>
-
 """
 
 
