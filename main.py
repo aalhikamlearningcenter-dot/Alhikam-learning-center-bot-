@@ -1121,26 +1121,41 @@ def register():
 
         payment["tx_ref"] = tx_ref
 
-        payment["status"] = str(
-            payment.get(
-                "status",
-                "",
-            )
-            or ""
-        ).lower()
+       # ============================================================
+# PAYMENT STATUS CHECK
+# ============================================================
 
-        payment["payment_status"] = (
-            "Successful"
-            if payment["status"] == "successful"
-            else payment["status"]
-        )
+payment_status = str(
+    payment.get(
+        "payment_status",
+        ""
+    )
+    or payment.get(
+        "status",
+        ""
+    )
+    or ""
+).strip().lower()
 
-        if payment["status"] != "successful":
+payment["payment_status"] = payment_status
 
-            return (
-                "This payment has not been "
-                "successfully verified.",
-                403,
+# Keep compatibility with older code
+payment["status"] = payment_status
+
+if payment_status != "successful":
+
+    logger.warning(
+        "Registration blocked: payment not successful "
+        "tx_ref=%s status=%s",
+        tx_ref,
+        payment_status,
+    )
+
+    return (
+        "This payment has not been "
+        "successfully verified.",
+        403,
+    ) 
             )
 
         PAYMENT_SESSIONS[
