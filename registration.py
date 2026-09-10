@@ -1,8 +1,27 @@
-
 # ==========================================================
 # ALHIKAM LEARNING CENTER V2
 # registration.py
+#
 # PAYMENT -> REGISTRATION -> TELEGRAM BOT
+#
+# FLOW:
+# PAYMENT
+#    ↓
+# REGISTRATION
+#    ↓
+# STUDENT SAVED
+#    ↓
+# GOOGLE SHEETS
+#    ↓
+# SUCCESS PAGE
+#    ↓
+# START ALHIKAM BOT
+#    ↓
+# BOT RECEIVES TX_REF
+#    ↓
+# FIND STUDENT
+#    ↓
+# SEND INVITATION LINKS
 # ==========================================================
 
 from flask import (
@@ -11,6 +30,7 @@ from flask import (
 )
 
 import asyncio
+
 from urllib.parse import quote
 
 from telegram_service import (
@@ -25,6 +45,7 @@ from database import (
     add_student,
     get_promoter_by_referral_code,
     get_payment_by_tx_ref,
+    get_student_by_tx_ref,
     mark_payment_registration_completed,
 )
 
@@ -141,6 +162,7 @@ button{
 🎓 ALHIKAM Registration
 </h2>
 
+
 <div class="payment">
 
 <b>Payment Information</b>
@@ -231,6 +253,7 @@ No referral code detected.
 <br><br>
 
 Please enter your correct information.
+
 This information will be used to create your
 ALHIKAM student record.
 
@@ -358,7 +381,7 @@ def success_page(
 ):
 
     # ------------------------------------------------------
-    # CREATE TELEGRAM DEEP LINK
+    # TELEGRAM BOT DEEP LINK
     # ------------------------------------------------------
 
     bot_url = (
@@ -434,6 +457,14 @@ h2{{
     font-size:14px;
 }}
 
+.warning{{
+    background:#fff8e1;
+    padding:15px;
+    border-radius:10px;
+    margin-top:20px;
+    color:#7a5b00;
+}}
+
 </style>
 
 </head>
@@ -442,9 +473,11 @@ h2{{
 
 <div class="container">
 
+
 <h2>
 🎉 Registration Successful
 </h2>
+
 
 <div class="success">
 
@@ -454,7 +487,7 @@ Thank you
 </p>
 
 <p>
-Your ALHIKAM registration has been completed.
+Your ALHIKAM registration has been completed successfully.
 </p>
 
 </div>
@@ -499,10 +532,33 @@ class="telegram-button"
 </a>
 
 
+<div class="warning">
+
+<b>📱 Important</b>
+
+<br><br>
+
+Tap the
+<b>START ALHIKAM BOT</b>
+button above.
+
+The bot will identify your registration
+using your transaction reference and
+send your ALHIKAM class invitation links.
+
+<br><br>
+
+Please do not close this page before
+opening the Telegram bot.
+
+</div>
+
+
 <p class="telegram-info">
 
-Tap the button above to open Telegram
-and receive your ALHIKAM invitation links.
+After opening Telegram, press
+<b>START</b>
+if Telegram asks you to start the bot.
 
 </p>
 
@@ -524,6 +580,7 @@ Transaction Reference:
 
 </p>
 
+
 </div>
 
 </body>
@@ -542,6 +599,7 @@ def registration_page(
 ):
 
     if payment_sessions is None:
+
         payment_sessions = {}
 
 
@@ -596,7 +654,7 @@ def registration_page(
 
             print(
                 "Payment lookup error:",
-                e
+                repr(e)
             )
 
             payment = None
@@ -794,7 +852,7 @@ def registration_page(
 
             print(
                 "Promoter lookup error:",
-                e
+                repr(e)
             )
 
             promoter = None
@@ -963,10 +1021,6 @@ def registration_page(
 
     try:
 
-        from database import (
-            get_student_by_tx_ref
-        )
-
         existing_student = (
             get_student_by_tx_ref(
                 tx_ref
@@ -977,15 +1031,21 @@ def registration_page(
 
         print(
             "Existing student lookup error:",
-            e
+            repr(e)
         )
 
 
     if existing_student:
 
+        existing_name = (
+            existing_student["full_name"]
+            or full_name
+        )
+
+
         return success_page(
 
-            existing_student["full_name"],
+            existing_name,
 
             payment_plan,
 
@@ -1015,9 +1075,13 @@ def registration_page(
     # ======================================================
 
     promoter_id = (
+
         promoter["id"]
+
         if promoter
+
         else None
+
     )
 
 
@@ -1026,16 +1090,19 @@ def registration_page(
     # ======================================================
 
     commission = float(
+
         payment.get(
             "commission",
             0
         )
+
         or 0
+
     )
 
 
     # ======================================================
-    # STUDENT DATA
+    # STUDENT DATABASE DATA
     # ======================================================
 
     database_data = {
@@ -1098,16 +1165,41 @@ def registration_page(
             database_data
         )
 
+
         print(
-            "Student saved:",
-            student_id
+            "=================================================="
         )
+
+        print(
+            "STUDENT SAVED"
+        )
+
+        print(
+            f"STUDENT_ID={student_id}"
+        )
+
+        print(
+            f"TX_REF={tx_ref}"
+        )
+
+        print(
+            f"TELEGRAM_ID={telegram_id or 'NOT_CONNECTED'}"
+        )
+
+        print(
+            f"FACULTY={faculty}"
+        )
+
+        print(
+            "=================================================="
+        )
+
 
     except Exception as e:
 
         print(
             "Student database error:",
-            e
+            repr(e)
         )
 
         return (
@@ -1131,7 +1223,7 @@ def registration_page(
 
         print(
             "Payment registration update error:",
-            e
+            repr(e)
         )
 
 
@@ -1197,21 +1289,25 @@ def registration_page(
             )
         )
 
+
         print(
             "Google Sheet result:",
             sheet_result
         )
 
+
     except Exception as e:
 
         print(
             "Google Sheets error:",
-            e
+            repr(e)
         )
 
 
     # ======================================================
-    # TELEGRAM LINKS
+    # TELEGRAM DIRECT DELIVERY
+    #
+    # ONLY POSSIBLE IF TELEGRAM ID IS AVAILABLE
     # ======================================================
 
     telegram_error = None
@@ -1219,9 +1315,34 @@ def registration_page(
 
     if telegram_id:
 
+        print(
+            "=================================================="
+        )
+
+        print(
+            "TELEGRAM ID FOUND"
+        )
+
+        print(
+            f"TELEGRAM_ID={telegram_id}"
+        )
+
+        print(
+            f"FACULTY={faculty}"
+        )
+
+        print(
+            "Attempting direct invitation delivery..."
+        )
+
+        print(
+            "=================================================="
+        )
+
+
         try:
 
-            asyncio.run(
+            links = asyncio.run(
 
                 send_student_links(
 
@@ -1233,18 +1354,71 @@ def registration_page(
 
             )
 
+
+            print(
+                "=================================================="
+            )
+
+            print(
+                "DIRECT TELEGRAM DELIVERY FINISHED"
+            )
+
+            print(
+                f"TOTAL_LINKS={len(links or [])}"
+            )
+
+            print(
+                "=================================================="
+            )
+
+
         except Exception as e:
 
             telegram_error = e
 
+
             print(
-                "Telegram link error:",
-                e
+                "=================================================="
+            )
+
+            print(
+                "DIRECT TELEGRAM DELIVERY FAILED"
+            )
+
+            print(
+                f"ERROR={repr(e)}"
+            )
+
+            print(
+                "=================================================="
             )
 
 
+    else:
+
+        print(
+            "=================================================="
+        )
+
+        print(
+            "NO TELEGRAM ID DURING REGISTRATION"
+        )
+
+        print(
+            "Student must use START ALHIKAM BOT button."
+        )
+
+        print(
+            f"TX_REF={tx_ref}"
+        )
+
+        print(
+            "=================================================="
+        )
+
+
     # ======================================================
-    # TELEGRAM MESSAGE
+    # TELEGRAM STATUS MESSAGE
     # ======================================================
 
     if telegram_id and not telegram_error:
@@ -1278,8 +1452,9 @@ def registration_page(
 
         <br><br>
 
-        You can use the Telegram button below
-        to continue.
+        Please tap the
+        <b>START ALHIKAM BOT</b>
+        button below.
 
         </p>
 
@@ -1290,18 +1465,23 @@ def registration_page(
         telegram_message = """
 
         <p style="
-        color:#b45309;
+        color:#087f5b;
         font-weight:bold;
         ">
 
-        📱 Telegram is not connected yet.
+        ✅ Registration completed successfully.
+
+        <br><br>
+
+        📱 Your Telegram account is not connected
+        yet.
 
         <br><br>
 
         Tap the
         <b>START ALHIKAM BOT</b>
-        button below to connect your Telegram
-        and receive your invitation links.
+        button below to receive your
+        ALHIKAM class invitation links.
 
         </p>
 
@@ -1309,7 +1489,7 @@ def registration_page(
 
 
     # ======================================================
-    # SUCCESS
+    # FINAL SUCCESS PAGE
     # ======================================================
 
     return success_page(
