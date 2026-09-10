@@ -860,14 +860,39 @@ def registration_page(
 
         if promoter:
 
+    # Safely read promoter name from different database schemas
+    if isinstance(promoter, dict):
+
+        promoter_name = (
+            promoter.get("full_name")
+            or promoter.get("name")
+            or promoter.get("promoter_name")
+            or ""
+        )
+
+    else:
+
+        try:
             promoter_name = (
                 promoter["full_name"]
             )
+        except (KeyError, IndexError):
+            try:
+                promoter_name = (
+                    promoter["name"]
+                )
+            except (KeyError, IndexError):
+                try:
+                    promoter_name = (
+                        promoter["promoter_name"]
+                    )
+                except (KeyError, IndexError):
+                    promoter_name = ""
 
-        else:
+else:
 
-            referral_code = ""
-            promoter_name = ""
+    referral_code = ""
+    promoter_name = ""
 
 
     # ======================================================
