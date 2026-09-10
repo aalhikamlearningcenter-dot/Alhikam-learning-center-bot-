@@ -1236,33 +1236,72 @@ def get_payment_by_tx_ref(
 
 def update_payment_status(
     tx_ref,
-    status
+    status,
+    transaction_id=None,
+    amount=None,
+    currency=None
 ):
 
     conn = get_connection()
 
     try:
 
-        cursor = conn.execute(
-            """
-            UPDATE payments
+        now = datetime.utcnow().isoformat()
 
-            SET
-                payment_status = ?,
-                updated_at = ?
+        # ----------------------------------------------------
+        # UPDATE PAYMENT WITH VERIFICATION DETAILS
+        # ----------------------------------------------------
 
-            WHERE tx_ref = ?
-            """,
-            (
-                status,
-                datetime.utcnow().isoformat(),
-                tx_ref
+        if transaction_id is not None or amount is not None or currency is not None:
+
+            conn.execute(
+                """
+                UPDATE payments
+
+                SET
+                    payment_status = ?,
+                    transaction_id =
+                        COALESCE(?, transaction_id),
+                    amount =
+                        COALESCE(?, amount),
+                    currency =
+                        COALESCE(?, currency),
+                    updated_at = ?
+
+                WHERE tx_ref = ?
+                """,
+                (
+                    status,
+                    transaction_id,
+                    amount,
+                    currency,
+                    now,
+                    tx_ref
+                )
             )
-        )
+
+        else:
+
+            conn.execute(
+                """
+                UPDATE payments
+
+                SET
+                    payment_status = ?,
+                    updated_at = ?
+
+                WHERE tx_ref = ?
+                """,
+                (
+                    status,
+                    now,
+                    tx_ref
+                )
+            )
 
         conn.commit()
 
-        return cursor.rowcount > 0
+        return True
 
     except Exception:
 
@@ -1273,6 +1312,9 @@ def update_payment_status(
     finally:
 
         conn.close()
+
+
+# ============================================================
 
 
 # ============================================================
