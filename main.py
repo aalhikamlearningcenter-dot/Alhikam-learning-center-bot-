@@ -1,2530 +1,1613 @@
-# ALHIKAM Learning Center Bot
-# Updated flow:
-# Flutterwave Payment -> Verified Payment -> Telegram Login -> Registration
-# -> Google Sheets -> Unique Telegram Invite -> Bot sends invite directly
+# ============================================================
+# ALHIKAM LEARNING CENTER V2
+# ============================================================
+#
+# Main Flask Application
+#
+# Flutterwave Payment
+# Secure Payment Verification
+# Telegram Login
+# Student Registration
+# Google Sheets
+# Referral / Commission
+# Promoter Dashboard
+# Withdrawal
+# Admin Referral Dashboard
+#
+# ============================================================
 
 import os
-import uuid
-import hmac
-import hashlib
-import json
-import asyncio
+import sys
+import time
 import threading
-import requests
+import subprocess
 import logging
-import secrets
-from datetime import datetime, timedelta, timezone
-from markupsafe import escape
-
-from decimal import Decimal, InvalidOperation
 
 from flask import (
-    Flask, request, jsonify, render_template_string, redirect, url_for, session
+    Flask,
+    request,
+    redirect,
+    url_for,
+    render_template_string,
+    jsonify,
+    session,
 )
-from telegram import (
-    Update,
-    ReplyKeyboardMarkup,
-    InlineKeyboardMarkup,
-    InlineKeyboardButton,
-)
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    MessageHandler,
-    ContextTypes,
-    filters,
-)
-from telegram.error import TelegramError
-
 
 # ============================================================
-# ALHIKAM DATABASE + SECURE REFERRAL SYSTEM
+# PROJECT IMPORTS
 # ============================================================
+
+from config import (
+    APP_URL,
+    BOT_TOKEN,
+    PAYMENT_PLANS,
+)
+
+from payment import (
+    PAYMENT_HTML,
+    create_flutterwave_payment,
+    verify_flutterwave_payment,
+)
+
+from registration import (
+    registration_page,
+)
 
 from database import (
     initialize_database,
-    get_promoter_by_id,
-    get_promoter_by_referral_code,
-    save_payment,
     get_payment_by_tx_ref,
+    save_payment,
     update_payment_status,
-    mark_payment_registration_completed,
-    payment_registration_completed,
-    commission_exists,
+    get_promoter_by_referral_code,
     create_commission,
-    add_student,
-    create_or_get_student,
-    get_student_by_tx_ref,
-    get_withdrawal_by_transfer_id,
-    get_withdrawal_by_transfer_reference,
-    process_transfer_result,
-)
-
-from transfer import (
-    get_flutterwave_transfer_status,
-    get_flutterwave_transfer_status_by_reference,
+    commission_exists,
 )
 
 from referral_dashboard import (
-    promoter_login_page,
-    promoter_logout as promoter_logout_page,
     referral_dashboard_by_code,
+    promoter_login_page,
+    promoter_logout_page,
     withdrawal_page,
     withdrawal_status_page,
 )
 
-try:
-    from admin_referral import (
-        admin_referral_page,
-        admin_login_page,
-        admin_logout_page,
-        create_promoter_page,
-        admin_withdrawal_status_page,
-    )
-    ADMIN_MODULE_AVAILABLE = True
-except ImportError:
-    ADMIN_MODULE_AVAILABLE = False
+from admin_referral import (
+    admin_logged_in,
+    admin_login_page,
+    admin_logout_page,
+    admin_referral_page,
+    create_promoter_page,
+    admin_withdrawal_status_page,
+)
 
 
-initialize_database()
+# ============================================================
+# LOGGING
+# ============================================================
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
 
 logger = logging.getLogger(__name__)
 
 
 # ============================================================
-# SETTINGS
-# ============================================================
-
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-FLW_SECRET_KEY = os.getenv("FLW_SECRET_KEY")
-FLUTTERWAVE_SECRET_HASH = os.getenv("FLUTTERWAVE_SECRET_HASH")
-
-SHEET_URL = os.getenv(
-    "SHEET_URL",
-    "https://script.google.com/macros/s/AKfycbw6LRBGCzMIHcWGEIKXAYXo9bMHxsO_am4a4iSZ4kR58FFA-bj4TcUNy085uTaVRx2z0A/exec",
-)
-
-RAILWAY_URL = os.getenv(
-    "RAILWAY_URL",
-    "https://precious-trust-production-956b.up.railway.app",
-).rstrip("/")
-
-PORT = int(os.getenv("PORT", "8080"))
-
-MAIN_GROUP_ID = -1004384506380
-PUBLIC_PAYMENT_PAGE = f"{RAILWAY_URL}/pay"
-
-# Telegram Login Widget bot username
-TELEGRAM_BOT_USERNAME = "Alhikamcenterbot"
-
-
-# ============================================================
-# PAYMENT PLANS
-# ============================================================
-
-PAYMENT_PLANS = {
-    "1": {"name": "1 Month", "amount": 3600},
-    "2": {"name": "2 Months", "amount": 6800},
-    "3": {"name": "3 Months", "amount": 10000},
-    "4": {"name": "4 Months", "amount": 13600},
-    "5": {"name": "5 Months", "amount": 16500},
-    "6": {"name": "6 Months", "amount": 20000},
-}
-
-
-# ============================================================
-# TEMPORARY STORAGE
-# NOTE: Railway restarts clear this memory. For production,
-# move pending payments to a persistent database.
-# ============================================================
-
-pending_payments = {}
-processed_payments = set()
-telegram_bot_app = None
-
-
-# ============================================================
-# FLASK
+# FLASK APP
 # ============================================================
 
 web_app = Flask(__name__)
 
-SECRET_KEY = os.getenv("SECRET_KEY")
-if not SECRET_KEY or len(SECRET_KEY) < 32:
-    raise RuntimeError("SECRET_KEY must be configured and at least 32 characters long.")
-
-web_app.secret_key = SECRET_KEY
-web_app.config.update(
-    SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE="Lax",
-    SESSION_COOKIE_SECURE=RAILWAY_URL.startswith("https://"),
-    PERMANENT_SESSION_LIFETIME=86400,
+web_app.secret_key = os.getenv(
+    "FLASK_SECRET_KEY",
+    os.getenv(
+        "SECRET_KEY",
+        "ALHIKAM_LEARNING_CENTER_CHANGE_THIS_SECRET_KEY",
+    ),
 )
 
 
+# ============================================================
+# DATABASE INITIALIZATION
+# ============================================================
+
+try:
+    initialize_database()
+    logger.info("Database initialized successfully.")
+except Exception as e:
+    logger.exception("Database initialization failed: %s", e)
+
+
+# ============================================================
+# PAYMENT SESSIONS
+# ============================================================
+#
+# This is only a temporary cache.
+# The database remains the main source of truth.
+#
+# ============================================================
+
+PAYMENT_SESSIONS = {}
+
+
+# ============================================================
+# COMMISSION MAP
+# ============================================================
+
+COMMISSION_BY_AMOUNT = {
+    3600: 200,
+    6800: 500,
+    10000: 800,
+    13600: 1200,
+    16500: 1800,
+    20000: 2500,
+}
+
+
+# ============================================================
+# HELPER FUNCTIONS
+# ============================================================
+
+def row_to_dict(row):
+    """
+    Safely convert sqlite3.Row / dict / object to dict.
+    """
+
+    if row is None:
+        return None
+
+    if isinstance(row, dict):
+        return dict(row)
+
+    try:
+        return dict(row)
+    except Exception:
+        pass
+
+    result = {}
+
+    try:
+        for key in row.keys():
+            result[key] = row[key]
+    except Exception:
+        pass
+
+    return result
+
+
+def get_value(data, key, default=None):
+    """
+    Safely get a value from dict/sqlite Row.
+    """
+
+    if data is None:
+        return default
+
+    try:
+        value = data[key]
+        return default if value is None else value
+    except Exception:
+        pass
+
+    try:
+        value = data.get(key, default)
+        return default if value is None else value
+    except Exception:
+        return default
+
+
+def normalize_amount(value):
+    """
+    Convert payment amount safely to integer.
+    """
+
+    try:
+        return int(round(float(value)))
+    except Exception:
+        return 0
+
+
+def get_plan_amount(plan):
+    """
+    Return the configured amount for a payment plan.
+    """
+
+    plan = str(plan)
+
+    if plan not in PAYMENT_PLANS:
+        return None
+
+    try:
+        return normalize_amount(PAYMENT_PLANS[plan][1])
+    except Exception:
+        return None
+
+
+def calculate_commission(amount):
+    """
+    Calculate promoter commission based on verified amount.
+    """
+
+    amount = normalize_amount(amount)
+
+    return COMMISSION_BY_AMOUNT.get(amount, 0)
+
+
+def safe_redirect(endpoint, **kwargs):
+    """
+    Redirect safely to a Flask endpoint.
+    """
+
+    try:
+        return redirect(url_for(endpoint, **kwargs))
+    except Exception as e:
+        logger.exception(
+            "Redirect failed for endpoint %s: %s",
+            endpoint,
+            e,
+        )
+
+        return redirect("/")
+
+
+# ============================================================
+# HOME
+# ============================================================
+
 @web_app.route("/", methods=["GET"])
 def home():
-    return jsonify({
-        "status": "online",
-        "bot": "ALHIKAM Learning Center Bot",
-        "payment_page": PUBLIC_PAYMENT_PAGE,
-        "webhook": f"{RAILWAY_URL}/webhook/flutterwave",
-        "telegram_login": f"{RAILWAY_URL}/telegram-auth",
-    })
-
-
-@web_app.route("/health", methods=["GET"])
-def health():
-    return jsonify({"status": "healthy"})
+    return redirect(url_for("payment_page"))
 
 
 # ============================================================
 # PAYMENT PAGE
 # ============================================================
 
-PAYMENT_PAGE_HTML = """
-<!DOCTYPE html>
-<html>
-<head>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ALHIKAM Learning Center Payment</title>
-<style>
-body{font-family:Arial,sans-serif;background:#f4f7f6;margin:0;padding:20px}
-.container{max-width:520px;margin:30px auto;background:white;padding:25px;border-radius:16px;box-shadow:0 4px 18px rgba(0,0,0,.10)}
-h1{color:#087f5b;text-align:center}
-.subtitle{text-align:center;color:#555;margin-bottom:25px}
-.plan{border:1px solid #ddd;border-radius:12px;padding:15px;margin:10px 0}
-.plan label{display:block;cursor:pointer}
-.amount{font-weight:bold;font-size:18px;color:#087f5b}
-button{width:100%;padding:15px;margin-top:20px;border:none;border-radius:10px;background:#087f5b;color:white;font-size:17px;font-weight:bold;cursor:pointer}
-.note{text-align:center;font-size:13px;color:#777;margin-top:18px}
-</style>
-</head>
-<body>
-<div class="container">
-<h1>🎓 ALHIKAM Learning Center</h1>
-<div class="subtitle">Choose your learning duration and continue to secure payment.</div>
-
-<form method="POST" action="/create-payment">
-<input type="hidden" name="referral_code" value="{{ referral_code }}">
-{% for key, plan in plans.items() %}
-<div class="plan">
-<label>
-<input type="radio" name="plan" value="{{ key }}" required>
-<strong>{{ plan.name }}</strong><br>
-<span class="amount">₦{{ "{:,}".format(plan.amount) }}</span>
-</label>
-</div>
-{% endfor %}
-
-<button type="submit">💳 CONTINUE TO SECURE PAYMENT</button>
-</form>
-
-<div class="note">
-After successful payment, you will connect your Telegram account and complete registration.
-</div>
-</div>
-</body>
-</html>
-"""
-
-
-@web_app.route("/pay", methods=["GET"])
+@web_app.route("/payment", methods=["GET"])
 def payment_page():
-    referral_code = (request.args.get("ref", "") or "").strip()
-    if referral_code and not get_promoter_by_referral_code(referral_code):
-        referral_code = ""
-    return render_template_string(
-        PAYMENT_PAGE_HTML,
-        plans=PAYMENT_PLANS,
-        referral_code=referral_code,
-    )
+    """
+    Main payment page.
+
+    Supports:
+        /payment
+        /payment?ref=ABC123
+        /payment?telegram_id=...
+    """
+
+    referral_code = (
+        request.args.get("ref")
+        or request.args.get("referral_code")
+        or ""
+    ).strip()
+
+    telegram_id = (
+        request.args.get("telegram_id")
+        or ""
+    ).strip()
+
+    telegram_name = (
+        request.args.get("telegram_name")
+        or ""
+    ).strip()
+
+    telegram_username = (
+        request.args.get("telegram_username")
+        or ""
+    ).strip()
+
+    # --------------------------------------------------------
+    # Validate referral if supplied
+    # --------------------------------------------------------
+
+    if referral_code:
+
+        promoter = get_promoter_by_referral_code(
+            referral_code
+        )
+
+        if promoter is None:
+            referral_code = ""
+
+    # --------------------------------------------------------
+    # Render payment page
+    # --------------------------------------------------------
+
+    try:
+        return render_template_string(
+            PAYMENT_HTML,
+            referral_code=referral_code,
+            telegram_id=telegram_id,
+            telegram_name=telegram_name,
+            telegram_username=telegram_username,
+        )
+
+    except TypeError:
+        # Compatibility fallback if PAYMENT_HTML does not
+        # expect template variables.
+        return render_template_string(
+            PAYMENT_HTML
+        )
 
 
 # ============================================================
-# CREATE FLUTTERWAVE PAYMENT
+# /pay
+# ============================================================
+#
+# Admin/referral dashboard creates links like:
+#
+# https://your-app/pay
+# https://your-app/pay?ref=ABC123
+#
+# Keep /payment as the main route and /pay as an alias.
+#
+# ============================================================
+
+@web_app.route("/pay", methods=["GET"])
+def pay():
+    return payment_page()
+
+
+# ============================================================
+# CREATE PAYMENT
 # ============================================================
 
 @web_app.route("/create-payment", methods=["POST"])
 def create_payment():
-    if not FLW_SECRET_KEY:
-        return "Payment system is temporarily unavailable.", 500
+    """
+    Create Flutterwave payment.
 
-    plan_number = (request.form.get("plan") or "").strip()
-    plan = PAYMENT_PLANS.get(plan_number)
-    if not plan:
-        return "Invalid payment plan.", 400
-
-    referral_code = (request.form.get("referral_code") or "").strip()
-    promoter = None
-    if referral_code:
-        promoter = get_promoter_by_referral_code(referral_code)
-        if not promoter:
-            referral_code = ""
-
-    payment_token = uuid.uuid4().hex
-    tx_ref = f"ALHIKAM_{payment_token}"
-
-    payment = {
-        "tx_ref": tx_ref,
-        "plan": plan_number,
-        "plan_name": plan["name"],
-        "amount": plan["amount"],
-        "status": "pending",
-        "payment_status": "Pending",
-        "referral_code": referral_code,
-        "promoter_id": promoter["id"] if promoter else None,
-        "promoter_name": promoter["full_name"] if promoter else "",
-        "commission": 0,
-        "registration_completed": 0,
-    }
-
-    pending_payments[payment_token] = payment.copy()
-    save_payment(payment)
-
-    payload = {
-        "tx_ref": tx_ref,
-        "amount": plan["amount"],
-        "currency": "NGN",
-        "redirect_url": f"{RAILWAY_URL}/payment-complete/{payment_token}",
-        "customer": {
-            "email": f"student_{payment_token}@alhikam.com",
-            "name": "ALHIKAM Student",
-        },
-        "customizations": {
-            "title": "ALHIKAM Learning Center",
-            "description": f"{plan['name']} Training",
-            "logo": "",
-        },
-    }
-
-    headers = {
-        "Authorization": f"Bearer {FLW_SECRET_KEY}",
-        "Content-Type": "application/json",
-    }
+    Important:
+    We store the payment in our database BEFORE redirecting
+    the student to Flutterwave.
+    """
 
     try:
-        response = requests.post(
-            "https://api.flutterwave.com/v3/payments",
-            json=payload,
-            headers=headers,
-            timeout=30,
+
+        # ----------------------------------------------------
+        # Get submitted data
+        # ----------------------------------------------------
+
+        telegram_id = (
+            request.form.get("telegram_id")
+            or ""
+        ).strip()
+
+        telegram_name = (
+            request.form.get("telegram_name")
+            or ""
+        ).strip()
+
+        telegram_username = (
+            request.form.get("telegram_username")
+            or ""
+        ).strip()
+
+        payment_plan = (
+            request.form.get("payment_plan")
+            or request.form.get("plan")
+            or ""
+        ).strip()
+
+        referral_code = (
+            request.form.get("referral_code")
+            or request.form.get("ref")
+            or ""
+        ).strip()
+
+        # ----------------------------------------------------
+        # Validate plan
+        # ----------------------------------------------------
+
+        if payment_plan not in PAYMENT_PLANS:
+            return (
+                "Invalid payment plan.",
+                400,
+            )
+
+        plan_amount = get_plan_amount(payment_plan)
+
+        if not plan_amount:
+            return (
+                "Invalid payment amount.",
+                400,
+            )
+
+        # ----------------------------------------------------
+        # Validate referral
+        # ----------------------------------------------------
+
+        promoter_id = None
+
+        if referral_code:
+
+            promoter = get_promoter_by_referral_code(
+                referral_code
+            )
+
+            if promoter is None:
+                return (
+                    "Invalid or inactive referral code.",
+                    400,
+                )
+
+            promoter_dict = row_to_dict(promoter)
+
+            promoter_id = get_value(
+                promoter_dict,
+                "id",
+            )
+
+        # ----------------------------------------------------
+        # Create Flutterwave payment
+        # ----------------------------------------------------
+
+        payment = create_flutterwave_payment(
+            payment_plan=payment_plan,
+            telegram_id=telegram_id,
+            telegram_name=telegram_name,
+            telegram_username=telegram_username,
+            referral_code=referral_code,
         )
-        result = response.json()
-        logger.info("Flutterwave checkout status=%s", response.status_code)
 
-        if response.status_code == 200 and result.get("status") == "success":
-            payment_link = result.get("data", {}).get("link")
-            if payment_link:
-                return redirect(payment_link)
+        if not payment:
+            return (
+                "Unable to create payment. Please try again.",
+                500,
+            )
 
-        return "Unable to create payment link. Please try again.", 500
+        # ----------------------------------------------------
+        # Extract payment information
+        # ----------------------------------------------------
 
-    except requests.RequestException:
-        logger.exception("Flutterwave payment request failed")
-        return "Payment system error. Please try again later.", 500
-    except Exception:
-        logger.exception("Flutterwave payment creation failed")
-        return "Payment system error. Please try again later.", 500
+        tx_ref = str(
+            payment.get("tx_ref")
+            or ""
+        ).strip()
 
+        amount = normalize_amount(
+            payment.get("amount")
+        )
 
-# ============================================================
-# PAYMENT HELPERS
-# ============================================================
+        payment_link = (
+            payment.get("payment_link")
+            or ""
+        )
 
-def _payment_from_token(payment_token):
-    if not payment_token:
-        return None
+        if not tx_ref or not payment_link:
+            logger.error(
+                "Flutterwave payment response missing tx_ref/payment_link."
+            )
 
-    tx_ref = f"ALHIKAM_{payment_token}"
-    row = get_payment_by_tx_ref(tx_ref)
-    if row:
-        data = dict(row)
-        data["plan_name"] = data.get("payment_plan") or data.get("plan_name") or ""
-        data["amount"] = float(data.get("amount") or 0)
-        data["status"] = str(data.get("payment_status") or "").lower()
-        if data["status"] in {"successful", "success", "completed"}:
-            data["status"] = "successful"
-        data["registration_completed"] = int(data.get("registration_completed") or 0)
-        # Rebuild Telegram auth state from persistent DB fields after a restart.
-        if data.get("telegram_id"):
-            data["telegram_auth"] = {
-                "telegram_id": str(data.get("telegram_id")),
-                "telegram_username": data.get("telegram_username") or "",
-                "first_name": (data.get("telegram_name") or "").split(" ")[0],
-                "last_name": " ".join((data.get("telegram_name") or "").split(" ")[1:]),
-            }
-        return data
+            return (
+                "Payment initialization failed.",
+                500,
+            )
 
-    return pending_payments.get(payment_token)
+        # ----------------------------------------------------
+        # Verify amount against our own plan
+        # ----------------------------------------------------
 
+        if amount != plan_amount:
 
-def _commission_for_amount(amount):
-    try:
-        amount = int(Decimal(str(amount)))
-    except Exception:
-        return 0
+            logger.error(
+                "Amount mismatch while creating payment. "
+                "Plan=%s Expected=%s Received=%s",
+                payment_plan,
+                plan_amount,
+                amount,
+            )
 
-    return {
-        3600: 200,
-        6800: 500,
-        10000: 800,
-        13600: 1200,
-        16500: 1800,
-        20000: 2500,
-    }.get(amount, 0)
+            return (
+                "Payment amount validation failed.",
+                400,
+            )
 
+        # ----------------------------------------------------
+        # Save pending payment
+        # ----------------------------------------------------
 
-# ============================================================
-# FIND FLUTTERWAVE TRANSACTION BY TX_REF
-# ============================================================
-
-def find_flutterwave_transaction_by_tx_ref(tx_ref):
-    """
-    Find the exact Flutterwave transaction for our merchant reference.
-
-    Flutterwave Standard normally returns transaction_id on the redirect.
-    If the browser does not return it, we use the transactions endpoint and
-    match the exact tx_ref. We deliberately do not trust the lookup result
-    until the transaction is verified again with /{id}/verify.
-    """
-    if not FLW_SECRET_KEY:
-        logger.error("FLW_SECRET_KEY is missing.")
-        return None
-
-    tx_ref = str(tx_ref or "").strip()
-    if not tx_ref:
-        return None
-
-    try:
-        today = datetime.now(timezone.utc).date()
-        from_date = (today - timedelta(days=7)).isoformat()
-        to_date = (today + timedelta(days=1)).isoformat()
-
-        headers = {
-            "Authorization": f"Bearer {FLW_SECRET_KEY}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
+        payment_data = {
+            "tx_ref": tx_ref,
+            "transaction_id": None,
+            "payment_plan": payment_plan,
+            "amount": amount,
+            "status": "pending",
+            "referral_code": referral_code,
+            "promoter_id": promoter_id,
+            "commission": calculate_commission(amount),
+            "telegram_username": telegram_username,
+            "telegram_id": telegram_id,
+            "registration_completed": 0,
         }
 
-        # First try the documented exact tx_ref filter.
-        response = requests.get(
-            "https://api.flutterwave.com/v3/transactions",
-            headers=headers,
-            params={
-                "from": from_date,
-                "to": to_date,
-                "page": 1,
-                "tx_ref": tx_ref,
-                "currency": "NGN",
-            },
-            timeout=30,
-        )
+        save_payment(payment_data)
+
+        # ----------------------------------------------------
+        # Temporary session cache
+        # ----------------------------------------------------
+
+        PAYMENT_SESSIONS[tx_ref] = {
+            **payment_data,
+            "payment_status": "pending",
+        }
 
         logger.info(
-            "Flutterwave tx_ref lookup status=%s tx_ref=%s",
-            response.status_code,
+            "Payment created: tx_ref=%s amount=%s plan=%s",
             tx_ref,
+            amount,
+            payment_plan,
         )
 
-        if response.status_code == 200:
-            result = response.json() or {}
-            data = result.get("data")
-            if isinstance(data, list):
-                for transaction in data:
-                    if str(transaction.get("tx_ref") or "").strip() == tx_ref:
-                        return transaction
+        # ----------------------------------------------------
+        # Redirect to Flutterwave checkout
+        # ----------------------------------------------------
 
-        # Fallback: some account/API responses may not honor tx_ref as a
-        # server-side filter. Fetch recent pages and match exactly.
-        for page in range(1, 6):
-            response = requests.get(
-                "https://api.flutterwave.com/v3/transactions",
-                headers=headers,
-                params={
-                    "from": from_date,
-                    "to": to_date,
-                    "page": page,
-                    "currency": "NGN",
-                },
-                timeout=30,
-            )
+        return redirect(payment_link)
 
-            if response.status_code != 200:
-                logger.error(
-                    "Flutterwave recent transaction lookup failed "
-                    "status=%s body=%s",
-                    response.status_code,
-                    response.text[:1000],
-                )
-                break
+    except Exception as e:
 
-            result = response.json() or {}
-            data = result.get("data")
-            if not isinstance(data, list) or not data:
-                break
-
-            for transaction in data:
-                if str(transaction.get("tx_ref") or "").strip() == tx_ref:
-                    logger.info(
-                        "Flutterwave transaction found by fallback "
-                        "tx_ref=%s transaction_id=%s",
-                        tx_ref,
-                        transaction.get("id"),
-                    )
-                    return transaction
-
-        logger.warning(
-            "No Flutterwave transaction found for tx_ref=%s",
-            tx_ref,
-        )
-        return None
-
-    except Exception:
         logger.exception(
-            "Error finding Flutterwave transaction by tx_ref=%s",
-            tx_ref,
-        )
-        return None
-
-
-# ============================================================
-# PAYMENT VERIFICATION + FINALIZATION
-# ============================================================
-
-def _verify_and_finalize_payment(
-    payment_token,
-    transaction_id=None,
-):
-    payment = _payment_from_token(payment_token)
-
-    if not payment:
-        return None
-
-    current_status = str(
-        payment.get("status") or ""
-    ).strip().lower()
-
-    if current_status == "successful":
-        return payment
-
-    expected_tx_ref = str(
-        payment.get("tx_ref") or ""
-    ).strip()
-
-    if not expected_tx_ref:
-        logger.error(
-            "Payment has no tx_ref. token=%s",
-            payment_token,
-        )
-        return payment
-
-    # --------------------------------------------------------
-    # STEP 1: Use transaction ID supplied by Flutterwave
-    # --------------------------------------------------------
-
-    transaction_id = str(
-        transaction_id or ""
-    ).strip()
-
-    # --------------------------------------------------------
-    # STEP 2: If no transaction ID was supplied, find it
-    #         using the exact merchant tx_ref
-    # --------------------------------------------------------
-
-    if not transaction_id:
-        logger.info(
-            "No transaction_id in redirect. "
-            "Searching Flutterwave using tx_ref=%s",
-            expected_tx_ref,
-        )
-
-        found_transaction = (
-            find_flutterwave_transaction_by_tx_ref(
-                expected_tx_ref
-            )
-        )
-
-        if found_transaction:
-            transaction_id = str(
-                found_transaction.get("id") or ""
-            ).strip()
-
-        if not transaction_id:
-            logger.warning(
-                "Flutterwave transaction still not found "
-                "for tx_ref=%s",
-                expected_tx_ref,
-            )
-            return payment
-
-    # --------------------------------------------------------
-    # STEP 3: Verify transaction directly with Flutterwave
-    # --------------------------------------------------------
-
-    verified = verify_flutterwave_transaction(
-        transaction_id
-    )
-
-    if not verified:
-        logger.warning(
-            "Flutterwave verification unavailable "
-            "tx_ref=%s transaction_id=%s",
-            expected_tx_ref,
-            transaction_id,
-        )
-        return payment
-
-    verified_status = str(
-        verified.get("status") or ""
-    ).strip().lower()
-
-    verified_tx_ref = str(
-        verified.get("tx_ref") or ""
-    ).strip()
-
-    verified_currency = str(
-        verified.get("currency") or ""
-    ).strip().upper()
-
-    # --------------------------------------------------------
-    # STEP 4: Successful status
-    # --------------------------------------------------------
-
-    if verified_status != "successful":
-        logger.warning(
-            "Flutterwave transaction is not successful "
-            "tx_ref=%s status=%s",
-            verified_tx_ref,
-            verified_status,
-        )
-        return payment
-
-    # --------------------------------------------------------
-    # STEP 5: TX_REF security check
-    # --------------------------------------------------------
-
-    if verified_tx_ref != expected_tx_ref:
-        logger.error(
-            "TX_REF mismatch expected=%s received=%s",
-            expected_tx_ref,
-            verified_tx_ref,
-        )
-        return payment
-
-    # --------------------------------------------------------
-    # STEP 6: Currency security check
-    # --------------------------------------------------------
-
-    if verified_currency != "NGN":
-        logger.error(
-            "Currency mismatch tx_ref=%s currency=%s",
-            verified_tx_ref,
-            verified_currency,
-        )
-        return payment
-
-    # --------------------------------------------------------
-    # STEP 7: Amount security check
-    # --------------------------------------------------------
-
-    try:
-        verified_amount = Decimal(
-            str(verified.get("amount"))
-        )
-
-        expected_amount = Decimal(
-            str(payment.get("amount"))
-        )
-
-    except (InvalidOperation, TypeError, ValueError):
-        logger.exception(
-            "Unable to validate payment amount tx_ref=%s",
-            verified_tx_ref,
-        )
-        return payment
-
-    if verified_amount != expected_amount:
-        logger.error(
-            "Amount mismatch tx_ref=%s expected=%s received=%s",
-            verified_tx_ref,
-            expected_amount,
-            verified_amount,
-        )
-        return payment
-
-    # --------------------------------------------------------
-    # STEP 8: Make sure this is our ALHIKAM transaction
-    # --------------------------------------------------------
-
-    if not verified_tx_ref.startswith("ALHIKAM_"):
-        logger.error(
-            "Invalid ALHIKAM transaction reference: %s",
-            verified_tx_ref,
-        )
-        return payment
-
-    # --------------------------------------------------------
-    # STEP 9: Validate promoter
-    # --------------------------------------------------------
-
-    promoter_id = payment.get("promoter_id")
-
-    referral_code = str(
-        payment.get("referral_code") or ""
-    ).strip().upper()
-
-    promoter = None
-
-    if promoter_id:
-        try:
-            promoter = get_promoter_by_id(
-                promoter_id
-            )
-        except Exception:
-            logger.exception(
-                "Could not load promoter id=%s",
-                promoter_id,
-            )
-            promoter = None
-
-    if promoter:
-        promoter_status = str(
-            promoter["status"] or ""
-        ).strip().lower()
-
-        promoter_referral_code = str(
-            promoter["referral_code"] or ""
-        ).strip().upper()
-
-        if promoter_status != "active":
-            logger.warning(
-                "Promoter is not active. promoter_id=%s",
-                promoter_id,
-            )
-            promoter = None
-
-        elif (
-            referral_code
-            and promoter_referral_code != referral_code
-        ):
-            logger.error(
-                "Promoter referral mismatch "
-                "payment=%s promoter=%s",
-                referral_code,
-                promoter_referral_code,
-            )
-            promoter = None
-
-    # --------------------------------------------------------
-    # STEP 10: Calculate commission
-    # --------------------------------------------------------
-
-    commission_amount = 0
-
-    if promoter:
-        commission_amount = _commission_for_amount(
-            verified_amount
-        )
-
-    # --------------------------------------------------------
-    # STEP 11: Update payment status
-    # --------------------------------------------------------
-
-    try:
-        update_payment_status(
-            verified_tx_ref,
-            "Successful",
-            transaction_id=transaction_id,
-        )
-    except Exception:
-        logger.exception(
-            "Failed to update payment status tx_ref=%s",
-            verified_tx_ref,
-        )
-        return payment
-
-    # --------------------------------------------------------
-    # STEP 12: Save verified payment
-    # --------------------------------------------------------
-
-    try:
-        save_payment(
-            {
-                "tx_ref": verified_tx_ref,
-                "transaction_id": transaction_id,
-                "payment_plan": (
-                    payment.get("plan_name")
-                    or payment.get("payment_plan", "")
-                ),
-                "amount": float(verified_amount),
-                "payment_status": "Successful",
-                "referral_code": (
-                    referral_code
-                    if promoter
-                    else ""
-                ),
-                "promoter_id": (
-                    promoter["id"]
-                    if promoter
-                    else None
-                ),
-                "promoter_name": (
-                    promoter["full_name"]
-                    if promoter
-                    else ""
-                ),
-                "commission": commission_amount,
-                "telegram_id": payment.get(
-                    "telegram_id",
-                    "",
-                ),
-                "telegram_username": payment.get(
-                    "telegram_username",
-                    "",
-                ),
-                "telegram_name": payment.get(
-                    "telegram_name",
-                    "",
-                ),
-                "registration_completed": payment.get(
-                    "registration_completed",
-                    0,
-                ),
-            }
-        )
-    except Exception:
-        logger.exception(
-            "Failed to save verified payment tx_ref=%s",
-            verified_tx_ref,
-        )
-        return payment
-
-    # --------------------------------------------------------
-    # STEP 13: Update temporary payment cache
-    # --------------------------------------------------------
-
-    pending_payments[payment_token] = {
-        **pending_payments.get(
-            payment_token,
-            {},
-        ),
-        **payment,
-        "status": "successful",
-        "payment_status": "Successful",
-        "transaction_id": transaction_id,
-        "promoter_id": (
-            promoter["id"]
-            if promoter
-            else None
-        ),
-        "promoter_name": (
-            promoter["full_name"]
-            if promoter
-            else ""
-        ),
-        "commission": commission_amount,
-    }
-
-    # --------------------------------------------------------
-    # STEP 14: Create commission only once
-    # --------------------------------------------------------
-
-    if (
-        promoter
-        and commission_amount > 0
-        and not commission_exists(
-            verified_tx_ref
-        )
-    ):
-        try:
-            create_commission(
-                promoter_id=promoter["id"],
-                student_id=None,
-                tx_ref=verified_tx_ref,
-                payment_amount=verified_amount,
-                commission_amount=commission_amount,
-            )
-
-            logger.info(
-                "Commission created "
-                "tx_ref=%s promoter=%s amount=%s",
-                verified_tx_ref,
-                promoter["id"],
-                commission_amount,
-            )
-
-        except Exception:
-            logger.exception(
-                "Commission creation failed tx_ref=%s",
-                verified_tx_ref,
-            )
-
-    logger.info(
-        "ALHIKAM PAYMENT VERIFIED SUCCESSFULLY "
-        "tx_ref=%s transaction_id=%s",
-        verified_tx_ref,
-        transaction_id,
-    )
-
-    return _payment_from_token(
-        payment_token
-    )
-
-
-# ============================================================
-# PAYMENT RETURN PAGE
-# ============================================================
-
-@web_app.route(
-    "/payment-complete/<payment_token>",
-    methods=["GET"],
-)
-def payment_complete(payment_token):
-    payment = _payment_from_token(
-        payment_token
-    )
-
-    if not payment:
-        return (
-            """
-            <!DOCTYPE html>
-            <html>
-            <head>
-            <meta name="viewport"
-                  content="width=device-width, initial-scale=1">
-            <title>Payment Not Found</title>
-            </head>
-            <body style="
-                font-family:Arial;
-                text-align:center;
-                padding:50px 20px;
-            ">
-            <h2>❌ Payment Reference Not Found</h2>
-            <p>
-            We could not find this payment reference.
-            </p>
-            <p>
-            Please contact ALHIKAM Learning Center
-            support if money was deducted.
-            </p>
-            </body>
-            </html>
-            """,
-            404,
-        )
-
-    transaction_id = (
-        request.args.get("transaction_id")
-        or request.args.get("id")
-        or ""
-    ).strip()
-
-    flutterwave_status = str(
-        request.args.get("status")
-        or ""
-    ).strip().lower()
-
-    returned_tx_ref = str(
-        request.args.get("tx_ref")
-        or ""
-    ).strip()
-
-    expected_tx_ref = str(
-        payment.get("tx_ref")
-        or ""
-    ).strip()
-
-    # --------------------------------------------------------
-    # SECURITY: redirect tx_ref must match our payment
-    # --------------------------------------------------------
-
-    if (
-        returned_tx_ref
-        and returned_tx_ref != expected_tx_ref
-    ):
-        logger.error(
-            "Flutterwave redirect tx_ref mismatch "
-            "expected=%s received=%s",
-            expected_tx_ref,
-            returned_tx_ref,
+            "CREATE PAYMENT ERROR: %s",
+            e,
         )
 
         return (
-            """
-            <!DOCTYPE html>
-            <html>
-            <head>
-            <meta name="viewport"
-                  content="width=device-width, initial-scale=1">
-            <title>Payment Verification Error</title>
-            </head>
-            <body style="
-                font-family:Arial;
-                text-align:center;
-                padding:50px 20px;
-            ">
-            <h2>❌ Payment Verification Error</h2>
-            <p>
-            The payment reference could not be verified.
-            </p>
-            <p>
-            Please contact ALHIKAM Learning Center.
-            </p>
-            </body>
-            </html>
-            """,
-            400,
-        )
-
-    # --------------------------------------------------------
-    # ALWAYS TRY SERVER-SIDE VERIFICATION
-    #
-    # If transaction_id exists:
-    #     verify directly.
-    #
-    # If transaction_id is missing:
-    #     find it by tx_ref first.
-    # --------------------------------------------------------
-
-    if str(
-        payment.get("status") or ""
-    ).lower() != "successful":
-        payment = _verify_and_finalize_payment(
-            payment_token,
-            transaction_id,
-        )
-
-    # --------------------------------------------------------
-    # SUCCESS
-    # --------------------------------------------------------
-
-    if (
-        payment
-        and str(
-            payment.get("status") or ""
-        ).lower()
-        == "successful"
-    ):
-        logger.info(
-            "Payment verified successfully. "
-            "Opening Telegram login. token=%s",
-            payment_token,
-        )
-
-        return redirect(
-            f"/register/{payment_token}"
-        )
-
-    # --------------------------------------------------------
-    # FAILED / CANCELLED
-    # --------------------------------------------------------
-
-    if flutterwave_status in {
-        "cancelled",
-        "canceled",
-        "failed",
-    }:
-        return (
-            """
-            <!DOCTYPE html>
-            <html>
-            <head>
-            <meta name="viewport"
-                  content="width=device-width, initial-scale=1">
-            <title>Payment Not Completed</title>
-            </head>
-            <body style="
-                font-family:Arial;
-                text-align:center;
-                padding:50px 20px;
-            ">
-            <h2>❌ Payment Not Completed</h2>
-            <p>
-            Your payment was cancelled or failed.
-            </p>
-            <p>
-            If money was deducted, please wait for
-            Flutterwave to process the transaction.
-            </p>
-            <br>
-            <a href="/pay">
-            🔄 Try Payment Again
-            </a>
-            </body>
-            </html>
-            """
-        )
-
-    # --------------------------------------------------------
-    # STILL PROCESSING
-    # --------------------------------------------------------
-
-    return f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-    <meta name="viewport"
-          content="width=device-width, initial-scale=1">
-    <meta http-equiv="refresh" content="5">
-    <title>Payment Verification</title>
-
-    <style>
-    body{{
-        font-family:Arial,sans-serif;
-        background:#f4f7f6;
-        margin:0;
-        padding:30px 20px;
-        text-align:center;
-    }}
-
-    .container{{
-        max-width:520px;
-        margin:30px auto;
-        background:white;
-        padding:30px;
-        border-radius:16px;
-        box-shadow:
-            0 4px 18px rgba(0,0,0,.10);
-    }}
-
-    h2{{
-        color:#087f5b;
-    }}
-
-    .loader{{
-        font-size:42px;
-        margin:15px;
-    }}
-
-    .refresh{{
-        display:inline-block;
-        margin-top:15px;
-        padding:12px 20px;
-        background:#087f5b;
-        color:white;
-        text-decoration:none;
-        border-radius:8px;
-    }}
-    </style>
-    </head>
-
-    <body>
-    <div class="container">
-
-    <div class="loader">⏳</div>
-
-    <h2>
-    Payment Verification
-    </h2>
-
-    <p>
-    Your payment is being verified securely
-    with Flutterwave.
-    </p>
-
-    <p>
-    Please wait a moment.
-    </p>
-
-    <p>
-    This page will automatically refresh.
-    </p>
-
-    <a
-        class="refresh"
-        href="/payment-complete/{payment_token}"
-    >
-    🔄 Refresh Now
-    </a>
-
-    </div>
-    </body>
-    </html>
-    """
-
-
-# ============================================================
-# TELEGRAM LOGIN PAGE
-# ============================================================
-
-TELEGRAM_LOGIN_HTML = """
-<!DOCTYPE html>
-<html>
-<head>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Connect Telegram</title>
-
-<style>
-body{
-    font-family:Arial,sans-serif;
-    background:#f4f7f6;
-    padding:20px;
-}
-.container{
-    max-width:520px;
-    margin:30px auto;
-    background:white;
-    padding:25px;
-    border-radius:16px;
-    box-shadow:0 4px 18px rgba(0,0,0,.10);
-    text-align:center;
-}
-h1{color:#087f5b}
-.info{
-    background:#eef8f4;
-    padding:15px;
-    border-radius:10px;
-    margin:20px 0;
-    text-align:left;
-}
-</style>
-
-<script async src="https://telegram.org/js/telegram-widget.js?22"
-        data-telegram-login="{{ bot_username }}"
-        data-size="large"
-        data-userpic="false"
-        data-request-access="write"
-        data-onauth="onTelegramAuth(user)">
-</script>
-
-<script>
-function onTelegramAuth(user) {
-    const form = document.createElement("form");
-    form.method = "POST";
-    form.action = "/telegram-auth";
-
-    const data = {
-        payment_token: "{{ payment_token }}",
-        id: user.id,
-        first_name: user.first_name || "",
-        last_name: user.last_name || "",
-        username: user.username || "",
-        photo_url: user.photo_url || "",
-        auth_date: user.auth_date,
-        hash: user.hash
-    };
-
-    for (const key in data) {
-        const input = document.createElement("input");
-        input.type = "hidden";
-        input.name = key;
-        input.value = data[key];
-        form.appendChild(input);
-    }
-
-    document.body.appendChild(form);
-    form.submit();
-}
-</script>
-
-</head>
-
-<body>
-<div class="container">
-
-<h1>🔗 Connect Your Telegram</h1>
-
-<div class="info">
-<strong>Payment Confirmed ✅</strong><br><br>
-Plan: {{ plan_name }}<br>
-Amount: ₦{{ "{:,}".format(amount) }}
-</div>
-
-<p>
-To continue registration, connect the Telegram account you will use to receive your ALHIKAM class invite.
-</p>
-
-<p>
-<strong>⚠️ Do not enter your Telegram ID manually.</strong>
-</p>
-
-<p>
-Click the Telegram button below to connect your account.
-</p>
-
-</div>
-</body>
-</html>
-"""
-
-
-@web_app.route("/register/<payment_token>", methods=["GET"])
-def register_student(payment_token):
-    payment = _payment_from_token(payment_token)
-
-    if not payment:
-        return "Payment reference not found.", 404
-
-    if payment.get("status") != "successful":
-        return "Payment has not yet been verified.", 400
-
-    if payment.get("registration_completed"):
-        return """
-        <h2>Registration Already Completed</h2>
-        <p>Your Telegram class access has already been processed.</p>
-        """
-
-    if payment.get("telegram_auth"):
-        return redirect(f"/registration-form/{payment_token}")
-
-    return render_template_string(
-        TELEGRAM_LOGIN_HTML,
-        bot_username=TELEGRAM_BOT_USERNAME,
-        payment_token=payment_token,
-        plan_name=payment["plan_name"],
-        amount=payment["amount"],
-    )
-
-
-# ============================================================
-# TELEGRAM LOGIN VERIFICATION
-# ============================================================
-
-def verify_telegram_login(data):
-    if not BOT_TOKEN:
-        return False
-
-    received_hash = data.get("hash", "")
-    auth_date = str(data.get("auth_date", ""))
-    telegram_id = str(data.get("id", ""))
-
-    if not received_hash or not auth_date or not telegram_id:
-        return False
-
-    # Prevent very old authentication data
-    try:
-        if abs(int(__import__("time").time()) - int(auth_date)) > 3600:
-            return False
-    except Exception:
-        return False
-
-    check_data = {
-        "id": telegram_id,
-        "first_name": data.get("first_name", ""),
-        "last_name": data.get("last_name", ""),
-        "username": data.get("username", ""),
-        "photo_url": data.get("photo_url", ""),
-        "auth_date": auth_date,
-    }
-
-    # Telegram requires only fields actually received.
-    pairs = []
-    for key, value in check_data.items():
-        if value not in (None, ""):
-            pairs.append(f"{key}={value}")
-
-    data_check_string = "\n".join(sorted(pairs))
-
-    secret_key = hashlib.sha256(BOT_TOKEN.encode()).digest()
-
-    calculated_hash = hmac.new(
-        secret_key,
-        data_check_string.encode(),
-        hashlib.sha256,
-    ).hexdigest()
-
-    return hmac.compare_digest(
-        calculated_hash,
-        received_hash,
-    )
-
-
-@web_app.route("/telegram-auth", methods=["POST"])
-def telegram_auth():
-    payment_token = request.form.get("payment_token", "")
-    payment = _payment_from_token(payment_token)
-
-    if not payment:
-        return "Payment reference not found.", 404
-
-    if payment.get("status") != "successful":
-        return "Payment has not been verified.", 400
-
-    data = {
-        "id": request.form.get("id", ""),
-        "first_name": request.form.get("first_name", ""),
-        "last_name": request.form.get("last_name", ""),
-        "username": request.form.get("username", ""),
-        "photo_url": request.form.get("photo_url", ""),
-        "auth_date": request.form.get("auth_date", ""),
-        "hash": request.form.get("hash", ""),
-    }
-
-    if not verify_telegram_login(data):
-        return """
-        <h2>Telegram Verification Failed ❌</h2>
-        <p>Please go back and connect Telegram again.</p>
-        """, 401
-
-    payment["telegram_auth"] = {
-        "telegram_id": data["id"],
-        "telegram_username": data["username"],
-        "first_name": data["first_name"],
-        "last_name": data["last_name"],
-    }
-
-    save_payment({
-        "tx_ref": payment["tx_ref"],
-        "transaction_id": payment.get("transaction_id", ""),
-        "payment_plan": payment.get("plan_name", ""),
-        "amount": payment.get("amount", 0),
-        "payment_status": "Successful",
-        "referral_code": payment.get("referral_code", ""),
-        "promoter_id": payment.get("promoter_id"),
-        "promoter_name": payment.get("promoter_name", ""),
-        "commission": payment.get("commission", 0),
-        "telegram_id": data["id"],
-        "telegram_username": data["username"],
-        "telegram_name": f"{data['first_name']} {data['last_name']}".strip(),
-        "registration_completed": payment.get("registration_completed", 0),
-    })
-
-    return redirect(
-        f"/registration-form/{payment_token}"
-    )
-
-
-# ============================================================
-# REGISTRATION FORM
-# ============================================================
-
-REGISTRATION_HTML = """
-<!DOCTYPE html>
-<html>
-<head>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ALHIKAM Student Registration</title>
-
-<style>
-body{font-family:Arial;background:#f4f7f6;padding:20px}
-.container{max-width:520px;margin:30px auto;background:white;padding:25px;border-radius:16px;box-shadow:0 4px 18px rgba(0,0,0,.10)}
-h1{color:#087f5b;text-align:center}
-input,select{width:100%;padding:13px;margin:8px 0 15px;border:1px solid #ddd;border-radius:8px;box-sizing:border-box}
-button{width:100%;padding:15px;background:#087f5b;color:white;border:none;border-radius:10px;font-size:17px;font-weight:bold}
-.info{background:#eef8f4;padding:15px;border-radius:10px;margin-bottom:20px}
-.connected{background:#e8f5e9;padding:12px;border-radius:8px;margin-bottom:20px}
-</style>
-</head>
-
-<body>
-<div class="container">
-
-<h1>🎓 ALHIKAM Learning Center</h1>
-
-<div class="info">
-<strong>Payment Confirmed ✅</strong><br><br>
-Plan: {{ plan_name }}<br>
-Amount: ₦{{ "{:,}".format(amount) }}
-</div>
-
-<div class="connected">
-<strong>Telegram Connected ✅</strong><br>
-Username: @{{ telegram_username if telegram_username else "Telegram User" }}
-<br>
-Your Telegram ID has been verified automatically.
-</div>
-
-<form method="POST">
-<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-
-<label>Full Name</label>
-<input type="text" name="full_name" required>
-
-<label>Phone Number</label>
-<input type="tel" name="phone" required>
-
-<label>Email Address</label>
-<input type="email" name="email" required>
-
-<label>Course</label>
-<select name="course" required>
-<option value="">Select Course</option>
-<option>JAMB Science</option>
-<option>JAMB Arts</option>
-<option>WAEC</option>
-<option>NECO</option>
-<option>CBT Training</option>
-</select>
-
-<button type="submit">✅ COMPLETE REGISTRATION</button>
-
-</form>
-</div>
-</body>
-</html>
-"""
-
-
-def _registration_csrf(payment_token):
-    key = f"reg_csrf_{payment_token}"
-    token = session.get(key)
-    if not token:
-        token = secrets.token_urlsafe(32)
-        session[key] = token
-    return token
-
-
-@web_app.route(
-    "/registration-form/<payment_token>",
-    methods=["GET", "POST"],
-)
-def registration_form(payment_token):
-    payment = _payment_from_token(payment_token)
-
-    if not payment:
-        return "Payment reference not found.", 404
-
-    if payment.get("status") != "successful":
-        return "Payment has not yet been verified.", 400
-
-    telegram_auth = payment.get("telegram_auth")
-
-    if not telegram_auth:
-        return redirect(f"/register/{payment_token}")
-
-    if payment.get("registration_completed"):
-        return """
-        <h2>Registration Already Completed</h2>
-        <p>Your Telegram class access has already been processed.</p>
-        """
-
-    if request.method == "GET":
-        return render_template_string(
-            REGISTRATION_HTML,
-            plan_name=payment["plan_name"],
-            amount=payment["amount"],
-            telegram_username=telegram_auth.get(
-                "telegram_username",
-                "",
-            ),
-            csrf_token=_registration_csrf(payment_token),
-        )
-
-    token = request.form.get("csrf_token", "")
-    expected = session.get(f"reg_csrf_{payment_token}", "")
-    if not token or not expected or not secrets.compare_digest(token, expected):
-        return "Invalid registration request. Please refresh and try again.", 400
-
-    full_name = request.form.get(
-        "full_name",
-        "",
-    ).strip()
-
-    phone = request.form.get(
-        "phone",
-        "",
-    ).strip()
-
-    email = request.form.get(
-        "email",
-        "",
-    ).strip()
-
-    course = request.form.get(
-        "course",
-        "",
-    ).strip()
-
-    if not full_name or not phone or not email or not course:
-        return "Please complete all required fields.", 400
-
-    registration_data = {
-        "telegram_id": telegram_auth["telegram_id"],
-        "telegram_username": telegram_auth["telegram_username"],
-        "full_name": full_name,
-        "phone": phone,
-        "email": email,
-        "course": course,
-        "payment_plan": payment["plan_name"],
-        "amount_paid": payment["amount"],
-        "tx_ref": payment["tx_ref"],
-    }
-
-    saved = save_registration_to_google_sheets(
-        registration_data
-    )
-
-    if not saved:
-        return (
-            "Registration could not be saved. "
-            "Please try again.",
+            "Unable to start payment. Please try again.",
             500,
         )
 
-    invite_link = create_unique_invite_link(
-        payment_token
-    )
 
-    if not invite_link:
-        return """
-        <h2>Registration Saved ✅</h2>
-        <p>
-        Your registration was saved, but your Telegram invite
-        could not be created automatically.
-        Please contact ALHIKAM Learning Center.
-        </p>
-        """, 500
+# ============================================================
+# FLUTTERWAVE PAYMENT CALLBACK
+# ============================================================
 
-    student_id, created_now = create_or_get_student({
-        "payment_token": payment_token,
-        "tx_ref": payment["tx_ref"],
-        "full_name": full_name,
-        "phone": phone,
-        "email": email,
-        "course": course,
-        "telegram_id": telegram_auth["telegram_id"],
-        "telegram_username": telegram_auth.get("telegram_username", ""),
-        "telegram_name": (
-            f"{telegram_auth.get('first_name', '')} "
-            f"{telegram_auth.get('last_name', '')}"
-        ).strip(),
-        "payment_plan": payment.get("plan_name", ""),
-        "amount_paid": payment.get("amount", 0),
-        "payment_status": "Successful",
-        "registration_completed": 1,
-        "referral_code": payment.get("referral_code", ""),
-        "promoter_id": payment.get("promoter_id"),
-    })
+@web_app.route("/payment-callback", methods=["GET"])
+def payment_callback():
+    """
+    Flutterwave redirects here after payment.
 
-    if not created_now:
-        mark_payment_registration_completed(payment["tx_ref"])
-        return "<h2>Registration Already Completed</h2><p>Your registration has already been processed.</p>"
+    SECURITY:
+    We do NOT trust:
+        - amount from URL
+        - referral from URL
+        - Telegram data from URL
 
-    payment["registration_completed"] = True
-    payment["registration"] = registration_data
-    payment["invite_link"] = invite_link
-
-    mark_payment_registration_completed(payment["tx_ref"])
-
-    save_payment({
-        "tx_ref": payment["tx_ref"],
-        "transaction_id": payment.get("transaction_id", ""),
-        "payment_plan": payment.get("plan_name", ""),
-        "amount": payment.get("amount", 0),
-        "payment_status": "Successful",
-        "referral_code": payment.get("referral_code", ""),
-        "promoter_id": payment.get("promoter_id"),
-        "promoter_name": payment.get("promoter_name", ""),
-        "commission": _commission_for_amount(payment.get("amount", 0)),
-        "telegram_id": telegram_auth["telegram_id"],
-        "telegram_username": telegram_auth.get("telegram_username", ""),
-        "telegram_name": (
-            f"{telegram_auth.get('first_name', '')} "
-            f"{telegram_auth.get('last_name', '')}"
-        ).strip(),
-        "registration_completed": 1,
-    })
-
-    telegram_id = int(
-        telegram_auth["telegram_id"]
-    )
-
-    threading.Thread(
-        target=send_registration_access,
-        args=(
-            telegram_id,
-            full_name,
-            payment["amount"],
-            invite_link,
-        ),
-        daemon=True,
-    ).start()
-
-    safe_full_name = escape(full_name)
-    return f"""
-    <html>
-    <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-    body{{font-family:Arial;text-align:center;padding:40px 20px}}
-    </style>
-    </head>
-    <body>
-    <h1>🎉 Registration Completed!</h1>
-    <p>
-    Welcome to ALHIKAM Learning Center,
-    <strong>{safe_full_name}</strong>.
-    </p>
-    <p>
-    Your payment and registration have been confirmed.
-    </p>
-    <p>
-    ✅ Your unique Telegram class invite has been sent to your connected Telegram account.
-    </p>
-    <p>
-    Please open Telegram and check the message from
-    <strong>@Alhikamcenterbot</strong>.
-    </p>
-    </body>
-    </html>
+    The original payment record in SQLite is the authority.
     """
 
-
-# ============================================================
-# GOOGLE SHEETS
-# ============================================================
-
-def save_registration_to_google_sheets(data):
     try:
-        print("Saving registration:", data)
 
-        response = requests.post(
-            SHEET_URL,
-            json=data,
-            timeout=20,
-        )
+        # ----------------------------------------------------
+        # Get Flutterwave transaction ID
+        # ----------------------------------------------------
 
-        print(
-            "Google Sheets Status:",
-            response.status_code,
-        )
+        transaction_id = (
+            request.args.get("transaction_id")
+            or ""
+        ).strip()
 
-        print(
-            "Google Sheets Response:",
-            response.text,
-        )
+        callback_tx_ref = (
+            request.args.get("tx_ref")
+            or ""
+        ).strip()
 
-        return response.status_code == 200
+        # Telegram values are only fallback display/context.
+        callback_telegram_id = (
+            request.args.get("telegram_id")
+            or ""
+        ).strip()
 
-    except Exception as e:
-        print("Google Sheets Error:", e)
-        return False
+        callback_telegram_name = (
+            request.args.get("telegram_name")
+            or ""
+        ).strip()
 
+        callback_telegram_username = (
+            request.args.get("telegram_username")
+            or ""
+        ).strip()
 
-# ============================================================
-# CREATE UNIQUE TELEGRAM INVITE LINK
-# ============================================================
+        # ----------------------------------------------------
+        # Transaction ID is required
+        # ----------------------------------------------------
 
-def create_unique_invite_link(payment_token):
-    global telegram_bot_app
-
-    if telegram_bot_app is None:
-        print("Telegram application not ready.")
-        return None
-
-    try:
-        async def create_link():
-            return await telegram_bot_app.bot.create_chat_invite_link(
-                chat_id=MAIN_GROUP_ID,
-                member_limit=1,
-                name=f"ALHIKAM-{payment_token[:10]}",
+        if not transaction_id:
+            return (
+                "Payment verification failed: "
+                "missing transaction ID.",
+                400,
             )
 
-        invite_link = asyncio.run(create_link())
-        return invite_link.invite_link
+        # ----------------------------------------------------
+        # Verify with Flutterwave
+        # ----------------------------------------------------
 
-    except Exception as e:
-        print(
-            "Invite link creation error:",
-            e,
+        verified = verify_flutterwave_payment(
+            transaction_id
         )
-        return None
 
+        if not verified:
 
-# ============================================================
-# SEND TELEGRAM ACCESS
-# ============================================================
+            return (
+                "Payment verification failed. "
+                "Please contact Alhikam Learning Center.",
+                400,
+            )
 
-def send_registration_access(
-    telegram_id,
-    full_name,
-    amount,
-    invite_link,
-):
-    try:
-        asyncio.run(
-            send_access_message(
-                telegram_id,
-                full_name,
-                amount,
-                invite_link,
+        # ----------------------------------------------------
+        # Convert response safely
+        # ----------------------------------------------------
+
+        verified_dict = row_to_dict(verified) or {}
+
+        verified_status = str(
+            get_value(
+                verified_dict,
+                "status",
+                "",
+            )
+        ).strip().lower()
+
+        # Flutterwave normally returns successful
+        if verified_status != "successful":
+
+            logger.warning(
+                "Flutterwave payment not successful: %s",
+                verified_status,
+            )
+
+            return (
+                "Payment was not successful.",
+                400,
+            )
+
+        # ----------------------------------------------------
+        # Verified transaction data
+        # ----------------------------------------------------
+
+        verified_tx_ref = str(
+            get_value(
+                verified_dict,
+                "tx_ref",
+                "",
+            )
+        ).strip()
+
+        verified_amount = normalize_amount(
+            get_value(
+                verified_dict,
+                "amount",
+                0,
             )
         )
 
-    except Exception as e:
-        print(
-            "Telegram access error:",
-            e,
+        verified_currency = str(
+            get_value(
+                verified_dict,
+                "currency",
+                "",
+            )
+        ).strip().upper()
+
+        # ----------------------------------------------------
+        # tx_ref must exist
+        # ----------------------------------------------------
+
+        if not verified_tx_ref:
+
+            return (
+                "Payment verification failed: "
+                "missing transaction reference.",
+                400,
+            )
+
+        # ----------------------------------------------------
+        # If Flutterwave gives tx_ref in callback,
+        # it must match verified tx_ref.
+        # ----------------------------------------------------
+
+        if callback_tx_ref:
+
+            if callback_tx_ref != verified_tx_ref:
+
+                logger.warning(
+                    "Callback tx_ref mismatch: callback=%s verified=%s",
+                    callback_tx_ref,
+                    verified_tx_ref,
+                )
+
+                return (
+                    "Payment verification failed: "
+                    "transaction reference mismatch.",
+                    400,
+                )
+
+        tx_ref = verified_tx_ref
+
+        # ----------------------------------------------------
+        # Load ORIGINAL payment from database
+        # ----------------------------------------------------
+
+        original_payment = get_payment_by_tx_ref(
+            tx_ref
         )
 
+        if original_payment is None:
 
-async def send_access_message(
-    telegram_id,
-    full_name,
-    amount,
-    invite_link,
-):
-    global telegram_bot_app
+            logger.warning(
+                "No original payment found for tx_ref=%s",
+                tx_ref,
+            )
 
-    if telegram_bot_app is None:
-        return
+            return (
+                "Payment record not found.",
+                404,
+            )
 
-    try:
-        await telegram_bot_app.bot.send_message(
-            chat_id=telegram_id,
-            text=(
-                "🎉 *REGISTRATION COMPLETED!*\n\n"
-                f"👤 Name: {full_name}\n\n"
-                "🎓 ALHIKAM Learning Center\n\n"
-                f"💰 Amount Paid: ₦{amount:,}\n\n"
-                "✅ Payment confirmed.\n"
-                "✅ Registration completed.\n\n"
-                "📚 Your class access is ready.\n\n"
-                "👇 Click the button below to join your class.\n\n"
-                "⚠️ This invite link is for you only."
+        payment = row_to_dict(
+            original_payment
+        ) or {}
+
+        # ----------------------------------------------------
+        # Original amount
+        # ----------------------------------------------------
+
+        original_amount = normalize_amount(
+            get_value(
+                payment,
+                "amount",
+                0,
+            )
+        )
+
+        # ----------------------------------------------------
+        # Currency validation
+        # ----------------------------------------------------
+
+        if verified_currency != "NGN":
+
+            logger.warning(
+                "Wrong payment currency: %s",
+                verified_currency,
+            )
+
+            update_payment_status(
+                tx_ref=tx_ref,
+                status="failed",
+            )
+
+            return (
+                "Invalid payment currency.",
+                400,
+            )
+
+        # ----------------------------------------------------
+        # Amount validation
+        # ----------------------------------------------------
+
+        if verified_amount != original_amount:
+
+            logger.warning(
+                "Payment amount mismatch: tx_ref=%s "
+                "original=%s verified=%s",
+                tx_ref,
+                original_amount,
+                verified_amount,
+            )
+
+            update_payment_status(
+                tx_ref=tx_ref,
+                status="failed",
+            )
+
+            return (
+                "Payment amount does not match the selected plan.",
+                400,
+            )
+
+        # ----------------------------------------------------
+        # Validate configured plan amount too
+        # ----------------------------------------------------
+
+        payment_plan = str(
+            get_value(
+                payment,
+                "payment_plan",
+                "",
+            )
+        ).strip()
+
+        expected_plan_amount = get_plan_amount(
+            payment_plan
+        )
+
+        if expected_plan_amount is None:
+
+            logger.error(
+                "Unknown payment plan in DB: %s",
+                payment_plan,
+            )
+
+            return (
+                "Payment plan validation failed.",
+                400,
+            )
+
+        if original_amount != expected_plan_amount:
+
+            logger.error(
+                "Database payment plan amount mismatch: "
+                "plan=%s expected=%s db=%s",
+                payment_plan,
+                expected_plan_amount,
+                original_amount,
+            )
+
+            return (
+                "Payment plan amount validation failed.",
+                400,
+            )
+
+        # ----------------------------------------------------
+        # Get referral information ONLY from original DB
+        # ----------------------------------------------------
+
+        referral_code = str(
+            get_value(
+                payment,
+                "referral_code",
+                "",
+            )
+            or ""
+        ).strip()
+
+        promoter_id = get_value(
+            payment,
+            "promoter_id",
+            None,
+        )
+
+        # ----------------------------------------------------
+        # Revalidate promoter
+        # ----------------------------------------------------
+
+        if referral_code:
+
+            promoter = get_promoter_by_referral_code(
+                referral_code
+            )
+
+            if promoter is None:
+
+                logger.warning(
+                    "Referral promoter no longer active: %s",
+                    referral_code,
+                )
+
+                promoter_id = None
+                referral_code = ""
+
+            else:
+
+                promoter_dict = row_to_dict(
+                    promoter
+                ) or {}
+
+                promoter_id = get_value(
+                    promoter_dict,
+                    "id",
+                    promoter_id,
+                )
+
+        else:
+            promoter_id = None
+
+        # ----------------------------------------------------
+        # Calculate commission
+        # ----------------------------------------------------
+
+        commission_amount = 0
+        commission_rate = 0
+
+        if promoter_id:
+
+            commission_amount = calculate_commission(
+                original_amount
+            )
+
+            # The current system uses the fixed amount map.
+            # Store the effective rate as informational data.
+            if original_amount > 0:
+                commission_rate = (
+                    commission_amount / original_amount
+                ) * 100
+
+        # ----------------------------------------------------
+        # Save SUCCESSFUL payment
+        # ----------------------------------------------------
+
+        save_payment({
+            "tx_ref": tx_ref,
+            "transaction_id": transaction_id,
+            "payment_plan": payment_plan,
+            "amount": original_amount,
+            "status": "successful",
+            "referral_code": referral_code,
+            "promoter_id": promoter_id,
+            "commission": commission_amount,
+            "telegram_username": get_value(
+                payment,
+                "telegram_username",
+                callback_telegram_username,
             ),
-            parse_mode="Markdown",
-            reply_markup=InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton(
-                        "🎓 JOIN ALHIKAM CLASS",
-                        url=invite_link,
-                    )
-                ]
-            ]),
+            "telegram_id": get_value(
+                payment,
+                "telegram_id",
+                callback_telegram_id,
+            ),
+            "registration_completed": get_value(
+                payment,
+                "registration_completed",
+                0,
+            ),
+        })
+
+        # ----------------------------------------------------
+        # Update status explicitly
+        # ----------------------------------------------------
+
+        update_payment_status(
+            tx_ref=tx_ref,
+            status="successful",
+            transaction_id=transaction_id,
         )
 
-        print(
-            "Access sent to Telegram:",
-            telegram_id,
-        )
+        # ----------------------------------------------------
+        # Temporary cache
+        # ----------------------------------------------------
 
-    except TelegramError as e:
-        print(
-            "Telegram Error:",
-            e,
-        )
-
-
-# ============================================================
-# FLUTTERWAVE VERIFY
-# ============================================================
-
-def verify_flutterwave_transaction(transaction_id):
-    if not FLW_SECRET_KEY:
-        return None
-
-    try:
-        url = (
-            "https://api.flutterwave.com/v3/transactions/"
-            f"{transaction_id}/verify"
-        )
-
-        headers = {
-            "Authorization": f"Bearer {FLW_SECRET_KEY}",
-            "Content-Type": "application/json",
+        PAYMENT_SESSIONS[tx_ref] = {
+            **payment,
+            "tx_ref": tx_ref,
+            "transaction_id": transaction_id,
+            "amount": original_amount,
+            "payment_status": "successful",
+            "status": "successful",
+            "referral_code": referral_code,
+            "promoter_id": promoter_id,
+            "commission": commission_amount,
+            "telegram_id": get_value(
+                payment,
+                "telegram_id",
+                callback_telegram_id,
+            ),
+            "telegram_username": get_value(
+                payment,
+                "telegram_username",
+                callback_telegram_username,
+            ),
+            "telegram_name": callback_telegram_name,
         }
 
-        response = requests.get(
-            url,
-            headers=headers,
-            timeout=30,
-        )
+        # ----------------------------------------------------
+        # Create commission ONCE
+        # ----------------------------------------------------
+        #
+        # We keep the existing architecture:
+        # commission is created after VERIFIED payment.
+        #
+        # commission_exists protects against duplicate callbacks.
+        #
+        # ----------------------------------------------------
 
-        result = response.json()
+        if promoter_id and commission_amount > 0:
 
-        print(
-            "Verification Response:",
-            result,
-        )
+            try:
 
-        if (
-            response.status_code == 200
-            and result.get("status") == "success"
-        ):
-            return result.get(
-                "data",
-                {},
+                already_exists = commission_exists(
+                    tx_ref
+                )
+
+                if not already_exists:
+
+                    create_commission(
+                        tx_ref=tx_ref,
+                        promoter_id=promoter_id,
+                        student_id=None,
+                        payment_amount=original_amount,
+                        commission_rate=commission_rate,
+                        commission_amount=commission_amount,
+                    )
+
+                    logger.info(
+                        "Commission created: tx_ref=%s promoter=%s amount=%s",
+                        tx_ref,
+                        promoter_id,
+                        commission_amount,
+                    )
+
+                else:
+
+                    logger.info(
+                        "Commission already exists: tx_ref=%s",
+                        tx_ref,
+                    )
+
+            except Exception as commission_error:
+
+                # Do NOT mark the payment as failed just because
+                # commission creation has a separate problem.
+                logger.exception(
+                    "Commission creation error for %s: %s",
+                    tx_ref,
+                    commission_error,
+                )
+
+        # ----------------------------------------------------
+        # Payment successful -> registration
+        # ----------------------------------------------------
+
+        return redirect(
+            url_for(
+                "register",
+                tx_ref=tx_ref,
             )
-
-        return None
+        )
 
     except Exception as e:
-        print(
-            "Verification Error:",
+
+        logger.exception(
+            "PAYMENT CALLBACK ERROR: %s",
             e,
         )
-        return None
+
+        return (
+            "An error occurred while verifying your payment. "
+            "Please contact Alhikam Learning Center.",
+            500,
+        )
 
 
 # ============================================================
-# FLUTTERWAVE WEBHOOK
+# REGISTRATION
+# ============================================================
+
+@web_app.route("/register", methods=["GET", "POST"])
+def register():
+    """
+    Student registration after successful payment.
+
+    registration.py expects a dictionary-like payment object
+    and uses payment_status, while database.py uses status.
+    We provide both for compatibility.
+    """
+
+    try:
+
+        # ----------------------------------------------------
+        # tx_ref can come from:
+        #   GET ?tx_ref=
+        #   POST form
+        # ----------------------------------------------------
+
+        tx_ref = (
+            request.args.get("tx_ref")
+            or request.form.get("tx_ref")
+            or ""
+        ).strip()
+
+        if not tx_ref:
+
+            return (
+                "Missing payment reference.",
+                400,
+            )
+
+        # ----------------------------------------------------
+        # Always use database payment
+        # ----------------------------------------------------
+
+        db_payment = get_payment_by_tx_ref(
+            tx_ref
+        )
+
+        if db_payment is None:
+
+            return (
+                "Payment record not found.",
+                404,
+            )
+
+        payment = row_to_dict(
+            db_payment
+        ) or {}
+
+        # ----------------------------------------------------
+        # Compatibility fields
+        # ----------------------------------------------------
+
+        payment["tx_ref"] = tx_ref
+
+        payment["status"] = str(
+            payment.get(
+                "status",
+                "",
+            )
+            or ""
+        ).lower()
+
+        payment["payment_status"] = (
+            "Successful"
+            if payment["status"] == "successful"
+            else payment["status"]
+        )
+
+        # ----------------------------------------------------
+        # Registration must only happen after success
+        # ----------------------------------------------------
+
+        if payment["status"] != "successful":
+
+            return (
+                "This payment has not been successfully verified.",
+                403,
+            )
+
+        # ----------------------------------------------------
+        # Make sure the temporary session has the latest DB data
+        # ----------------------------------------------------
+
+        PAYMENT_SESSIONS[tx_ref] = payment
+
+        # ----------------------------------------------------
+        # registration.py expects:
+        #
+        # payment_sessions[tx_ref]
+        #
+        # ----------------------------------------------------
+
+        return registration_page(
+            payment_sessions={
+                tx_ref: payment
+            }
+        )
+
+    except Exception as e:
+
+        logger.exception(
+            "REGISTRATION ERROR: %s",
+            e,
+        )
+
+        return (
+            "Unable to open registration page. "
+            "Please contact Alhikam Learning Center.",
+            500,
+        )
+
+
+# ============================================================
+# PROMOTER LOGIN
 # ============================================================
 
 @web_app.route(
-    "/webhook/flutterwave",
-    methods=["POST"],
+    "/referral/login",
+    methods=["GET", "POST"],
 )
-def flutterwave_webhook():
-    incoming_hash = request.headers.get("verif-hash")
-
-    if not FLUTTERWAVE_SECRET_HASH:
-        return jsonify({"status": "error", "message": "Webhook secret hash missing"}), 500
-
-    if not incoming_hash or not hmac.compare_digest(
-        str(incoming_hash), str(FLUTTERWAVE_SECRET_HASH)
-    ):
-        return jsonify({"status": "error", "message": "Invalid verification hash"}), 401
-
-    data = request.get_json(silent=True) or {}
-    payment_data = data.get("data") or {}
-
-    transaction_id = payment_data.get("id")
-    callback_tx_ref = str(payment_data.get("tx_ref") or "").strip()
-
-    if not transaction_id or not callback_tx_ref:
-        return jsonify({"status": "error", "message": "Missing transaction data"}), 400
-
-    verified = verify_flutterwave_transaction(transaction_id)
-    if not verified:
-        return jsonify({"status": "accepted", "message": "Verification unavailable; retry later"}), 202
-
-    verified_status = str(verified.get("status") or "").lower()
-    verified_tx_ref = str(verified.get("tx_ref") or "").strip()
-    verified_currency = str(verified.get("currency") or "").upper()
-
-    if verified_status != "successful":
-        return jsonify({"status": "ignored"}), 200
-
-    if verified_currency != "NGN" or verified_tx_ref != callback_tx_ref:
-        return jsonify({"status": "error", "message": "Transaction verification mismatch"}), 400
-
-    if not verified_tx_ref.startswith("ALHIKAM_"):
-        return jsonify({"status": "error", "message": "Invalid transaction reference"}), 400
-
-    payment_token = verified_tx_ref[len("ALHIKAM_"):]
-    payment = _payment_from_token(payment_token)
-
-    if not payment:
-        return jsonify({"status": "accepted", "message": "Payment record not found yet"}), 202
-
-    try:
-        verified_amount = Decimal(str(verified.get("amount")))
-        expected_amount = Decimal(str(payment.get("amount")))
-    except Exception:
-        return jsonify({"status": "error", "message": "Invalid amount"}), 400
-
-    if verified_amount != expected_amount:
-        logger.error("Payment amount mismatch tx_ref=%s", verified_tx_ref)
-        return jsonify({"status": "error", "message": "Amount mismatch"}), 400
-
-    # Preserve the promoter attached when the payment was created.
-    promoter_id = payment.get("promoter_id")
-    referral_code = payment.get("referral_code") or ""
-    promoter = get_promoter_by_id(promoter_id) if promoter_id else None
-
-    if promoter:
-        if str(promoter["status"]).lower() != "active":
-            promoter = None
-        elif referral_code and str(promoter["referral_code"]).strip() != referral_code:
-            promoter = None
-
-    commission_amount = _commission_for_amount(verified_amount) if promoter else 0
-
-    update_payment_status(
-        verified_tx_ref,
-        "Successful",
-        transaction_id=transaction_id,
-    )
-
-    save_payment({
-        "tx_ref": verified_tx_ref,
-        "transaction_id": transaction_id,
-        "payment_plan": payment.get("plan_name") or payment.get("payment_plan", ""),
-        "amount": float(verified_amount),
-        "payment_status": "Successful",
-        "referral_code": referral_code if promoter else "",
-        "promoter_id": promoter["id"] if promoter else None,
-        "promoter_name": promoter["full_name"] if promoter else "",
-        "commission": commission_amount,
-        "telegram_id": payment.get("telegram_id", ""),
-        "telegram_username": payment.get("telegram_username", ""),
-        "telegram_name": payment.get("telegram_name", ""),
-        "registration_completed": payment.get("registration_completed", 0),
-    })
-
-    pending_payments[payment_token] = {
-        **pending_payments.get(payment_token, {}),
-        **payment,
-        "status": "successful",
-        "payment_status": "Successful",
-        "transaction_id": transaction_id,
-        "promoter_id": promoter["id"] if promoter else None,
-        "promoter_name": promoter["full_name"] if promoter else "",
-        "commission": commission_amount,
-    }
-
-    # Credit commission only after server-side Flutterwave verification.
-    if promoter and commission_amount > 0 and not commission_exists(verified_tx_ref):
-        create_commission(
-            promoter_id=promoter["id"],
-            student_id=None,
-            tx_ref=verified_tx_ref,
-            payment_amount=verified_amount,
-            commission_amount=commission_amount,
-        )
-
-    logger.info("PAYMENT SUCCESSFUL tx_ref=%s", verified_tx_ref)
-    return jsonify({"status": "success"}), 200
-
-
-# ============================================================
-# FLUTTERWAVE TRANSFER CALLBACK
-# ============================================================
-
-@web_app.route("/flutterwave/transfer-callback", methods=["GET", "POST"])
-def flutterwave_transfer_callback():
-    try:
-        data = request.get_json(silent=True) or {}
-        transfer_id = (
-            data.get("id") or data.get("transfer_id")
-            or request.form.get("id") or request.form.get("transfer_id")
-            or request.args.get("id") or request.args.get("transfer_id")
-        )
-        callback_reference = (
-            data.get("reference") or data.get("transfer_reference")
-            or request.form.get("reference") or request.form.get("transfer_reference")
-            or request.args.get("reference") or request.args.get("transfer_reference")
-        )
-
-        transfer_id = str(transfer_id or "").strip()
-        callback_reference = str(callback_reference or "").strip()
-
-        withdrawal = None
-        if transfer_id:
-            withdrawal = get_withdrawal_by_transfer_id(transfer_id)
-        if not withdrawal and callback_reference:
-            withdrawal = get_withdrawal_by_transfer_reference(callback_reference)
-
-        if not withdrawal:
-            return jsonify({"status": "accepted"}), 202
-
-        local_reference = str(withdrawal["transfer_reference"] or "").strip()
-        if callback_reference and local_reference and callback_reference != local_reference:
-            logger.error("Transfer callback reference mismatch withdrawal=%s", withdrawal["id"])
-            return jsonify({"status": "accepted"}), 202
-
-        if transfer_id:
-            verified = get_flutterwave_transfer_status(transfer_id)
-        else:
-            verified = get_flutterwave_transfer_status_by_reference(local_reference)
-
-        verified_reference = str(verified.get("reference") or "").strip()
-        if local_reference and verified_reference and verified_reference != local_reference:
-            logger.error("Verified transfer reference mismatch withdrawal=%s", withdrawal["id"])
-            return jsonify({"status": "accepted"}), 202
-
-        process_transfer_result(
-            withdrawal_id=withdrawal["id"],
-            flutterwave_status=verified.get("status"),
-            transfer_id=verified.get("transfer_id") or transfer_id,
-            transfer_reference=verified_reference or local_reference,
-            message=verified.get("message"),
-        )
-
-        return jsonify({"status": "accepted"}), 200
-
-    except Exception:
-        logger.exception("Flutterwave transfer callback failed")
-        return jsonify({"status": "accepted"}), 202
-
-
-# ============================================================
-# SECURE REFERRAL ROUTES
-# ============================================================
-
-@web_app.route("/referral/login", methods=["GET", "POST"])
 def promoter_login():
     return promoter_login_page()
 
 
-@web_app.route("/referral/logout", methods=["POST"])
+# ============================================================
+# PROMOTER LOGOUT
+# ============================================================
+
+@web_app.route(
+    "/referral/logout",
+    methods=["GET", "POST"],
+)
 def promoter_logout():
     return promoter_logout_page()
 
 
-@web_app.route("/referral/dashboard", methods=["GET"])
+# ============================================================
+# PROMOTER DASHBOARD
+# ============================================================
+
+@web_app.route(
+    "/referral/dashboard",
+    methods=["GET"],
+)
 def referral_dashboard():
-    return referral_dashboard_by_code(None)
+    """
+    Session-based promoter dashboard.
+
+    referral_dashboard.py handles promoter authentication.
+    """
+
+    return referral_dashboard_by_code(
+        None
+    )
 
 
-@web_app.route("/referral/<referral_code>", methods=["GET"])
-def referral_entry(referral_code):
-    return redirect(url_for("promoter_login", ref=referral_code))
+# ============================================================
+# PROMOTER REFERRAL DASHBOARD LINK
+# ============================================================
+
+@web_app.route(
+    "/referral/<referral_code>",
+    methods=["GET"],
+)
+def referral_by_code(referral_code):
+    """
+    Promoter-specific dashboard/referral URL.
+
+    Example:
+        /referral/ALC123
+    """
+
+    referral_code = (
+        referral_code or ""
+    ).strip()
+
+    if not referral_code:
+
+        return redirect(
+            url_for("promoter_login")
+        )
+
+    promoter = get_promoter_by_referral_code(
+        referral_code
+    )
+
+    if promoter is None:
+
+        return (
+            "Invalid or inactive referral code.",
+            404,
+        )
+
+    return referral_dashboard_by_code(
+        referral_code
+    )
 
 
-@web_app.route("/referral-dashboard", methods=["GET"])
-def old_referral_dashboard():
-    return redirect(url_for("promoter_login", ref=request.args.get("ref", "")))
+# ============================================================
+# LEGACY PROMOTER DASHBOARD URL
+# ============================================================
+
+@web_app.route(
+    "/referral-dashboard",
+    methods=["GET"],
+)
+def referral_dashboard_legacy():
+
+    return referral_dashboard_by_code(
+        None
+    )
 
 
-@web_app.route("/referral/withdraw", methods=["GET", "POST"])
+# ============================================================
+# PROMOTER WITHDRAWAL
+# ============================================================
+
+@web_app.route(
+    "/referral/withdraw",
+    methods=["POST"],
+)
 def referral_withdraw():
-    return withdrawal_page(request.args.get("ref") or None)
 
+    # withdrawal_page() already checks:
+    # - promoter login
+    # - CSRF
+    # - balance
+    # - withdrawal code
+    # - bank
+    # - transfer
+    # etc.
 
-@web_app.route("/referral/withdraw/status/<int:withdrawal_id>", methods=["GET"])
-def withdrawal_status(withdrawal_id):
-    return withdrawal_status_page(withdrawal_id, request.args.get("ref") or None)
+    return withdrawal_page()
 
 
 # ============================================================
-# ADMIN REFERRAL ROUTES
+# PROMOTER WITHDRAWAL STATUS
 # ============================================================
 
-if ADMIN_MODULE_AVAILABLE:
+@web_app.route(
+    "/referral/withdraw/status/<int:withdrawal_id>",
+    methods=["GET", "POST"],
+)
+def promoter_withdrawal_status(
+    withdrawal_id
+):
 
-    @web_app.route("/admin/referral", methods=["GET"])
-    def admin_referral():
+    return withdrawal_status_page(
+        withdrawal_id
+    )
+
+
+# ============================================================
+# ADMIN REFERRAL LOGIN
+# ============================================================
+#
+# IMPORTANT:
+# admin_referral.py expects endpoint:
+#
+#     admin_referral_login
+#
+# and after successful login it redirects to:
+#
+#     admin_referral
+#
+# ============================================================
+
+@web_app.route(
+    "/admin/referral/login",
+    methods=["GET", "POST"],
+)
+def admin_referral_login():
+
+    return admin_login_page()
+
+
+# ============================================================
+# ADMIN REFERRAL DASHBOARD
+# ============================================================
+
+@web_app.route(
+    "/admin/referral",
+    methods=["GET"],
+)
+def admin_referral():
+
+    try:
+
+        if not admin_logged_in():
+
+            return redirect(
+                url_for(
+                    "admin_referral_login"
+                )
+            )
+
         return admin_referral_page()
 
+    except Exception as e:
 
-    @web_app.route("/admin/referral/login", methods=["GET", "POST"])
-    def admin_referral_login():
-        return admin_login_page()
+        logger.exception(
+            "ADMIN REFERRAL DASHBOARD ERROR: %s",
+            e,
+        )
 
-
-    @web_app.route("/admin/referral/logout", methods=["POST"])
-    def admin_referral_logout():
-        return admin_logout_page()
-
-
-    @web_app.route("/admin/referral/create-promoter", methods=["POST"])
-    def admin_create_promoter():
-        return create_promoter_page()
-
-
-    @web_app.route("/admin/referral/withdrawal-status", methods=["POST"])
-    def admin_withdrawal_status():
-        return admin_withdrawal_status_page()
+        return (
+            "Admin referral dashboard error.",
+            500,
+        )
 
 
 # ============================================================
-# WEB SERVER
+# ADMIN LOGOUT
 # ============================================================
 
-def run_web_server():
-    print("Starting Flask Web Server...")
+@web_app.route(
+    "/admin/referral/logout",
+    methods=["GET", "POST"],
+)
+def admin_referral_logout():
 
-    web_app.run(
-        host="0.0.0.0",
-        port=PORT,
-        use_reloader=False,
-    )
-
-
-# ============================================================
-# TELEGRAM MENUS
-# ============================================================
-
-MAIN_MENU = [
-    [
-        "📚 Courses",
-        "📝 CBT Practice",
-    ],
-    [
-        "👤 Student Registration",
-        "💳 Pay School Fees",
-    ],
-    [
-        "📞 Contact Us",
-        "ℹ️ About Us",
-    ],
-]
-
-COURSE_MENU = [
-    [
-        "🎯 JAMB Science",
-        "🎨 JAMB Arts",
-    ],
-    [
-        "📘 WAEC",
-        "📕 NECO",
-    ],
-    [
-        "💻 CBT Training",
-    ],
-    [
-        "🔙 Back to Main Menu",
-    ],
-]
+    return admin_logout_page()
 
 
 # ============================================================
-# START
+# ADMIN CREATE PROMOTER
 # ============================================================
 
-async def start(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
+@web_app.route(
+    "/admin/referral/create-promoter",
+    methods=["POST"],
+)
+def admin_create_promoter():
+
+    return create_promoter_page()
+
+
+# ============================================================
+# ADMIN WITHDRAWAL STATUS
+# ============================================================
+
+@web_app.route(
+    "/admin/referral/withdrawal-status/<int:withdrawal_id>",
+    methods=["GET", "POST"],
+)
+def admin_withdrawal_status(
+    withdrawal_id
 ):
-    context.user_data.clear()
 
-    keyboard = ReplyKeyboardMarkup(
-        MAIN_MENU,
-        resize_keyboard=True,
-    )
-
-    await update.message.reply_text(
-        "🎓 *ALHIKAM Learning Center*\n\n"
-        "Welcome to ALHIKAM Learning Center.\n\n"
-        "We provide educational support for:\n\n"
-        "• JAMB\n"
-        "• WAEC\n"
-        "• NECO\n"
-        "• CBT Training\n\n"
-        "Please choose an option below.",
-        parse_mode="Markdown",
-        reply_markup=keyboard,
+    return admin_withdrawal_status_page(
+        withdrawal_id
     )
 
 
 # ============================================================
-# CANCEL
+# HEALTH CHECK
 # ============================================================
 
-async def cancel(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
-    context.user_data.clear()
+@web_app.route(
+    "/health",
+    methods=["GET"],
+)
+def health():
 
-    await update.message.reply_text(
-        "❌ Registration cancelled.",
-        reply_markup=ReplyKeyboardMarkup(
-            MAIN_MENU,
-            resize_keyboard=True,
-        ),
+    return jsonify({
+        "status": "ok",
+        "service": "ALHIKAM LEARNING CENTER V2",
+    })
+
+
+# ============================================================
+# CHECK IP
+# ============================================================
+
+@web_app.route(
+    "/check-ip",
+    methods=["GET"],
+)
+def check_ip():
+
+    forwarded_for = (
+        request.headers.get(
+            "X-Forwarded-For"
+        )
+        or ""
     )
 
-
-# ============================================================
-# TELEGRAM MESSAGE HANDLER
-# ============================================================
-
-async def menu_handler(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
-    if not update.message:
-        return
-
-    text = update.message.text
-    step = context.user_data.get("step")
-
-    # ========================================================
-    # BOT REGISTRATION
-    # ========================================================
-
-    if step == "full_name":
-        context.user_data["full_name"] = text
-        context.user_data["step"] = "phone"
-
-        await update.message.reply_text(
-            "📱 Please enter your Phone Number:"
+    real_ip = (
+        request.headers.get(
+            "X-Real-IP"
         )
-        return
-
-    if step == "phone":
-        context.user_data["phone"] = text
-        context.user_data["step"] = "email"
-
-        await update.message.reply_text(
-            "📧 Please enter your Email Address:"
-        )
-        return
-
-    if step == "email":
-        context.user_data["email"] = text
-        context.user_data["step"] = "course"
-
-        await update.message.reply_text(
-            "📚 Please type your Course."
-        )
-        return
-
-    if step == "course":
-        context.user_data["course"] = text
-
-        data = {
-            "telegram_id": update.effective_user.id,
-            "username": update.effective_user.username or "",
-            "full_name": context.user_data.get(
-                "full_name",
-                "",
-            ),
-            "phone": context.user_data.get(
-                "phone",
-                "",
-            ),
-            "email": context.user_data.get(
-                "email",
-                "",
-            ),
-            "course": context.user_data.get(
-                "course",
-                "",
-            ),
-        }
-
-        save_registration_to_google_sheets(data)
-
-        full_name = data["full_name"]
-        context.user_data.clear()
-
-        await update.message.reply_text(
-            "✅ *REGISTRATION COMPLETED*\n\n"
-            f"👤 Name: {full_name}\n\n"
-            "🎓 Thank you for registering with "
-            "ALHIKAM Learning Center.",
-            parse_mode="Markdown",
-        )
-        return
-
-    # ========================================================
-    # STUDENT REGISTRATION
-    # ========================================================
-
-    if text == "👤 Student Registration":
-        context.user_data.clear()
-        context.user_data["step"] = "full_name"
-
-        await update.message.reply_text(
-            "👤 *STUDENT REGISTRATION*\n\n"
-            "Please enter your Full Name.\n\n"
-            "Type /cancel to cancel.",
-            parse_mode="Markdown",
-        )
-        return
-
-    # ========================================================
-    # COURSES
-    # ========================================================
-
-    if text == "📚 Courses":
-        await update.message.reply_text(
-            "📚 *ALHIKAM COURSES*\n\n"
-            "Please select a course:",
-            parse_mode="Markdown",
-            reply_markup=ReplyKeyboardMarkup(
-                COURSE_MENU,
-                resize_keyboard=True,
-            ),
-        )
-        return
-
-    if text == "🎯 JAMB Science":
-        await update.message.reply_text(
-            "🎯 *JAMB SCIENCE*\n\n"
-            "• Mathematics\n"
-            "• English Language\n"
-            "• Physics\n"
-            "• Chemistry\n"
-            "• Biology\n"
-            "• Agricultural Science",
-            parse_mode="Markdown",
-        )
-        return
-
-    if text == "🎨 JAMB Arts":
-        await update.message.reply_text(
-            "🎨 *JAMB ARTS*\n\n"
-            "• Use of English\n"
-            "• Literature in English\n"
-            "• Government\n"
-            "• Economics\n"
-            "• History\n"
-            "• Hausa\n"
-            "• Islamic Studies\n"
-            "• CRS\n"
-            "• Fine Arts",
-            parse_mode="Markdown",
-        )
-        return
-
-    if text == "📘 WAEC":
-        await update.message.reply_text(
-            "📘 *WAEC PREPARATION*\n\n"
-            "📚 Study materials\n"
-            "📝 Practice questions\n"
-            "💻 CBT training\n"
-            "🎓 Examination guidance",
-            parse_mode="Markdown",
-        )
-        return
-
-    if text == "📕 NECO":
-        await update.message.reply_text(
-            "📕 *NECO PREPARATION*\n\n"
-            "📚 Study materials\n"
-            "📝 Practice questions\n"
-            "💻 CBT training\n"
-            "🎓 Examination guidance",
-            parse_mode="Markdown",
-        )
-        return
-
-    if text == "💻 CBT Training":
-        await update.message.reply_text(
-            "💻 *CBT TRAINING*\n\n"
-            "📝 Practice Questions\n"
-            "⏱️ Timed Tests\n"
-            "📊 Results and Scores\n\n"
-            "🚧 CBT system is under development.",
-            parse_mode="Markdown",
-        )
-        return
-
-    if text == "🔙 Back to Main Menu":
-        await update.message.reply_text(
-            "🏠 *MAIN MENU*",
-            parse_mode="Markdown",
-            reply_markup=ReplyKeyboardMarkup(
-                MAIN_MENU,
-                resize_keyboard=True,
-            ),
-        )
-        return
-
-    # ========================================================
-    # CBT
-    # ========================================================
-
-    if text == "📝 CBT Practice":
-        await update.message.reply_text(
-            "📝 *CBT PRACTICE*\n\n"
-            "JAMB • WAEC • NECO\n\n"
-            "🚧 This feature is under development.",
-            parse_mode="Markdown",
-        )
-        return
-
-    # ========================================================
-    # PAYMENT
-    # ========================================================
-
-    if text == "💳 Pay School Fees":
-        await update.message.reply_text(
-            "💳 *ALHIKAM SCHOOL FEES PAYMENT*\n\n"
-            "Click below to open the payment page.\n\n"
-            "After successful payment, you will connect "
-            "your Telegram account and complete registration.",
-            parse_mode="Markdown",
-            reply_markup=InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton(
-                        "💳 OPEN PAYMENT PAGE",
-                        url=PUBLIC_PAYMENT_PAGE,
-                    )
-                ]
-            ]),
-        )
-        return
-
-    # ========================================================
-    # CONTACT
-    # ========================================================
-
-    if text == "📞 Contact Us":
-        await update.message.reply_text(
-            "📞 *CONTACT US*\n\n"
-            "🎓 ALHIKAM Learning Center\n\n"
-            "JAMB • WAEC • NECO • CBT Training",
-            parse_mode="Markdown",
-        )
-        return
-
-    # ========================================================
-    # ABOUT
-    # ========================================================
-
-    if text == "ℹ️ About Us":
-        await update.message.reply_text(
-            "🎓 *ALHIKAM Learning Center*\n\n"
-            "JAMB • WAEC • NECO • CBT Training\n\n"
-            "We provide educational support "
-            "and examination preparation for students.",
-            parse_mode="Markdown",
-        )
-        return
-
-    await update.message.reply_text(
-        "❓ Please choose an option from the menu."
+        or ""
     )
 
+    remote_addr = (
+        request.remote_addr
+        or ""
+    )
+
+    return jsonify({
+        "remote_addr": remote_addr,
+        "real_ip": real_ip,
+        "x_forwarded_for": forwarded_for,
+    })
+
 
 # ============================================================
-# MAIN
+# BOT STARTER
 # ============================================================
 
-def main():
-    global telegram_bot_app
+def start_telegram_bot():
+    """
+    Start bot.py as a background process.
+
+    The bot remains separate from Flask.
+    """
 
     if not BOT_TOKEN:
-        raise ValueError("BOT_TOKEN is missing.")
 
-    if not FLW_SECRET_KEY:
-        raise ValueError("FLW_SECRET_KEY is missing.")
-
-    if not FLUTTERWAVE_SECRET_HASH:
-        raise ValueError(
-            "FLUTTERWAVE_SECRET_HASH is missing."
+        logger.warning(
+            "BOT_TOKEN is not configured. Telegram bot will not start."
         )
 
-    # Start Flask
-    web_thread = threading.Thread(
-        target=run_web_server,
-        daemon=True,
-    )
-    web_thread.start()
+        return
 
-    # Telegram bot
-    telegram_bot_app = (
-        Application
-        .builder()
-        .token(BOT_TOKEN)
-        .build()
-    )
+    try:
 
-    telegram_bot_app.add_handler(
-        CommandHandler("start", start)
-    )
-
-    telegram_bot_app.add_handler(
-        CommandHandler("cancel", cancel)
-    )
-
-    telegram_bot_app.add_handler(
-        MessageHandler(
-            filters.TEXT & ~filters.COMMAND,
-            menu_handler,
+        bot_file = os.path.join(
+            os.path.dirname(
+                os.path.abspath(__file__)
+            ),
+            "bot.py",
         )
-    )
 
-    print("================================")
-    print("ALHIKAM Learning Center Bot Running")
-    print("Payment Page:", PUBLIC_PAYMENT_PAGE)
-    print(
-        "Flutterwave Webhook:",
-        f"{RAILWAY_URL}/webhook/flutterwave",
-    )
-    print(
-        "Telegram Login Domain:",
-        RAILWAY_URL,
-    )
-    print("Registration Flow: ENABLED")
-    print("Google Sheets: ENABLED")
-    print("Unique Telegram Invite: ENABLED")
-    print("Automatic Telegram ID: ENABLED")
-    print("Main Group ID:", MAIN_GROUP_ID)
-    print("================================")
+        if not os.path.exists(bot_file):
 
-    telegram_bot_app.run_polling(
-        drop_pending_updates=True,
-        close_loop=False,
-    )
+            logger.warning(
+                "bot.py was not found: %s",
+                bot_file,
+            )
 
+            return
+
+        logger.info(
+            "Starting Telegram bot..."
+        )
+
+        subprocess.Popen(
+            [
+                sys.executable,
+                bot_file,
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.STDOUT,
+        )
+
+        logger.info(
+            "Telegram bot process started."
+        )
+
+    except Exception as e:
+
+        logger.exception(
+            "Unable to start Telegram bot: %s",
+            e,
+        )
+
+
+# ============================================================
+# BOT THREAD
+# ============================================================
+
+def launch_bot_once():
+
+    try:
+
+        # Small delay allows Flask/Railway service
+        # to finish starting.
+        time.sleep(3)
+
+        start_telegram_bot()
+
+    except Exception as e:
+
+        logger.exception(
+            "Bot launcher error: %s",
+            e,
+        )
+
+
+# ============================================================
+# START APPLICATION
+# ============================================================
 
 if __name__ == "__main__":
-    main()
+
+    logger.info(
+        "Starting ALHIKAM LEARNING CENTER V2..."
+    )
+
+    # --------------------------------------------------------
+    # Start Telegram bot in background
+    # --------------------------------------------------------
+
+    bot_thread = threading.Thread(
+        target=launch_bot_once,
+        daemon=True,
+    )
+
+    bot_thread.start()
+
+    # --------------------------------------------------------
+    # Railway provides PORT automatically
+    # --------------------------------------------------------
+
+    port = int(
+        os.getenv(
+            "PORT",
+            "5000",
+        )
+    )
+
+    host = "0.0.0.0"
+
+    logger.info(
+        "Flask server starting on %s:%s",
+        host,
+        port,
+    )
+
+    web_app.run(
+        host=host,
+        port=port,
+        debug=False,
+        use_reloader=False,
+    )
