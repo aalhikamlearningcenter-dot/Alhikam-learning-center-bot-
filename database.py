@@ -102,13 +102,21 @@ def verify_password(
     password_hash
 ):
 
-    if not password_hash:
+    if password_hash is None:
+        return False
+
+    if password is None:
         return False
 
     return (
         hash_password(password)
         == password_hash
     )
+
+
+def generate_withdrawal_code():
+
+    return secrets.token_hex(4).upper()
 
 
 # ==========================================================
@@ -155,13 +163,13 @@ def verify_promoter_password(
         ).fetchone()
 
         if not promoter:
-
             return False
 
-        stored_hash = promoter["password_hash"]
+        stored_hash = promoter[
+            "password_hash"
+        ]
 
         if not stored_hash:
-
             return False
 
         return verify_password(
@@ -174,9 +182,67 @@ def verify_promoter_password(
         conn.close()
 
 
-def generate_withdrawal_code():
+# ==========================================================
+# VERIFY PROMOTER WITHDRAWAL CODE
+#
+# COMPATIBILITY FUNCTION
+#
+# Used by referral_dashboard.py
+# ==========================================================
 
-    return secrets.token_hex(4).upper()
+def verify_promoter_withdrawal_code(
+    promoter_id,
+    withdrawal_code
+):
+
+    if not promoter_id:
+        return False
+
+    if withdrawal_code is None:
+        return False
+
+    withdrawal_code = str(
+        withdrawal_code
+    )
+
+    if not withdrawal_code:
+        return False
+
+    conn = get_connection()
+
+    try:
+
+        promoter = conn.execute(
+            """
+            SELECT withdrawal_code_hash
+
+            FROM promoters
+
+            WHERE id = ?
+
+            LIMIT 1
+            """,
+            (promoter_id,)
+        ).fetchone()
+
+        if not promoter:
+            return False
+
+        stored_hash = promoter[
+            "withdrawal_code_hash"
+        ]
+
+        if not stored_hash:
+            return False
+
+        return verify_password(
+            withdrawal_code,
+            stored_hash
+        )
+
+    finally:
+
+        conn.close()
 
 
 # ==========================================================
