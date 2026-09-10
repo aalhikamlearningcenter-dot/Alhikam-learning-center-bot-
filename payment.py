@@ -1,4 +1,3 @@
-
 # ==========================================================
 # ALHIKAM LEARNING CENTER V2
 # payment.py
@@ -32,7 +31,6 @@ FLUTTERWAVE_VERIFY_URL = (
 PAYMENT_HTML = """
 
 <!DOCTYPE html>
-
 <html>
 
 <head>
@@ -139,7 +137,6 @@ button:hover{
 🎓 ALHIKAM Learning Center
 </h2>
 
-
 <div class="telegram">
 
 <b>📱 Telegram Connected</b>
@@ -150,7 +147,6 @@ Your Telegram account will be connected
 to your ALHIKAM registration automatically.
 
 </div>
-
 
 <div class="info">
 
@@ -163,12 +159,8 @@ redirected automatically to registration.
 
 </div>
 
-
 <form method="POST"
       action="/create-payment">
-
-
-<!-- TELEGRAM DATA -->
 
 <input
 type="hidden"
@@ -187,9 +179,6 @@ type="hidden"
 name="telegram_username"
 value="{{ telegram_username }}"
 >
-
-
-<!-- REFERRAL -->
 
 <div class="referral">
 
@@ -223,8 +212,6 @@ placeholder="Enter referral code if you have one"
 </div>
 
 
-<!-- PLAN 1 -->
-
 <div class="plan">
 
 <label>
@@ -245,8 +232,6 @@ required
 </div>
 
 
-<!-- PLAN 2 -->
-
 <div class="plan">
 
 <label>
@@ -265,8 +250,6 @@ value="2"
 
 </div>
 
-
-<!-- PLAN 3 -->
 
 <div class="plan">
 
@@ -287,8 +270,6 @@ value="3"
 </div>
 
 
-<!-- PLAN 4 -->
-
 <div class="plan">
 
 <label>
@@ -308,8 +289,6 @@ value="4"
 </div>
 
 
-<!-- PLAN 5 -->
-
 <div class="plan">
 
 <label>
@@ -328,8 +307,6 @@ value="5"
 
 </div>
 
-
-<!-- PLAN 6 -->
 
 <div class="plan">
 
@@ -405,6 +382,8 @@ def create_flutterwave_payment(
     # Validate plan
     # ------------------------------------------------------
 
+    plan_id = str(plan_id).strip()
+
     if plan_id not in PAYMENT_PLANS:
 
         print(
@@ -438,27 +417,24 @@ def create_flutterwave_payment(
 
 
     # ------------------------------------------------------
-    # Callback URL
-    #
-    # Telegram data is included so it can be recovered
-    # after Flutterwave redirects the student.
+    # CALLBACK URL
     # ------------------------------------------------------
 
     callback_params = {
 
-    "tx_ref":
-        tx_ref,
+        "tx_ref":
+            tx_ref,
 
-    "telegram_id":
-        telegram_id or "",
+        "telegram_id":
+            telegram_id or "",
 
-    "telegram_name":
-        telegram_name or "",
+        "telegram_name":
+            telegram_name or "",
 
-    "telegram_username":
-        telegram_username or "",
+        "telegram_username":
+            telegram_username or "",
 
-}
+    }
 
 
     callback_url = (
