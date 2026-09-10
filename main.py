@@ -1213,7 +1213,7 @@ def payment_status(payment_token):
         or ""
     ).strip()
 
-    verified_payment, result = _verify_and_finalize_payment(
+    verified_payment = _verify_and_finalize_payment(
         payment_token,
         transaction_id or None,
     )
@@ -1224,7 +1224,9 @@ def payment_status(payment_token):
             "redirect": f"/register/{payment_token}",
         })
 
-    if result == "transaction_not_successful":
+    refreshed = _payment_from_token(payment_token) or verified_payment
+
+    if refreshed and str(refreshed.get("status") or "").lower() in {"failed", "cancelled", "canceled"}:
         return jsonify({"status": "failed"})
 
     return jsonify({
