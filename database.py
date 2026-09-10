@@ -984,9 +984,110 @@ def save_payment(
     telegram_username=None
 ):
 
+    # --------------------------------------------------------
+    # COMPATIBILITY:
+    # main.py may send the whole payment data as a dictionary.
+    # Convert it to the normal variables expected below.
+    # --------------------------------------------------------
+
+    if isinstance(tx_ref, dict):
+
+        payment_data = tx_ref
+
+        tx_ref = (
+            payment_data.get("tx_ref")
+            or payment_data.get("payment_token")
+            or payment_data.get("transaction_reference")
+        )
+
+        transaction_id = (
+            payment_data.get("transaction_id")
+            or payment_data.get("id")
+            or transaction_id
+        )
+
+        amount = payment_data.get(
+            "amount",
+            amount
+        )
+
+        currency = payment_data.get(
+            "currency",
+            currency
+        )
+
+        payment_plan = (
+            payment_data.get("payment_plan")
+            or payment_data.get("plan")
+            or payment_plan
+        )
+
+        payment_status = (
+            payment_data.get("payment_status")
+            or payment_data.get("status")
+            or payment_status
+        )
+
+        referral_code = (
+            payment_data.get("referral_code")
+            or referral_code
+        )
+
+        promoter_id = (
+            payment_data.get("promoter_id")
+            or promoter_id
+        )
+
+        telegram_id = (
+            payment_data.get("telegram_id")
+            or telegram_id
+        )
+
+        telegram_name = (
+            payment_data.get("telegram_name")
+            or telegram_name
+        )
+
+        telegram_username = (
+            payment_data.get("telegram_username")
+            or telegram_username
+        )
+
+    # --------------------------------------------------------
+    # TX REF MUST EXIST
+    # --------------------------------------------------------
+
+    if not tx_ref:
+
+        raise ValueError(
+            "Payment tx_ref is missing"
+        )
+
+    # --------------------------------------------------------
+    # NORMALIZE VALUES
+    # --------------------------------------------------------
+
+    tx_ref = str(tx_ref).strip()
+
+    if transaction_id is not None:
+        transaction_id = str(transaction_id)
+
+    if amount is None:
+        amount = 0
+
+    if currency is None:
+        currency = "NGN"
+
+    if payment_status is None:
+        payment_status = "pending"
+
     conn = get_connection()
 
     try:
+
+        # ----------------------------------------------------
+        # CHECK EXISTING PAYMENT
+        # ----------------------------------------------------
 
         existing = conn.execute(
             """
@@ -999,6 +1100,10 @@ def save_payment(
         ).fetchone()
 
         now = datetime.utcnow().isoformat()
+
+        # ----------------------------------------------------
+        # UPDATE EXISTING PAYMENT
+        # ----------------------------------------------------
 
         if existing:
 
@@ -1038,6 +1143,10 @@ def save_payment(
             )
 
             payment_id = existing["id"]
+
+        # ----------------------------------------------------
+        # CREATE NEW PAYMENT
+        # ----------------------------------------------------
 
         else:
 
@@ -1164,6 +1273,9 @@ def update_payment_status(
     finally:
 
         conn.close()
+
+
+# ============================================================
 
 
 # ============================================================
