@@ -41,9 +41,9 @@ from database import (
     set_promoter_password,
 )
 
-
 from transfer import (
     get_flutterwave_transfer_status,
+    get_flutterwave_transfer_status_by_reference,
 )
 
 
@@ -170,6 +170,96 @@ def mask_account_number(account_number):
         "*" * (len(value) - 4)
         + value[-4:]
     )
+
+
+# ============================================================
+# FORMAT WITHDRAWAL STATUS
+# ============================================================
+
+def format_withdrawal_status(status):
+
+    # --------------------------------------------------------
+    # IMPORTANT:
+    # Sometimes an old withdrawal record may contain a Python
+    # dictionary instead of only the status string.
+    #
+    # Example:
+    #
+    # {
+    #   "success": false,
+    #   "uncertain": true,
+    #   "status": "processing"
+    # }
+    #
+    # Extract only the actual status.
+    # --------------------------------------------------------
+
+    if isinstance(
+        status,
+        dict
+    ):
+
+        status = status.get(
+            "status",
+            "UNKNOWN"
+        )
+
+    status = str(
+        status or "UNKNOWN"
+    ).strip().upper()
+
+    # --------------------------------------------------------
+    # SUCCESS
+    # --------------------------------------------------------
+
+    if status in (
+        "SUCCESS",
+        "SUCCESSFUL",
+        "COMPLETED",
+    ):
+
+        return "✅ Successful"
+
+    # --------------------------------------------------------
+    # FAILED
+    # --------------------------------------------------------
+
+    if status in (
+        "FAILED",
+        "REJECTED",
+    ):
+
+        return "❌ Failed"
+
+    # --------------------------------------------------------
+    # CANCELLED
+    # --------------------------------------------------------
+
+    if status in (
+        "CANCELLED",
+        "CANCELED",
+    ):
+
+        return "❌ Cancelled"
+
+    # --------------------------------------------------------
+    # PROCESSING
+    # --------------------------------------------------------
+
+    if status in (
+        "PROCESSING",
+        "PENDING",
+        "NEW",
+        "QUEUED",
+    ):
+
+        return "⏳ Processing"
+
+    # --------------------------------------------------------
+    # UNKNOWN
+    # --------------------------------------------------------
+
+    return "⚠️ Verification Required"
 
 
 # ============================================================
@@ -797,6 +887,8 @@ th{
 .status{
 
     font-weight:bold;
+
+    white-space:nowrap;
 
 }
 
@@ -1746,7 +1838,9 @@ No promoters found.
 </td>
 
 <td class="status">
-{{ withdrawal["status"] }}
+{{ format_withdrawal_status(
+    withdrawal["status"]
+) }}
 </td>
 
 <td>
@@ -1867,6 +1961,9 @@ def admin_referral_page():
 
         mask_account_number=
             mask_account_number,
+
+        format_withdrawal_status=
+            format_withdrawal_status,
 
     )
 
@@ -2198,6 +2295,10 @@ def admin_withdrawal_status_page():
             400,
         )
 
+    # --------------------------------------------------------
+    # GET WITHDRAWAL
+    # --------------------------------------------------------
+
     withdrawal = get_withdrawal_by_id(
         withdrawal_id
     )
@@ -2209,6 +2310,10 @@ def admin_withdrawal_status_page():
             404,
         )
 
+    # --------------------------------------------------------
+    # GET TRANSFER ID
+    # --------------------------------------------------------
+
     transfer_id = str(
         withdrawal.get(
             "transfer_id"
@@ -2216,7 +2321,81 @@ def admin_withdrawal_status_page():
         or ""
     ).strip()
 
-    if not transfer_id:
+    # --------------------------------------------------------
+    # GET TRANSFER REFERENCE
+    #
+    # This supports withdrawals where transfer_id is not yet
+    # available but Flutterwave reference is available.
+    # --------------------------------------------------------
+
+    reference = str(
+        withdrawal.get(
+            "reference"
+        )
+        or ""
+    ).strip()
+
+    result = None
+
+    # --------------------------------------------------------
+    # OPTION 1:
+    # CHECK BY TRANSFER ID
+    # --------------------------------------------------------
+
+    if transfer_id:
+
+        try:
+
+            result = (
+                get_flutterwave_transfer_status(
+                    transfer_id
+                )
+            )
+
+        except Exception:
+
+            logger.exception(
+                "Flutterwave transfer status "
+                "check by ID failed."
+            )
+
+            result = None
+
+    # --------------------------------------------------------
+    # OPTION 2:
+    # CHECK BY REFERENCE
+    #
+    # Important for cases such as:
+    #
+    # transfer_id = None
+    # reference = alhikam-wd-1
+    #
+    # --------------------------------------------------------
+
+    elif reference:
+
+        try:
+
+            result = (
+                get_flutterwave_transfer_status_by_reference(
+                    reference
+                )
+            )
+
+        except Exception:
+
+            logger.exception(
+                "Flutterwave transfer status "
+                "check by reference failed."
+            )
+
+            result = None
+
+    # --------------------------------------------------------
+    # NOTHING TO CHECK
+    # --------------------------------------------------------
+
+    if not result:
 
         return redirect(
             url_for(
@@ -2224,36 +2403,103 @@ def admin_withdrawal_status_page():
             )
         )
 
-    try:
+    # --------------------------------------------------------
+    # NORMALIZE RESULT
+    # --------------------------------------------------------
 
-        result = (
-            get_flutterwave_transfer_status(
-                transfer_id
+    if isinstance(
+        result,
+        dict
+    ):
+
+        status = str(
+            result.get(
+                "status"
             )
+            or "PROCESSING"
+        ).strip().upper()
+
+        message = str(
+            result.get(
+                "message"
+            )
+            or ""
+        ).strip()
+
+        new_transfer_id = str(
+            result.get(
+                "transfer_id"
+            )
+            or ""
+        ).strip()
+
+    else:
+
+        status = "PROCESSING"
+
+        message = (
+            "Transfer status could not be confirmed."
         )
 
-    except Exception:
+        new_transfer_id = ""
 
-        logger.exception(
-            "Flutterwave transfer status check failed"
+    # --------------------------------------------------------
+    # LOG NEW TRANSFER ID
+    #
+    # We do not directly modify the database schema here.
+    # The existing database update function remains untouched.
+    # --------------------------------------------------------
+
+    if new_transfer_id:
+
+        logger.info(
+            "Flutterwave transfer ID confirmed. "
+            "Withdrawal=%s TransferID=%s",
+            withdrawal_id,
+            new_transfer_id,
         )
 
-        result = None
+    # --------------------------------------------------------
+    # UPDATE DATABASE STATUS
+    # --------------------------------------------------------
 
-    if result:
+    try:
 
         update_withdrawal_status(
 
             withdrawal_id=withdrawal_id,
 
-            status=result.get(
-                "status"
-            ),
+            status=status,
 
-            message=result.get(
-                "message"
-            ),
+            message=message,
 
+        )
+
+    except TypeError:
+
+        # Compatibility with older positional version
+        try:
+
+            update_withdrawal_status(
+
+                withdrawal_id,
+
+                status,
+
+                message,
+
+            )
+
+        except Exception:
+
+            logger.exception(
+                "Could not update withdrawal status."
+            )
+
+    except Exception:
+
+        logger.exception(
+            "Could not update withdrawal status."
         )
 
     return redirect(
