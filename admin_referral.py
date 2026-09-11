@@ -73,8 +73,6 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 
 ADMIN_SESSION_KEY = "alhikam_admin_logged_in"
 ADMIN_CSRF_KEY = "alhikam_admin_csrf"
-
-# One-time promoter creation result
 ADMIN_CREATED_PROMOTER_KEY = "alhikam_created_promoter"
 
 
@@ -83,7 +81,6 @@ ADMIN_CREATED_PROMOTER_KEY = "alhikam_created_promoter"
 # ============================================================
 
 def admin_logged_in():
-
     return bool(
         session.get(
             ADMIN_SESSION_KEY
@@ -149,7 +146,6 @@ def check_admin_csrf():
     )
 
     if not submitted or not expected:
-
         return False
 
     return secrets.compare_digest(
@@ -169,7 +165,6 @@ def mask_account_number(account_number):
     )
 
     if len(value) <= 4:
-
         return "****"
 
     return (
@@ -185,12 +180,7 @@ def mask_account_number(account_number):
 def format_withdrawal_status(status):
 
     if status is None:
-
         return "⚠️ Verification Required"
-
-    # --------------------------------------------------------
-    # If status is already a dictionary
-    # --------------------------------------------------------
 
     if isinstance(status, dict):
 
@@ -204,7 +194,6 @@ def format_withdrawal_status(status):
     ).strip()
 
     if not status:
-
         return "⚠️ Verification Required"
 
     normalized = status.lower()
@@ -219,7 +208,6 @@ def format_withdrawal_status(status):
         "completed",
         "complete",
     ):
-
         return "✅ Successful"
 
     # --------------------------------------------------------
@@ -232,7 +220,6 @@ def format_withdrawal_status(status):
         "rejected",
         "error",
     ):
-
         return "❌ Failed"
 
     # --------------------------------------------------------
@@ -243,7 +230,6 @@ def format_withdrawal_status(status):
         "cancelled",
         "canceled",
     ):
-
         return "🚫 Cancelled"
 
     # --------------------------------------------------------
@@ -258,11 +244,10 @@ def format_withdrawal_status(status):
         "in_progress",
         "in-progress",
     ):
-
         return "⏳ Processing"
 
     # --------------------------------------------------------
-    # OLD RAW DICTIONARY STRING
+    # RAW DICTIONARY STRING
     # --------------------------------------------------------
 
     if (
@@ -271,7 +256,6 @@ def format_withdrawal_status(status):
         or "'status':'processing'" in normalized
         or '"status":"processing"' in normalized
     ):
-
         return "⏳ Processing"
 
     if (
@@ -280,7 +264,6 @@ def format_withdrawal_status(status):
         or "'status':'pending'" in normalized
         or '"status":"pending"' in normalized
     ):
-
         return "⏳ Processing"
 
     if (
@@ -289,7 +272,6 @@ def format_withdrawal_status(status):
         or "'status':'successful'" in normalized
         or '"status":"successful"' in normalized
     ):
-
         return "✅ Successful"
 
     if (
@@ -298,7 +280,6 @@ def format_withdrawal_status(status):
         or "'status':'failed'" in normalized
         or '"status":"failed"' in normalized
     ):
-
         return "❌ Failed"
 
     if (
@@ -307,12 +288,7 @@ def format_withdrawal_status(status):
         or "'status':'cancelled'" in normalized
         or '"status":"cancelled"' in normalized
     ):
-
         return "🚫 Cancelled"
-
-    # --------------------------------------------------------
-    # UNKNOWN
-    # --------------------------------------------------------
 
     return "⚠️ Verification Required"
 
@@ -324,15 +300,16 @@ def format_withdrawal_status(status):
 ADMIN_LOGIN_HTML = """
 
 <!DOCTYPE html>
-
 <html>
 
 <head>
 
 <meta charset="UTF-8">
 
-<meta name="viewport"
-      content="width=device-width, initial-scale=1.0">
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+>
 
 <title>ALHIKAM Admin Login</title>
 
@@ -604,7 +581,6 @@ def admin_logout_page():
 ADMIN_DASHBOARD_HTML = """
 
 <!DOCTYPE html>
-
 <html>
 
 <head>
@@ -803,7 +779,7 @@ Admin Referral Dashboard
 
 <form
     method="POST"
-    action="{{ url_for('admin_logout') }}"
+    action="{{ url_for('admin_referral_logout') }}"
 >
 
 <input
@@ -1242,9 +1218,7 @@ The promoter referral code is automatically included.
 <tr>
 
 <td colspan="10">
-
 No promoters found.
-
 </td>
 
 </tr>
@@ -1370,9 +1344,7 @@ No promoters found.
 <tr>
 
 <td colspan="8">
-
 No withdrawal requests found.
-
 </td>
 
 </tr>
@@ -1410,19 +1382,13 @@ def admin_referral_page():
 
     base_url = request.url_root.rstrip("/")
 
-    # General payment link
-
     payment_link = (
         f"{base_url}/pay"
     )
 
-    # General promoter dashboard
-
     promoter_dashboard_link = (
         f"{base_url}/referral/dashboard"
     )
-
-    # Get one-time creation result
 
     created_promoter = session.pop(
         ADMIN_CREATED_PROMOTER_KEY,
@@ -1582,8 +1548,6 @@ def create_promoter_page():
 
     except TypeError:
 
-        # Compatibility with older positional version
-
         try:
 
             promoter = add_promoter(
@@ -1651,8 +1615,6 @@ def create_promoter_page():
 
         else:
 
-            # Older database compatibility
-
             promoter_id = promoter
 
             referral_code = ""
@@ -1668,7 +1630,7 @@ def create_promoter_page():
             password,
         )
 
-    except Exception as e:
+    except Exception:
 
         logger.exception(
             "Setting promoter password failed"
@@ -1717,10 +1679,6 @@ def create_promoter_page():
 
 @admin_required
 def admin_withdrawal_status_page():
-
-    # ========================================================
-    # POST ONLY
-    # ========================================================
 
     if request.method != "POST":
 
@@ -1788,9 +1746,7 @@ def admin_withdrawal_status_page():
         )
 
     # ========================================================
-    # GET TRANSFER ID
-    #
-    # sqlite3.Row MUST be accessed using ["column"]
+    # TRANSFER ID
     # ========================================================
 
     try:
@@ -1809,17 +1765,7 @@ def admin_withdrawal_status_page():
     ).strip()
 
     # ========================================================
-    # GET TRANSFER REFERENCE
-    #
-    # IMPORTANT:
-    #
-    # Database column is:
-    #
-    # transfer_reference
-    #
-    # NOT:
-    #
-    # reference
+    # TRANSFER REFERENCE
     # ========================================================
 
     try:
@@ -1840,7 +1786,6 @@ def admin_withdrawal_status_page():
     result = None
 
     # ========================================================
-    # OPTION 1:
     # CHECK BY TRANSFER ID
     # ========================================================
 
@@ -1864,7 +1809,6 @@ def admin_withdrawal_status_page():
             result = None
 
     # ========================================================
-    # OPTION 2:
     # CHECK BY TRANSFER REFERENCE
     # ========================================================
 
@@ -1924,7 +1868,7 @@ def admin_withdrawal_status_page():
         )
 
     # ========================================================
-    # NORMALIZE FLUTTERWAVE RESULT
+    # NORMALIZE RESULT
     # ========================================================
 
     if isinstance(
@@ -2022,7 +1966,8 @@ def admin_withdrawal_status_page():
 
     else:
 
-        # Unknown status must NOT be treated as failed.
+        # IMPORTANT:
+        # Unknown status is NOT failed.
 
         final_status = "processing"
 
@@ -2034,7 +1979,7 @@ def admin_withdrawal_status_page():
             )
 
     # ========================================================
-    # SAVE TRANSFER ID / REFERENCE
+    # SAVE TRANSFER INFORMATION
     # ========================================================
 
     try:
@@ -2064,8 +2009,6 @@ def admin_withdrawal_status_page():
         )
 
     except TypeError:
-
-        # Compatibility with older positional version
 
         try:
 
@@ -2104,21 +2047,7 @@ def admin_withdrawal_status_page():
         )
 
     # ========================================================
-    # PROCESS FINAL STATUS
-    #
-    # PROCESSING:
-    #   Do NOT change promoter balance.
-    #
-    # SUCCESSFUL:
-    #   update_withdrawal_status() increments withdrawn.
-    #
-    # FAILED/CANCELLED:
-    #   update_withdrawal_status() restores
-    #   promoter available balance.
-    #
-    # The database function also checks the previous
-    # status, so refreshing the same successful/failed
-    # withdrawal again will not double-process it.
+    # FINAL STATUS PROCESSING
     # ========================================================
 
     if final_status in (
@@ -2170,7 +2099,7 @@ def admin_withdrawal_status_page():
             )
 
     # ========================================================
-    # LOG RESULT
+    # LOG
     # ========================================================
 
     logger.info(
@@ -2178,15 +2107,12 @@ def admin_withdrawal_status_page():
         "withdrawal=%s status=%s "
         "transfer_id=%s reference=%s",
         withdrawal_id,
-
         final_status,
-
         (
             new_transfer_id
             or transfer_id
             or "none"
         ),
-
         (
             new_reference
             or transfer_reference
