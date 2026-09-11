@@ -109,7 +109,6 @@ web_app.secret_key = os.getenv(
 # ============================================================
 
 try:
-
     initialize_database()
 
     logger.info(
@@ -117,7 +116,6 @@ try:
     )
 
 except Exception as e:
-
     logger.exception(
         "Database initialization failed: %s",
         e,
@@ -134,17 +132,11 @@ PAYMENT_SESSIONS = {}
 # ============================================================
 
 COMMISSION_BY_AMOUNT = {
-
     3600: 200,
-
     6800: 500,
-
     10000: 800,
-
     13600: 1200,
-
     16500: 1800,
-
     20000: 2500,
 }
 
@@ -164,23 +156,16 @@ def row_to_dict(row):
         return dict(row)
 
     try:
-
         return dict(row)
-
     except Exception:
-
         pass
 
     result = {}
 
     try:
-
         for key in row.keys():
-
             result[key] = row[key]
-
     except Exception:
-
         pass
 
     return result
@@ -199,7 +184,6 @@ def get_value(
         return default
 
     try:
-
         value = data[key]
 
         if value is None:
@@ -208,11 +192,9 @@ def get_value(
         return value
 
     except Exception:
-
         pass
 
     try:
-
         value = data.get(
             key,
             default,
@@ -224,7 +206,6 @@ def get_value(
         return value
 
     except Exception:
-
         return default
 
 
@@ -234,7 +215,6 @@ def normalize_amount(value):
     """
 
     try:
-
         return int(
             round(
                 float(value)
@@ -242,7 +222,6 @@ def normalize_amount(value):
         )
 
     except Exception:
-
         return 0
 
 
@@ -254,17 +233,14 @@ def get_plan_amount(plan):
     plan = str(plan)
 
     if plan not in PAYMENT_PLANS:
-
         return None
 
     try:
-
         return normalize_amount(
             PAYMENT_PLANS[plan][1]
         )
 
     except Exception:
-
         return None
 
 
@@ -349,7 +325,6 @@ def payment_page():
         )
 
         if promoter is None:
-
             referral_code = ""
 
     return render_template_string(
@@ -484,9 +459,12 @@ def create_payment():
                     400,
                 )
 
-            promoter_dict = row_to_dict(
-                promoter
-            ) or {}
+            promoter_dict = (
+                row_to_dict(
+                    promoter
+                )
+                or {}
+            )
 
             promoter_id = get_value(
                 promoter_dict,
@@ -588,39 +566,17 @@ def create_payment():
         )
 
         payment_data = {
-
-            "tx_ref":
-                tx_ref,
-
-            "transaction_id":
-                None,
-
-            "payment_plan":
-                payment_plan,
-
-            "amount":
-                amount,
-
-            "status":
-                "pending",
-
-            "referral_code":
-                referral_code,
-
-            "promoter_id":
-                promoter_id,
-
-            "commission":
-                commission_amount,
-
-            "telegram_username":
-                telegram_username,
-
-            "telegram_id":
-                telegram_id,
-
-            "registration_completed":
-                0,
+            "tx_ref": tx_ref,
+            "transaction_id": None,
+            "payment_plan": payment_plan,
+            "amount": amount,
+            "status": "pending",
+            "referral_code": referral_code,
+            "promoter_id": promoter_id,
+            "commission": commission_amount,
+            "telegram_username": telegram_username,
+            "telegram_id": telegram_id,
+            "registration_completed": 0,
         }
 
         save_payment(
@@ -630,14 +586,9 @@ def create_payment():
         PAYMENT_SESSIONS[
             tx_ref
         ] = {
-
             **payment_data,
-
-            "payment_status":
-                "pending",
-
-            "plan":
-                payment_plan_name,
+            "payment_status": "pending",
+            "plan": payment_plan_name,
         }
 
         logger.info(
@@ -983,14 +934,16 @@ def payment_callback():
                 )
 
                 referral_code = ""
-
                 promoter_id = None
 
             else:
 
-                promoter_dict = row_to_dict(
-                    promoter
-                ) or {}
+                promoter_dict = (
+                    row_to_dict(
+                        promoter
+                    )
+                    or {}
+                )
 
                 promoter_id = get_value(
                     promoter_dict,
@@ -1007,7 +960,6 @@ def payment_callback():
         # ----------------------------------------------------
 
         commission_amount = 0
-
         commission_rate = 0
 
         if promoter_id:
@@ -1027,53 +979,33 @@ def payment_callback():
         # SAVE SUCCESSFUL PAYMENT
         # ----------------------------------------------------
 
-        save_payment({
-
-            "tx_ref":
-                tx_ref,
-
-            "transaction_id":
-                transaction_id,
-
-            "payment_plan":
-                payment_plan,
-
-            "amount":
-                original_amount,
-
-            "status":
-                "successful",
-
-            "referral_code":
-                referral_code,
-
-            "promoter_id":
-                promoter_id,
-
-            "commission":
-                commission_amount,
-
-            "telegram_username":
-                get_value(
+        save_payment(
+            {
+                "tx_ref": tx_ref,
+                "transaction_id": transaction_id,
+                "payment_plan": payment_plan,
+                "amount": original_amount,
+                "status": "successful",
+                "referral_code": referral_code,
+                "promoter_id": promoter_id,
+                "commission": commission_amount,
+                "telegram_username": get_value(
                     payment,
                     "telegram_username",
                     callback_telegram_username,
                 ),
-
-            "telegram_id":
-                get_value(
+                "telegram_id": get_value(
                     payment,
                     "telegram_id",
                     callback_telegram_id,
                 ),
-
-            "registration_completed":
-                get_value(
+                "registration_completed": get_value(
                     payment,
                     "registration_completed",
                     0,
                 ),
-        })
+            }
+        )
 
         # ----------------------------------------------------
         # UPDATE PAYMENT STATUS
@@ -1092,52 +1024,27 @@ def payment_callback():
         PAYMENT_SESSIONS[
             tx_ref
         ] = {
-
             **payment,
-
-            "tx_ref":
-                tx_ref,
-
-            "transaction_id":
-                transaction_id,
-
-            "amount":
-                original_amount,
-
-            "status":
-                "successful",
-
-            "payment_status":
-                "successful",
-
-            "payment_plan":
-                payment_plan,
-
-            "referral_code":
-                referral_code,
-
-            "promoter_id":
-                promoter_id,
-
-            "commission":
-                commission_amount,
-
-            "telegram_id":
-                get_value(
-                    payment,
-                    "telegram_id",
-                    callback_telegram_id,
-                ),
-
-            "telegram_username":
-                get_value(
-                    payment,
-                    "telegram_username",
-                    callback_telegram_username,
-                ),
-
-            "telegram_name":
-                callback_telegram_name,
+            "tx_ref": tx_ref,
+            "transaction_id": transaction_id,
+            "amount": original_amount,
+            "status": "successful",
+            "payment_status": "successful",
+            "payment_plan": payment_plan,
+            "referral_code": referral_code,
+            "promoter_id": promoter_id,
+            "commission": commission_amount,
+            "telegram_id": get_value(
+                payment,
+                "telegram_id",
+                callback_telegram_id,
+            ),
+            "telegram_username": get_value(
+                payment,
+                "telegram_username",
+                callback_telegram_username,
+            ),
+            "telegram_name": callback_telegram_name,
         }
 
         # ============================================================
@@ -1151,35 +1058,25 @@ def payment_callback():
 
             try:
 
-                # ----------------------------------------------------
+                # ------------------------------------------------
                 # CHECK DUPLICATE COMMISSION
-                #
-                # database.py expects:
-                # commission_exists(promoter_id, tx_ref)
-                # ----------------------------------------------------
+                # ------------------------------------------------
 
                 already_exists = commission_exists(
                     promoter_id,
-                    tx_ref
+                    tx_ref,
                 )
 
                 if not already_exists:
 
                     # ------------------------------------------------
                     # CREATE COMMISSION
-                    #
-                    # database.py expects:
-                    # create_commission(
-                    #     promoter_id,
-                    #     tx_ref,
-                    #     amount
-                    # )
                     # ------------------------------------------------
 
                     commission_id = create_commission(
                         promoter_id,
                         tx_ref,
-                        commission_amount
+                        commission_amount,
                     )
 
                     if commission_id:
@@ -1333,18 +1230,18 @@ def register():
 
         payment["tx_ref"] = tx_ref
 
-        # ============================================================
+        # ====================================================
         # PAYMENT STATUS CHECK
-        # ============================================================
+        # ====================================================
 
         payment_status = str(
             payment.get(
                 "payment_status",
-                ""
+                "",
             )
             or payment.get(
                 "status",
-                ""
+                "",
             )
             or ""
         ).strip().lower()
@@ -1374,9 +1271,9 @@ def register():
                 403,
             )
 
-        # ============================================================
+        # ====================================================
         # PAYMENT SESSION
-        # ============================================================
+        # ====================================================
 
         PAYMENT_SESSIONS[
             tx_ref
@@ -1607,18 +1504,23 @@ def admin_create_promoter():
 # ============================================================
 # ADMIN WITHDRAWAL STATUS
 # ============================================================
+#
+# IMPORTANT:
+# admin_referral.py sends withdrawal_id
+# inside POST form data.
+#
+# Therefore this route MUST NOT require
+# withdrawal_id in the URL.
+#
+# ============================================================
 
 @web_app.route(
-    "/admin/referral/withdrawal-status/<int:withdrawal_id>",
-    methods=["GET", "POST"],
+    "/admin/referral/withdrawal-status",
+    methods=["POST"],
 )
-def admin_withdrawal_status(
-    withdrawal_id
-):
+def admin_withdrawal_status():
 
-    return admin_withdrawal_status_page(
-        withdrawal_id
-    )
+    return admin_withdrawal_status_page()
 
 
 # ============================================================
@@ -1631,14 +1533,12 @@ def admin_withdrawal_status(
 )
 def health():
 
-    return jsonify({
-
-        "status":
-            "ok",
-
-        "service":
-            "ALHIKAM LEARNING CENTER V2",
-    })
+    return jsonify(
+        {
+            "status": "ok",
+            "service": "ALHIKAM LEARNING CENTER V2",
+        }
+    )
 
 
 # ============================================================
@@ -1670,17 +1570,13 @@ def check_ip():
         or ""
     )
 
-    return jsonify({
-
-        "remote_addr":
-            remote_addr,
-
-        "real_ip":
-            real_ip,
-
-        "x_forwarded_for":
-            forwarded_for,
-    })
+    return jsonify(
+        {
+            "remote_addr": remote_addr,
+            "real_ip": real_ip,
+            "x_forwarded_for": forwarded_for,
+        }
+    )
 
 
 # ============================================================
@@ -1750,9 +1646,9 @@ def start_telegram_bot():
             "=================================================="
         )
 
-        # ----------------------------------------------------
+        # ------------------------------------------------
         # DO NOT HIDE BOT OUTPUT
-        # ----------------------------------------------------
+        # ------------------------------------------------
 
         process = subprocess.Popen(
             [
@@ -1770,9 +1666,9 @@ def start_telegram_bot():
             process.pid,
         )
 
-        # ----------------------------------------------------
+        # ------------------------------------------------
         # MONITOR BOT PROCESS
-        # ----------------------------------------------------
+        # ------------------------------------------------
 
         def monitor_bot():
 
