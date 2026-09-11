@@ -947,7 +947,7 @@ The password and withdrawal code are shown once.
 
 <form
     method="POST"
-    action="{{ url_for('create_promoter') }}"
+    action="{{ url_for('admin_create_promoter') }}"
 >
 
 <input
