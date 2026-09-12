@@ -1,7 +1,7 @@
 # ============================================================
 #
 # ALHIKAM LEARNING CENTER
-# ADMIN REFERRAL DASHBOARD
+# ADMIN REFERRAL + STUDENT MANAGEMENT DASHBOARD
 #
 # ============================================================
 #
@@ -21,11 +21,27 @@
 # - Copy Buttons
 # - Withdrawal Status Refresh
 #
+# STUDENT MANAGEMENT
+#
+# - View all students
+# - Student payment information
+# - Student registration information
+# - Telegram information
+# - Faculty
+# - Course
+# - Referral information
+# - Promoter information
+# - Transaction reference
+# - Current student activity
+# - Student search
+#
 # ============================================================
+
 
 import os
 import secrets
 import logging
+import sqlite3
 
 from functools import wraps
 
@@ -38,6 +54,7 @@ from flask import (
 )
 
 from database import (
+    DATABASE_NAME,
     get_all_promoters,
     get_all_withdrawals,
     add_promoter,
@@ -81,6 +98,7 @@ ADMIN_CREATED_PROMOTER_KEY = "alhikam_created_promoter"
 # ============================================================
 
 def admin_logged_in():
+
     return bool(
         session.get(
             ADMIN_SESSION_KEY
@@ -128,7 +146,9 @@ def get_admin_csrf():
 
         token = secrets.token_urlsafe(32)
 
-        session[ADMIN_CSRF_KEY] = token
+        session[
+            ADMIN_CSRF_KEY
+        ] = token
 
     return token
 
@@ -198,10 +218,6 @@ def format_withdrawal_status(status):
 
     normalized = status.lower()
 
-    # --------------------------------------------------------
-    # SUCCESS
-    # --------------------------------------------------------
-
     if normalized in (
         "success",
         "successful",
@@ -209,10 +225,6 @@ def format_withdrawal_status(status):
         "complete",
     ):
         return "✅ Successful"
-
-    # --------------------------------------------------------
-    # FAILED
-    # --------------------------------------------------------
 
     if normalized in (
         "failed",
@@ -222,19 +234,11 @@ def format_withdrawal_status(status):
     ):
         return "❌ Failed"
 
-    # --------------------------------------------------------
-    # CANCELLED
-    # --------------------------------------------------------
-
     if normalized in (
         "cancelled",
         "canceled",
     ):
         return "🚫 Cancelled"
-
-    # --------------------------------------------------------
-    # PROCESSING
-    # --------------------------------------------------------
 
     if normalized in (
         "processing",
@@ -246,51 +250,270 @@ def format_withdrawal_status(status):
     ):
         return "⏳ Processing"
 
-    # --------------------------------------------------------
-    # RAW DICTIONARY STRING
-    # --------------------------------------------------------
-
     if (
-        "'status': 'processing'" in normalized
-        or '"status": "processing"' in normalized
-        or "'status':'processing'" in normalized
-        or '"status":"processing"' in normalized
+        "status': 'processing" in normalized
+        or '"status": "processing' in normalized
+        or "status':'processing" in normalized
+        or '"status":"processing' in normalized
     ):
         return "⏳ Processing"
 
     if (
-        "'status': 'pending'" in normalized
-        or '"status": "pending"' in normalized
-        or "'status':'pending'" in normalized
-        or '"status":"pending"' in normalized
+        "status': 'pending" in normalized
+        or '"status": "pending' in normalized
+        or "status':'pending" in normalized
+        or '"status":"pending' in normalized
     ):
         return "⏳ Processing"
 
     if (
-        "'status': 'successful'" in normalized
-        or '"status": "successful"' in normalized
-        or "'status':'successful'" in normalized
-        or '"status":"successful"' in normalized
+        "status': 'successful" in normalized
+        or '"status": "successful' in normalized
+        or "status':'successful" in normalized
+        or '"status":"successful' in normalized
     ):
         return "✅ Successful"
 
     if (
-        "'status': 'failed'" in normalized
-        or '"status": "failed"' in normalized
-        or "'status':'failed'" in normalized
-        or '"status":"failed"' in normalized
+        "status': 'failed" in normalized
+        or '"status": "failed' in normalized
+        or "status':'failed" in normalized
+        or '"status":"failed' in normalized
     ):
         return "❌ Failed"
 
     if (
-        "'status': 'cancelled'" in normalized
-        or '"status": "cancelled"' in normalized
-        or "'status':'cancelled'" in normalized
-        or '"status":"cancelled"' in normalized
+        "status': 'cancelled" in normalized
+        or '"status": "cancelled' in normalized
+        or "status':'cancelled" in normalized
+        or '"status":"cancelled' in normalized
     ):
         return "🚫 Cancelled"
 
     return "⚠️ Verification Required"
+
+
+# ============================================================
+# STUDENT ACTIVITY
+# ============================================================
+
+def get_student_activity(student):
+
+    payment_status = str(
+        student.get("payment_status") or ""
+    ).strip().lower()
+
+    registration_completed = bool(
+        student.get("registration_completed")
+    )
+
+    telegram_id = str(
+        student.get("telegram_id") or ""
+    ).strip()
+
+    telegram_username = str(
+        student.get("telegram_username") or ""
+    ).strip()
+
+    if registration_completed:
+
+        if telegram_id or telegram_username:
+            return "🟢 Registration Completed • Telegram Connected"
+
+        return "🟢 Registration Completed"
+
+    if payment_status in (
+        "successful",
+        "success",
+        "completed",
+        "complete",
+    ):
+
+        if telegram_id or telegram_username:
+            return "🟡 Payment Successful • Telegram Connected"
+
+        return "🟡 Payment Successful • Awaiting Registration"
+
+    if payment_status in (
+        "pending",
+        "processing",
+        "new",
+    ):
+
+        return "⏳ Payment Pending"
+
+    if payment_status in (
+        "failed",
+        "failure",
+        "rejected",
+    ):
+
+        return "❌ Payment Failed"
+
+    return "⚠️ Awaiting Activity"
+
+
+# ============================================================
+# STUDENT PAYMENT STATUS
+# ============================================================
+
+def format_student_payment_status(status):
+
+    value = str(
+        status or ""
+    ).strip().lower()
+
+    if value in (
+        "successful",
+        "success",
+        "completed",
+        "complete",
+    ):
+        return "✅ Successful"
+
+    if value in (
+        "pending",
+        "processing",
+        "new",
+    ):
+        return "⏳ Pending"
+
+    if value in (
+        "failed",
+        "failure",
+        "rejected",
+        "error",
+    ):
+        return "❌ Failed"
+
+    return "⚠️ " + (
+        str(status or "Unknown")
+    )
+
+
+# ============================================================
+# STUDENT REGISTRATION STATUS
+# ============================================================
+
+def format_registration_status(value):
+
+    if value:
+
+        return "✅ Completed"
+
+    return "⏳ Not Completed"
+
+
+# ============================================================
+# GET ALL STUDENTS
+# ============================================================
+
+def get_all_students(search_query=""):
+
+    connection = None
+
+    try:
+
+        connection = sqlite3.connect(
+            DATABASE_NAME,
+            timeout=30,
+        )
+
+        connection.row_factory = sqlite3.Row
+
+        cursor = connection.cursor()
+
+        query = """
+            SELECT
+                s.*,
+                p.full_name AS promoter_name
+            FROM students s
+            LEFT JOIN promoters p
+                ON s.promoter_id = p.id
+        """
+
+        params = []
+
+        search_query = (
+            str(search_query or "")
+            .strip()
+        )
+
+        if search_query:
+
+            query += """
+                WHERE
+                    s.full_name LIKE ?
+                    OR s.phone LIKE ?
+                    OR s.email LIKE ?
+                    OR s.telegram_username LIKE ?
+                    OR s.telegram_id LIKE ?
+                    OR s.tx_ref LIKE ?
+                    OR s.referral_code LIKE ?
+                    OR s.faculty LIKE ?
+                    OR s.course LIKE ?
+            """
+
+            search_value = (
+                "%"
+                + search_query
+                + "%"
+            )
+
+            params = [
+                search_value,
+                search_value,
+                search_value,
+                search_value,
+                search_value,
+                search_value,
+                search_value,
+                search_value,
+                search_value,
+            ]
+
+        query += """
+            ORDER BY
+                s.id DESC
+        """
+
+        cursor.execute(
+            query,
+            params,
+        )
+
+        rows = cursor.fetchall()
+
+        students = []
+
+        for row in rows:
+
+            student = dict(row)
+
+            student[
+                "activity"
+            ] = get_student_activity(
+                student
+            )
+
+            students.append(
+                student
+            )
+
+        return students
+
+    except Exception:
+
+        logger.exception(
+            "Could not load students."
+        )
+
+        return []
+
+    finally:
+
+        if connection:
+            connection.close()
 
 
 # ============================================================
@@ -605,7 +828,7 @@ body {
 }
 
 .container {
-    max-width: 1250px;
+    max-width: 1450px;
     margin: auto;
 }
 
@@ -666,6 +889,18 @@ button {
     color: white;
 }
 
+.search-btn {
+    background: #111827;
+    color: white;
+}
+
+.clear-btn {
+    background: #e5e7eb;
+    color: #111827;
+    text-decoration: none;
+    display: inline-block;
+}
+
 .table-wrap {
     overflow-x: auto;
 }
@@ -673,7 +908,11 @@ button {
 table {
     width: 100%;
     border-collapse: collapse;
-    min-width: 950px;
+    min-width: 1000px;
+}
+
+.student-table {
+    min-width: 1900px;
 }
 
 th,
@@ -686,19 +925,13 @@ td {
 
 th {
     background: #f8fafc;
+    white-space: nowrap;
 }
 
 .success-box {
     background: #ecfdf5;
     border: 1px solid #86efac;
     padding: 18px;
-    border-radius: 10px;
-}
-
-.warning-box {
-    background: #fff7ed;
-    border: 1px solid #fdba74;
-    padding: 14px;
     border-radius: 10px;
 }
 
@@ -714,6 +947,61 @@ th {
 .code-value {
     font-weight: bold;
     word-break: break-all;
+}
+
+.student-name {
+    min-width: 160px;
+}
+
+.activity {
+    min-width: 250px;
+}
+
+.telegram {
+    min-width: 180px;
+}
+
+.referral {
+    min-width: 160px;
+}
+
+.amount {
+    white-space: nowrap;
+}
+
+.status {
+    white-space: nowrap;
+}
+
+.search-box {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.search-box input {
+    margin: 0;
+    flex: 1;
+}
+
+.search-box button {
+    width: auto;
+    white-space: nowrap;
+}
+
+.section-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 15px;
+}
+
+.count {
+    background: #eef2ff;
+    padding: 8px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: bold;
 }
 
 </style>
@@ -765,6 +1053,7 @@ function copyLink(id, button) {
 
 <div class="container">
 
+
 <div class="header">
 
 <h1>
@@ -772,7 +1061,7 @@ function copyLink(id, button) {
 </h1>
 
 <div>
-Admin Referral Dashboard
+Admin Referral & Student Management Dashboard
 </div>
 
 <br>
@@ -860,6 +1149,10 @@ in plaintext.
 {% endif %}
 
 
+<!-- ===================================================== -->
+<!-- MAIN PAYMENT LINK -->
+<!-- ===================================================== -->
+
 <div class="card">
 
 <h2>
@@ -896,6 +1189,10 @@ Use this when no promoter referral is required.
 </div>
 
 
+<!-- ===================================================== -->
+<!-- PROMOTER DASHBOARD -->
+<!-- ===================================================== -->
+
 <div class="card">
 
 <h2>
@@ -904,8 +1201,6 @@ Use this when no promoter referral is required.
 
 <p class="small">
 General promoter login/dashboard page.
-Promoters can use their referral code and password
-to access their account.
 </p>
 
 <div class="link-box">
@@ -932,6 +1227,10 @@ to access their account.
 
 </div>
 
+
+<!-- ===================================================== -->
+<!-- CREATE PROMOTER -->
+<!-- ===================================================== -->
 
 <div class="card">
 
@@ -1027,6 +1326,288 @@ The password and withdrawal code are shown once.
 </div>
 
 
+<!-- ===================================================== -->
+<!-- STUDENT MANAGEMENT -->
+<!-- ===================================================== -->
+
+<div class="card">
+
+<div class="section-title">
+
+<div>
+
+<h2>
+🎓 Students
+</h2>
+
+<p class="small">
+View student payment, registration, Telegram,
+referral and activity information.
+</p>
+
+</div>
+
+<div class="count">
+{{ students|length }} Student(s)
+</div>
+
+</div>
+
+
+<form
+    method="GET"
+    action="{{ url_for('admin_referral') }}"
+>
+
+<div class="search-box">
+
+<input
+    type="text"
+    name="student_search"
+    value="{{ student_search }}"
+    placeholder="Search name, phone, email, Telegram, TX Ref, referral code, faculty or course..."
+>
+
+<button
+    type="submit"
+    class="search-btn"
+>
+🔎 Search
+</button>
+
+<a
+    href="{{ url_for('admin_referral') }}"
+    class="clear-btn"
+>
+Clear
+</a>
+
+</div>
+
+</form>
+
+
+<br>
+
+
+<div class="table-wrap">
+
+<table class="student-table">
+
+<thead>
+
+<tr>
+
+<th>ID</th>
+
+<th>Student</th>
+
+<th>Phone</th>
+
+<th>Email</th>
+
+<th>Telegram</th>
+
+<th>Faculty</th>
+
+<th>Course</th>
+
+<th>Plan</th>
+
+<th>Amount Paid</th>
+
+<th>Payment Status</th>
+
+<th>Registration</th>
+
+<th>Referral Code</th>
+
+<th>Promoter</th>
+
+<th>Transaction Ref</th>
+
+<th>Activity</th>
+
+<th>Date</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+{% for student in students %}
+
+<tr>
+
+<td>
+{{ student["id"] }}
+</td>
+
+
+<td class="student-name">
+
+<strong>
+{{ student["full_name"] or "Not provided" }}
+</strong>
+
+</td>
+
+
+<td>
+{{ student["phone"] or "—" }}
+</td>
+
+
+<td>
+{{ student["email"] or "—" }}
+</td>
+
+
+<td class="telegram">
+
+{% if student["telegram_username"] %}
+
+@{{ student["telegram_username"] }}
+
+{% else %}
+
+—
+
+{% endif %}
+
+<br>
+
+<span class="small">
+
+ID:
+{{ student["telegram_id"] or "Not connected" }}
+
+</span>
+
+<br>
+
+<span class="small">
+
+{{ student["telegram_name"] or "" }}
+
+</span>
+
+</td>
+
+
+<td>
+{{ student["faculty"] or "—" }}
+</td>
+
+
+<td>
+{{ student["course"] or "—" }}
+</td>
+
+
+<td>
+{{ student["payment_plan"] or "—" }}
+</td>
+
+
+<td class="amount">
+
+₦{{ "{:,.2f}".format(
+    student["amount_paid"] or 0
+) }}
+
+</td>
+
+
+<td class="status">
+
+{{ format_student_payment_status(
+    student["payment_status"]
+) }}
+
+</td>
+
+
+<td class="status">
+
+{{ format_registration_status(
+    student["registration_completed"]
+) }}
+
+</td>
+
+
+<td class="referral">
+
+{{ student["referral_code"] or "—" }}
+
+</td>
+
+
+<td>
+
+{{ student["promoter_name"] or "Direct / None" }}
+
+</td>
+
+
+<td>
+
+<span class="code-value">
+
+{{ student["tx_ref"] or "—" }}
+
+</span>
+
+</td>
+
+
+<td class="activity">
+
+<strong>
+{{ student["activity"] }}
+</strong>
+
+</td>
+
+
+<td>
+
+{{ student["created_at"] or "—" }}
+
+</td>
+
+</tr>
+
+
+{% else %}
+
+<tr>
+
+<td colspan="16">
+
+No students found.
+
+</td>
+
+</tr>
+
+{% endfor %}
+
+</tbody>
+
+</table>
+
+</div>
+
+</div>
+
+
+<!-- ===================================================== -->
+<!-- PROMOTERS -->
+<!-- ===================================================== -->
+
 <div class="card">
 
 <h2>
@@ -1067,9 +1648,11 @@ The password and withdrawal code are shown once.
 </td>
 
 <td>
+
 <strong>
 {{ promoter["full_name"] }}
 </strong>
+
 </td>
 
 <td>
@@ -1089,24 +1672,31 @@ The password and withdrawal code are shown once.
 </td>
 
 <td>
+
 ₦{{ "{:,.2f}".format(
     promoter["total_sales"] or 0
 ) }}
+
 </td>
 
 <td>
+
 ₦{{ "{:,.2f}".format(
     promoter["available_balance"] or 0
 ) }}
+
 </td>
 
 <td>
+
 ₦{{ "{:,.2f}".format(
     promoter["withdrawn"] or 0
 ) }}
+
 </td>
 
 <td>
+
 
 {% set referral_link =
     base_url
@@ -1137,10 +1727,6 @@ The password and withdrawal code are shown once.
 >
 📋 Copy
 </button>
-
-<p class="small">
-Used for promoter login/referral access.
-</p>
 
 </div>
 
@@ -1174,11 +1760,6 @@ Used for promoter login/referral access.
 >
 📋 Copy Payment Link
 </button>
-
-<p class="small">
-Students can open this link directly to pay.
-The promoter referral code is automatically included.
-</p>
 
 </div>
 
@@ -1234,6 +1815,10 @@ No promoters found.
 </div>
 
 
+<!-- ===================================================== -->
+<!-- WITHDRAWALS -->
+<!-- ===================================================== -->
+
 <div class="card">
 
 <h2>
@@ -1276,9 +1861,11 @@ No promoters found.
 </td>
 
 <td>
+
 ₦{{ "{:,.2f}".format(
     withdrawal["amount"] or 0
 ) }}
+
 </td>
 
 <td>
@@ -1286,9 +1873,11 @@ No promoters found.
 </td>
 
 <td>
+
 {{ mask_account_number(
     withdrawal["account_number"]
 ) }}
+
 </td>
 
 <td>
@@ -1380,6 +1969,17 @@ def admin_referral_page():
 
     withdrawals = get_all_withdrawals()
 
+    student_search = (
+        request.args.get(
+            "student_search",
+            ""
+        ).strip()
+    )
+
+    students = get_all_students(
+        student_search
+    )
+
     base_url = request.url_root.rstrip("/")
 
     payment_link = (
@@ -1403,6 +2003,10 @@ def admin_referral_page():
 
         withdrawals=withdrawals,
 
+        students=students,
+
+        student_search=student_search,
+
         base_url=base_url,
 
         payment_link=payment_link,
@@ -1421,6 +2025,12 @@ def admin_referral_page():
 
         format_withdrawal_status=
             format_withdrawal_status,
+
+        format_student_payment_status=
+            format_student_payment_status,
+
+        format_registration_status=
+            format_registration_status,
     )
 
 
@@ -1858,7 +2468,7 @@ def admin_withdrawal_status_page():
         logger.warning(
             "No Flutterwave status result "
             "for withdrawal %s.",
-            withdrawal_id,
+            withdrawal_id
         )
 
         return redirect(
@@ -1965,9 +2575,6 @@ def admin_withdrawal_status_page():
         final_status = "processing"
 
     else:
-
-        # IMPORTANT:
-        # Unknown status is NOT failed.
 
         final_status = "processing"
 
