@@ -34,6 +34,7 @@
 # - Transaction reference
 # - Current student activity
 # - Student search
+# - View Student Details
 #
 # ============================================================
 
@@ -318,7 +319,11 @@ def get_student_activity(student):
     if registration_completed:
 
         if telegram_id or telegram_username:
-            return "🟢 Registration Completed • Telegram Connected"
+
+            return (
+                "🟢 Registration Completed "
+                "• Telegram Connected"
+            )
 
         return "🟢 Registration Completed"
 
@@ -330,9 +335,16 @@ def get_student_activity(student):
     ):
 
         if telegram_id or telegram_username:
-            return "🟡 Payment Successful • Telegram Connected"
 
-        return "🟡 Payment Successful • Awaiting Registration"
+            return (
+                "🟡 Payment Successful "
+                "• Telegram Connected"
+            )
+
+        return (
+            "🟡 Payment Successful "
+            "• Awaiting Registration"
+        )
 
     if payment_status in (
         "pending",
@@ -509,6 +521,74 @@ def get_all_students(search_query=""):
         )
 
         return []
+
+    finally:
+
+        if connection:
+            connection.close()
+
+
+# ============================================================
+# GET SINGLE STUDENT
+# ============================================================
+
+def get_student_by_id(student_id):
+
+    connection = None
+
+    try:
+
+        connection = sqlite3.connect(
+            DATABASE_NAME,
+            timeout=30,
+        )
+
+        connection.row_factory = sqlite3.Row
+
+        cursor = connection.cursor()
+
+        query = """
+            SELECT
+                s.*,
+                p.full_name AS promoter_name,
+                p.phone AS promoter_phone,
+                p.email AS promoter_email,
+                p.referral_code AS promoter_referral_code
+            FROM students s
+            LEFT JOIN promoters p
+                ON s.promoter_id = p.id
+            WHERE s.id = ?
+            LIMIT 1
+        """
+
+        cursor.execute(
+            query,
+            (student_id,)
+        )
+
+        row = cursor.fetchone()
+
+        if not row:
+
+            return None
+
+        student = dict(row)
+
+        student[
+            "activity"
+        ] = get_student_activity(
+            student
+        )
+
+        return student
+
+    except Exception:
+
+        logger.exception(
+            "Could not load student by ID."
+        )
+
+        return None
 
     finally:
 
@@ -901,6 +981,17 @@ button {
     display: inline-block;
 }
 
+.details-btn {
+    background: #111827;
+    color: white;
+    text-decoration: none;
+    display: inline-block;
+    padding: 9px 12px;
+    border-radius: 8px;
+    font-weight: bold;
+    white-space: nowrap;
+}
+
 .table-wrap {
     overflow-x: auto;
 }
@@ -912,7 +1003,7 @@ table {
 }
 
 .student-table {
-    min-width: 1900px;
+    min-width: 2000px;
 }
 
 th,
@@ -1430,6 +1521,8 @@ Clear
 
 <th>Date</th>
 
+<th>Details</th>
+
 </tr>
 
 </thead>
@@ -1578,6 +1671,21 @@ ID:
 
 </td>
 
+
+<td>
+
+<a
+    href="{{ url_for(
+        'admin_student_details',
+        student_id=student['id']
+    ) }}"
+    class="details-btn"
+>
+👁️ View Details
+</a>
+
+</td>
+
 </tr>
 
 
@@ -1585,7 +1693,7 @@ ID:
 
 <tr>
 
-<td colspan="16">
+<td colspan="17">
 
 No students found.
 
@@ -1959,6 +2067,576 @@ No withdrawal requests found.
 
 
 # ============================================================
+# STUDENT DETAILS HTML
+# ============================================================
+
+STUDENT_DETAILS_HTML = """
+
+<!DOCTYPE html>
+<html>
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+>
+
+<title>
+Student Details - ALHIKAM Learning Center
+</title>
+
+<style>
+
+body {
+    margin: 0;
+    padding: 20px;
+    background: #f4f7fb;
+    font-family: Arial, sans-serif;
+    color: #172033;
+}
+
+.container {
+    max-width: 1000px;
+    margin: auto;
+}
+
+.header {
+    background: #111827;
+    color: white;
+    padding: 22px;
+    border-radius: 14px;
+    margin-bottom: 20px;
+}
+
+.header h1 {
+    margin: 0 0 6px;
+}
+
+.card {
+    background: white;
+    padding: 22px;
+    margin-bottom: 20px;
+    border-radius: 14px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.06);
+}
+
+.profile {
+    display: grid;
+    grid-template-columns:
+        repeat(auto-fit, minmax(220px, 1fr));
+    gap: 15px;
+}
+
+.info-box {
+    background: #f8fafc;
+    padding: 15px;
+    border-radius: 10px;
+    border: 1px solid #e5e7eb;
+}
+
+.label {
+    font-size: 12px;
+    color: #6b7280;
+    margin-bottom: 5px;
+}
+
+.value {
+    font-weight: bold;
+    word-break: break-word;
+}
+
+.status {
+    font-weight: bold;
+}
+
+.activity-box {
+    background: #ecfdf5;
+    border: 1px solid #86efac;
+    padding: 18px;
+    border-radius: 10px;
+}
+
+.back-btn {
+    display: inline-block;
+    background: #111827;
+    color: white;
+    text-decoration: none;
+    padding: 11px 16px;
+    border-radius: 8px;
+    font-weight: bold;
+}
+
+.small {
+    color: #6b7280;
+    font-size: 13px;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="container">
+
+
+<div class="header">
+
+<h1>
+🎓 Student Details
+</h1>
+
+<div>
+ALHIKAM Learning Center Admin
+</div>
+
+</div>
+
+
+<div class="card">
+
+<a
+    href="{{ url_for('admin_referral') }}"
+    class="back-btn"
+>
+← Back to Dashboard
+</a>
+
+</div>
+
+
+<!-- ===================================================== -->
+<!-- STUDENT PROFILE -->
+<!-- ===================================================== -->
+
+<div class="card">
+
+<h2>
+👤 Student Profile
+</h2>
+
+<div class="profile">
+
+
+<div class="info-box">
+
+<div class="label">
+Student ID
+</div>
+
+<div class="value">
+{{ student["id"] }}
+</div>
+
+</div>
+
+
+<div class="info-box">
+
+<div class="label">
+Full Name
+</div>
+
+<div class="value">
+{{ student["full_name"] or "Not provided" }}
+</div>
+
+</div>
+
+
+<div class="info-box">
+
+<div class="label">
+Phone
+</div>
+
+<div class="value">
+{{ student["phone"] or "Not provided" }}
+</div>
+
+</div>
+
+
+<div class="info-box">
+
+<div class="label">
+Email
+</div>
+
+<div class="value">
+{{ student["email"] or "Not provided" }}
+</div>
+
+</div>
+
+
+<div class="info-box">
+
+<div class="label">
+Faculty
+</div>
+
+<div class="value">
+{{ student["faculty"] or "Not provided" }}
+</div>
+
+</div>
+
+
+<div class="info-box">
+
+<div class="label">
+Course
+</div>
+
+<div class="value">
+{{ student["course"] or "Not provided" }}
+</div>
+
+</div>
+
+
+</div>
+
+</div>
+
+
+<!-- ===================================================== -->
+<!-- TELEGRAM INFORMATION -->
+<!-- ===================================================== -->
+
+<div class="card">
+
+<h2>
+📲 Telegram Information
+</h2>
+
+<div class="profile">
+
+
+<div class="info-box">
+
+<div class="label">
+Telegram Username
+</div>
+
+<div class="value">
+
+{% if student["telegram_username"] %}
+
+@{{ student["telegram_username"] }}
+
+{% else %}
+
+Not connected
+
+{% endif %}
+
+</div>
+
+</div>
+
+
+<div class="info-box">
+
+<div class="label">
+Telegram ID
+</div>
+
+<div class="value">
+{{ student["telegram_id"] or "Not connected" }}
+</div>
+
+</div>
+
+
+<div class="info-box">
+
+<div class="label">
+Telegram Name
+</div>
+
+<div class="value">
+{{ student["telegram_name"] or "Not provided" }}
+</div>
+
+</div>
+
+
+</div>
+
+</div>
+
+
+<!-- ===================================================== -->
+<!-- PAYMENT INFORMATION -->
+<!-- ===================================================== -->
+
+<div class="card">
+
+<h2>
+💳 Payment Information
+</h2>
+
+<div class="profile">
+
+
+<div class="info-box">
+
+<div class="label">
+Payment Plan
+</div>
+
+<div class="value">
+{{ student["payment_plan"] or "Not provided" }}
+</div>
+
+</div>
+
+
+<div class="info-box">
+
+<div class="label">
+Amount Paid
+</div>
+
+<div class="value">
+
+₦{{ "{:,.2f}".format(
+    student["amount_paid"] or 0
+) }}
+
+</div>
+
+</div>
+
+
+<div class="info-box">
+
+<div class="label">
+Payment Status
+</div>
+
+<div class="value status">
+
+{{ format_student_payment_status(
+    student["payment_status"]
+) }}
+
+</div>
+
+</div>
+
+
+<div class="info-box">
+
+<div class="label">
+Transaction Reference
+</div>
+
+<div class="value">
+{{ student["tx_ref"] or "Not available" }}
+</div>
+
+</div>
+
+
+</div>
+
+</div>
+
+
+<!-- ===================================================== -->
+<!-- REGISTRATION INFORMATION -->
+<!-- ===================================================== -->
+
+<div class="card">
+
+<h2>
+📝 Registration Information
+</h2>
+
+<div class="profile">
+
+
+<div class="info-box">
+
+<div class="label">
+Registration Status
+</div>
+
+<div class="value status">
+
+{{ format_registration_status(
+    student["registration_completed"]
+) }}
+
+</div>
+
+</div>
+
+
+<div class="info-box">
+
+<div class="label">
+Created At
+</div>
+
+<div class="value">
+{{ student["created_at"] or "Not available" }}
+</div>
+
+</div>
+
+
+<div class="info-box">
+
+<div class="label">
+Current Activity
+</div>
+
+<div class="value">
+{{ student["activity"] }}
+</div>
+
+</div>
+
+
+</div>
+
+</div>
+
+
+<!-- ===================================================== -->
+<!-- REFERRAL INFORMATION -->
+<!-- ===================================================== -->
+
+<div class="card">
+
+<h2>
+🔗 Referral Information
+</h2>
+
+<div class="profile">
+
+
+<div class="info-box">
+
+<div class="label">
+Referral Code
+</div>
+
+<div class="value">
+{{ student["referral_code"] or "Direct / None" }}
+</div>
+
+</div>
+
+
+<div class="info-box">
+
+<div class="label">
+Promoter
+</div>
+
+<div class="value">
+{{ student["promoter_name"] or "Direct / None" }}
+</div>
+
+</div>
+
+
+{% if student["promoter_name"] %}
+
+
+<div class="info-box">
+
+<div class="label">
+Promoter Phone
+</div>
+
+<div class="value">
+{{ student["promoter_phone"] or "Not available" }}
+</div>
+
+</div>
+
+
+<div class="info-box">
+
+<div class="label">
+Promoter Email
+</div>
+
+<div class="value">
+{{ student["promoter_email"] or "Not available" }}
+</div>
+
+</div>
+
+
+<div class="info-box">
+
+<div class="label">
+Promoter Referral Code
+</div>
+
+<div class="value">
+{{ student["promoter_referral_code"] or "Not available" }}
+</div>
+
+</div>
+
+
+{% endif %}
+
+
+</div>
+
+</div>
+
+
+<!-- ===================================================== -->
+<!-- ACTIVITY -->
+<!-- ===================================================== -->
+
+<div class="card">
+
+<h2>
+📊 Current Student Activity
+</h2>
+
+<div class="activity-box">
+
+<strong>
+{{ student["activity"] }}
+</strong>
+
+<p class="small">
+
+This shows the student's current activity based
+on the information currently stored in the system.
+
+</p>
+
+</div>
+
+</div>
+
+
+</div>
+
+</body>
+
+</html>
+
+"""
+
+
+# ============================================================
 # ADMIN DASHBOARD
 # ============================================================
 
@@ -2025,6 +2703,51 @@ def admin_referral_page():
 
         format_withdrawal_status=
             format_withdrawal_status,
+
+        format_student_payment_status=
+            format_student_payment_status,
+
+        format_registration_status=
+            format_registration_status,
+    )
+
+
+# ============================================================
+# STUDENT DETAILS PAGE
+# ============================================================
+
+@admin_required
+def admin_student_details_page(student_id):
+
+    try:
+
+        student_id = int(
+            student_id
+        )
+
+    except (TypeError, ValueError):
+
+        return (
+            "Invalid student ID.",
+            400,
+        )
+
+    student = get_student_by_id(
+        student_id
+    )
+
+    if not student:
+
+        return (
+            "Student not found.",
+            404,
+        )
+
+    return render_template_string(
+
+        STUDENT_DETAILS_HTML,
+
+        student=student,
 
         format_student_payment_status=
             format_student_payment_status,
