@@ -20,7 +20,8 @@ DATABASE_NAME = os.getenv(
     "alhikam.db"
 )
 
-MINIMUM_WITHDRAWAL = 5000
+MINIMUM_WITHDRAWAL = 200
+MAXIMUM_WITHDRAWAL = 5000
 
 
 # ============================================================
@@ -1747,11 +1748,29 @@ def create_withdrawal(
         bank_code or ""
     ).strip()
 
+    # ========================================================
+    # MINIMUM WITHDRAWAL
+    # ========================================================
+
     if amount < MINIMUM_WITHDRAWAL:
 
         raise ValueError(
-            "Minimum withdrawal is ₦5,000."
+            "Minimum withdrawal is ₦200."
         )
+
+    # ========================================================
+    # MAXIMUM WITHDRAWAL
+    # ========================================================
+
+    if amount > MAXIMUM_WITHDRAWAL:
+
+        raise ValueError(
+            "Maximum withdrawal is ₦5,000."
+        )
+
+    # ========================================================
+    # ACCOUNT NUMBER
+    # ========================================================
 
     if (
         len(account_number) != 10
@@ -1761,6 +1780,10 @@ def create_withdrawal(
         raise ValueError(
             "Account number must contain 10 digits."
         )
+
+    # ========================================================
+    # BANK CODE
+    # ========================================================
 
     if not bank_code:
 
@@ -1792,6 +1815,10 @@ def create_withdrawal(
                 "Promoter not found."
             )
 
+        # ====================================================
+        # PROMOTER STATUS
+        # ====================================================
+
         if (
             str(
                 promoter["status"] or ""
@@ -1808,11 +1835,19 @@ def create_withdrawal(
             or 0
         )
 
+        # ====================================================
+        # AVAILABLE BALANCE
+        # ====================================================
+
         if amount > balance:
 
             raise ValueError(
                 "Insufficient available balance."
             )
+
+        # ====================================================
+        # EXISTING PROCESSING WITHDRAWAL
+        # ====================================================
 
         cursor.execute("""
         SELECT id
@@ -1827,6 +1862,10 @@ def create_withdrawal(
             raise ValueError(
                 "You already have a withdrawal being processed."
             )
+
+        # ====================================================
+        # CREATE WITHDRAWAL
+        # ====================================================
 
         cursor.execute("""
         INSERT INTO withdrawals(
@@ -1852,6 +1891,10 @@ def create_withdrawal(
         ))
 
         withdrawal_id = cursor.lastrowid
+
+        # ====================================================
+        # RESERVE BALANCE
+        # ====================================================
 
         cursor.execute("""
         UPDATE promoters
