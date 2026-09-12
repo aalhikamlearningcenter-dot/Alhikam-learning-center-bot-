@@ -82,16 +82,26 @@ logger = logging.getLogger(__name__)
 # ADMIN PASSWORD
 # ============================================================
 
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
+ADMIN_PASSWORD = os.getenv(
+    "ADMIN_PASSWORD"
+)
 
 
 # ============================================================
 # SESSION KEYS
 # ============================================================
 
-ADMIN_SESSION_KEY = "alhikam_admin_logged_in"
-ADMIN_CSRF_KEY = "alhikam_admin_csrf"
-ADMIN_CREATED_PROMOTER_KEY = "alhikam_created_promoter"
+ADMIN_SESSION_KEY = (
+    "alhikam_admin_logged_in"
+)
+
+ADMIN_CSRF_KEY = (
+    "alhikam_admin_csrf"
+)
+
+ADMIN_CREATED_PROMOTER_KEY = (
+    "alhikam_created_promoter"
+)
 
 
 # ============================================================
@@ -145,7 +155,9 @@ def get_admin_csrf():
 
     if not token:
 
-        token = secrets.token_urlsafe(32)
+        token = secrets.token_urlsafe(
+            32
+        )
 
         session[
             ADMIN_CSRF_KEY
@@ -167,6 +179,7 @@ def check_admin_csrf():
     )
 
     if not submitted or not expected:
+
         return False
 
     return secrets.compare_digest(
@@ -179,13 +192,16 @@ def check_admin_csrf():
 # MASK ACCOUNT NUMBER
 # ============================================================
 
-def mask_account_number(account_number):
+def mask_account_number(
+    account_number
+):
 
     value = str(
         account_number or ""
     )
 
     if len(value) <= 4:
+
         return "****"
 
     return (
@@ -198,12 +214,18 @@ def mask_account_number(account_number):
 # FORMAT WITHDRAWAL STATUS
 # ============================================================
 
-def format_withdrawal_status(status):
+def format_withdrawal_status(
+    status
+):
 
     if status is None:
+
         return "⚠️ Verification Required"
 
-    if isinstance(status, dict):
+    if isinstance(
+        status,
+        dict
+    ):
 
         status = (
             status.get("status")
@@ -215,6 +237,7 @@ def format_withdrawal_status(status):
     ).strip()
 
     if not status:
+
         return "⚠️ Verification Required"
 
     normalized = status.lower()
@@ -225,6 +248,7 @@ def format_withdrawal_status(status):
         "completed",
         "complete",
     ):
+
         return "✅ Successful"
 
     if normalized in (
@@ -233,12 +257,14 @@ def format_withdrawal_status(status):
         "rejected",
         "error",
     ):
+
         return "❌ Failed"
 
     if normalized in (
         "cancelled",
         "canceled",
     ):
+
         return "🚫 Cancelled"
 
     if normalized in (
@@ -249,6 +275,7 @@ def format_withdrawal_status(status):
         "in_progress",
         "in-progress",
     ):
+
         return "⏳ Processing"
 
     if (
@@ -257,6 +284,7 @@ def format_withdrawal_status(status):
         or "status':'processing" in normalized
         or '"status":"processing' in normalized
     ):
+
         return "⏳ Processing"
 
     if (
@@ -265,6 +293,7 @@ def format_withdrawal_status(status):
         or "status':'pending" in normalized
         or '"status":"pending' in normalized
     ):
+
         return "⏳ Processing"
 
     if (
@@ -273,6 +302,7 @@ def format_withdrawal_status(status):
         or "status':'successful" in normalized
         or '"status":"successful' in normalized
     ):
+
         return "✅ Successful"
 
     if (
@@ -281,6 +311,7 @@ def format_withdrawal_status(status):
         or "status':'failed" in normalized
         or '"status":"failed' in normalized
     ):
+
         return "❌ Failed"
 
     if (
@@ -289,6 +320,7 @@ def format_withdrawal_status(status):
         or "status':'cancelled" in normalized
         or '"status":"cancelled' in normalized
     ):
+
         return "🚫 Cancelled"
 
     return "⚠️ Verification Required"
@@ -298,34 +330,49 @@ def format_withdrawal_status(status):
 # STUDENT ACTIVITY
 # ============================================================
 
-def get_student_activity(student):
+def get_student_activity(
+    student
+):
 
     payment_status = str(
-        student.get("payment_status") or ""
+        student.get(
+            "payment_status"
+        ) or ""
     ).strip().lower()
 
     registration_completed = bool(
-        student.get("registration_completed")
+        student.get(
+            "registration_completed"
+        )
     )
 
     telegram_id = str(
-        student.get("telegram_id") or ""
+        student.get(
+            "telegram_id"
+        ) or ""
     ).strip()
 
     telegram_username = str(
-        student.get("telegram_username") or ""
+        student.get(
+            "telegram_username"
+        ) or ""
     ).strip()
 
     if registration_completed:
 
-        if telegram_id or telegram_username:
+        if (
+            telegram_id
+            or telegram_username
+        ):
 
             return (
                 "🟢 Registration Completed "
                 "• Telegram Connected"
             )
 
-        return "🟢 Registration Completed"
+        return (
+            "🟢 Registration Completed"
+        )
 
     if payment_status in (
         "successful",
@@ -334,7 +381,10 @@ def get_student_activity(student):
         "complete",
     ):
 
-        if telegram_id or telegram_username:
+        if (
+            telegram_id
+            or telegram_username
+        ):
 
             return (
                 "🟡 Payment Successful "
@@ -369,7 +419,9 @@ def get_student_activity(student):
 # STUDENT PAYMENT STATUS
 # ============================================================
 
-def format_student_payment_status(status):
+def format_student_payment_status(
+    status
+):
 
     value = str(
         status or ""
@@ -381,6 +433,7 @@ def format_student_payment_status(status):
         "completed",
         "complete",
     ):
+
         return "✅ Successful"
 
     if value in (
@@ -388,6 +441,7 @@ def format_student_payment_status(status):
         "processing",
         "new",
     ):
+
         return "⏳ Pending"
 
     if value in (
@@ -396,10 +450,14 @@ def format_student_payment_status(status):
         "rejected",
         "error",
     ):
+
         return "❌ Failed"
 
-    return "⚠️ " + (
-        str(status or "Unknown")
+    return (
+        "⚠️ "
+        + str(
+            status or "Unknown"
+        )
     )
 
 
@@ -407,7 +465,9 @@ def format_student_payment_status(status):
 # STUDENT REGISTRATION STATUS
 # ============================================================
 
-def format_registration_status(value):
+def format_registration_status(
+    value
+):
 
     if value:
 
@@ -420,7 +480,9 @@ def format_registration_status(value):
 # GET ALL STUDENTS
 # ============================================================
 
-def get_all_students(search_query=""):
+def get_all_students(
+    search_query=""
+):
 
     connection = None
 
@@ -431,7 +493,9 @@ def get_all_students(search_query=""):
             timeout=30,
         )
 
-        connection.row_factory = sqlite3.Row
+        connection.row_factory = (
+            sqlite3.Row
+        )
 
         cursor = connection.cursor()
 
@@ -447,8 +511,9 @@ def get_all_students(search_query=""):
         params = []
 
         search_query = (
-            str(search_query or "")
-            .strip()
+            str(
+                search_query or ""
+            ).strip()
         )
 
         if search_query:
@@ -525,6 +590,7 @@ def get_all_students(search_query=""):
     finally:
 
         if connection:
+
             connection.close()
 
 
@@ -532,7 +598,9 @@ def get_all_students(search_query=""):
 # GET SINGLE STUDENT
 # ============================================================
 
-def get_student_by_id(student_id):
+def get_student_by_id(
+    student_id
+):
 
     connection = None
 
@@ -543,7 +611,9 @@ def get_student_by_id(student_id):
             timeout=30,
         )
 
-        connection.row_factory = sqlite3.Row
+        connection.row_factory = (
+            sqlite3.Row
+        )
 
         cursor = connection.cursor()
 
@@ -593,6 +663,7 @@ def get_student_by_id(student_id):
     finally:
 
         if connection:
+
             connection.close()
 
 
@@ -1101,7 +1172,8 @@ th {
 
 function copyLink(id, button) {
 
-    const input = document.getElementById(id);
+    const input =
+        document.getElementById(id);
 
     if (!input) {
         return;
@@ -1111,26 +1183,38 @@ function copyLink(id, button) {
         input.value
     ).then(function() {
 
-        const oldText = button.innerText;
+        const oldText =
+            button.innerText;
 
-        button.innerText = "✅ Copied";
+        button.innerText =
+            "✅ Copied";
 
         setTimeout(function() {
-            button.innerText = oldText;
+
+            button.innerText =
+                oldText;
+
         }, 1500);
 
     }).catch(function() {
 
         input.select();
 
-        document.execCommand("copy");
+        document.execCommand(
+            "copy"
+        );
 
-        const oldText = button.innerText;
+        const oldText =
+            button.innerText;
 
-        button.innerText = "✅ Copied";
+        button.innerText =
+            "✅ Copied";
 
         setTimeout(function() {
-            button.innerText = oldText;
+
+            button.innerText =
+                oldText;
+
         }, 1500);
 
     });
@@ -1490,37 +1574,21 @@ Clear
 <tr>
 
 <th>ID</th>
-
 <th>Student</th>
-
 <th>Phone</th>
-
 <th>Email</th>
-
 <th>Telegram</th>
-
 <th>Faculty</th>
-
 <th>Course</th>
-
 <th>Plan</th>
-
 <th>Amount Paid</th>
-
 <th>Payment Status</th>
-
 <th>Registration</th>
-
 <th>Referral Code</th>
-
 <th>Promoter</th>
-
 <th>Transaction Ref</th>
-
 <th>Activity</th>
-
 <th>Date</th>
-
 <th>Details</th>
 
 </tr>
@@ -1537,7 +1605,6 @@ Clear
 {{ student["id"] }}
 </td>
 
-
 <td class="student-name">
 
 <strong>
@@ -1546,16 +1613,13 @@ Clear
 
 </td>
 
-
 <td>
 {{ student["phone"] or "—" }}
 </td>
 
-
 <td>
 {{ student["email"] or "—" }}
 </td>
-
 
 <td class="telegram">
 
@@ -1588,21 +1652,17 @@ ID:
 
 </td>
 
-
 <td>
 {{ student["faculty"] or "—" }}
 </td>
-
 
 <td>
 {{ student["course"] or "—" }}
 </td>
 
-
 <td>
 {{ student["payment_plan"] or "—" }}
 </td>
-
 
 <td class="amount">
 
@@ -1612,7 +1672,6 @@ ID:
 
 </td>
 
-
 <td class="status">
 
 {{ format_student_payment_status(
@@ -1620,7 +1679,6 @@ ID:
 ) }}
 
 </td>
-
 
 <td class="status">
 
@@ -1630,20 +1688,17 @@ ID:
 
 </td>
 
-
 <td class="referral">
 
 {{ student["referral_code"] or "—" }}
 
 </td>
 
-
 <td>
 
 {{ student["promoter_name"] or "Direct / None" }}
 
 </td>
-
 
 <td>
 
@@ -1655,7 +1710,6 @@ ID:
 
 </td>
 
-
 <td class="activity">
 
 <strong>
@@ -1664,13 +1718,11 @@ ID:
 
 </td>
 
-
 <td>
 
 {{ student["created_at"] or "—" }}
 
 </td>
-
 
 <td>
 
@@ -1687,7 +1739,6 @@ ID:
 </td>
 
 </tr>
-
 
 {% else %}
 
@@ -1804,7 +1855,6 @@ No students found.
 </td>
 
 <td>
-
 
 {% set referral_link =
     base_url
@@ -2126,7 +2176,10 @@ body {
 .profile {
     display: grid;
     grid-template-columns:
-        repeat(auto-fit, minmax(220px, 1fr));
+        repeat(
+            auto-fit,
+            minmax(220px, 1fr)
+        );
     gap: 15px;
 }
 
@@ -2658,7 +2711,9 @@ def admin_referral_page():
         student_search
     )
 
-    base_url = request.url_root.rstrip("/")
+    base_url = (
+        request.url_root.rstrip("/")
+    )
 
     payment_link = (
         f"{base_url}/pay"
@@ -2689,26 +2744,33 @@ def admin_referral_page():
 
         payment_link=payment_link,
 
-        promoter_dashboard_link=
-            promoter_dashboard_link,
+        promoter_dashboard_link=(
+            promoter_dashboard_link
+        ),
 
-        created_promoter=
-            created_promoter,
+        created_promoter=(
+            created_promoter
+        ),
 
-        csrf_token=
-            get_admin_csrf(),
+        csrf_token=(
+            get_admin_csrf()
+        ),
 
-        mask_account_number=
-            mask_account_number,
+        mask_account_number=(
+            mask_account_number
+        ),
 
-        format_withdrawal_status=
-            format_withdrawal_status,
+        format_withdrawal_status=(
+            format_withdrawal_status
+        ),
 
-        format_student_payment_status=
-            format_student_payment_status,
+        format_student_payment_status=(
+            format_student_payment_status
+        ),
 
-        format_registration_status=
-            format_registration_status,
+        format_registration_status=(
+            format_registration_status
+        ),
     )
 
 
@@ -2717,7 +2779,9 @@ def admin_referral_page():
 # ============================================================
 
 @admin_required
-def admin_student_details_page(student_id):
+def admin_student_details_page(
+    student_id
+):
 
     try:
 
@@ -2725,7 +2789,10 @@ def admin_student_details_page(student_id):
             student_id
         )
 
-    except (TypeError, ValueError):
+    except (
+        TypeError,
+        ValueError
+    ):
 
         return (
             "Invalid student ID.",
@@ -2749,11 +2816,13 @@ def admin_student_details_page(student_id):
 
         student=student,
 
-        format_student_payment_status=
-            format_student_payment_status,
+        format_student_payment_status=(
+            format_student_payment_status
+        ),
 
-        format_registration_status=
-            format_registration_status,
+        format_registration_status=(
+            format_registration_status
+        ),
     )
 
 
@@ -2921,6 +2990,13 @@ def create_promoter_page():
 
     # ========================================================
     # DATABASE RETURN COMPATIBILITY
+    #
+    # IMPORTANT:
+    # set_promoter_password() returns the
+    # plaintext withdrawal code ONE TIME.
+    #
+    # The code itself is stored in database
+    # only as a secure hash.
     # ========================================================
 
     try:
@@ -2930,18 +3006,13 @@ def create_promoter_page():
             dict
         ):
 
-            promoter_id = promoter["id"]
+            promoter_id = (
+                promoter["id"]
+            )
 
             referral_code = (
                 promoter.get(
                     "referral_code"
-                )
-                or ""
-            )
-
-            withdrawal_code = (
-                promoter.get(
-                    "withdrawal_code"
                 )
                 or ""
             )
@@ -2952,16 +3023,34 @@ def create_promoter_page():
 
             referral_code = ""
 
-            withdrawal_code = ""
-
         # ====================================================
         # SET PROMOTER PASSWORD
+        # AND GENERATE WITHDRAWAL CODE
         # ====================================================
 
-        set_promoter_password(
-            promoter_id,
-            password,
+        withdrawal_code = (
+            set_promoter_password(
+                promoter_id,
+                password,
+            )
         )
+
+        # ====================================================
+        # VERIFY THAT PASSWORD + CODE WERE SAVED
+        # ====================================================
+
+        if not withdrawal_code:
+
+            logger.error(
+                "Promoter password/withdrawal code "
+                "could not be saved."
+            )
+
+            return (
+                "Promoter was created but password "
+                "or withdrawal code could not be saved.",
+                500,
+            )
 
     except Exception:
 
@@ -2971,7 +3060,7 @@ def create_promoter_page():
 
         return (
             "Promoter was created but password "
-            "could not be saved.",
+            "or withdrawal code could not be saved.",
             500,
         )
 
@@ -3085,7 +3174,9 @@ def admin_withdrawal_status_page():
     try:
 
         transfer_id = (
-            withdrawal["transfer_id"]
+            withdrawal[
+                "transfer_id"
+            ]
             or ""
         )
 
@@ -3104,7 +3195,9 @@ def admin_withdrawal_status_page():
     try:
 
         transfer_reference = (
-            withdrawal["transfer_reference"]
+            withdrawal[
+                "transfer_reference"
+            ]
             or ""
         )
 
@@ -3344,17 +3437,21 @@ def admin_withdrawal_status_page():
 
             update_withdrawal_transfer(
                 withdrawal_id,
+
                 (
                     new_transfer_id
                     if new_transfer_id
                     else None
                 ),
+
                 (
                     new_reference
                     if new_reference
                     else None
                 ),
+
                 final_status,
+
                 (
                     message
                     if message
@@ -3436,13 +3533,17 @@ def admin_withdrawal_status_page():
         "Withdrawal status refreshed: "
         "withdrawal=%s status=%s "
         "transfer_id=%s reference=%s",
+
         withdrawal_id,
+
         final_status,
+
         (
             new_transfer_id
             or transfer_id
             or "none"
         ),
+
         (
             new_reference
             or transfer_reference
