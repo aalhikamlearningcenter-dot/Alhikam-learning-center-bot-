@@ -577,12 +577,14 @@ def add_student_activity(
     if metadata is not None:
 
         try:
+
             metadata = json.dumps(
                 metadata,
                 ensure_ascii=False
             )
 
         except Exception:
+
             metadata = str(metadata)
 
     cursor.execute("""
@@ -680,10 +682,6 @@ def add_student(data, *args):
     conn = get_connection()
     cursor = conn.cursor()
 
-    # ========================================================
-    # EXISTING STUDENT
-    # ========================================================
-
     existing = None
 
     if tx_ref:
@@ -743,13 +741,8 @@ def add_student(data, *args):
 
         return student_id
 
-    # ========================================================
-    # NEW STUDENT
-    # ========================================================
-
     cursor.execute("""
     INSERT INTO students(
-
         payment_token,
         tx_ref,
         full_name,
@@ -766,7 +759,6 @@ def add_student(data, *args):
         registration_completed,
         referral_code,
         promoter_id
-
     )
     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     """, (
@@ -824,7 +816,7 @@ def create_or_get_student(data):
 
 
 # ============================================================
-# GET STUDENT BY ID
+# GET STUDENT
 # ============================================================
 
 def get_student_by_id(student_id):
@@ -849,10 +841,6 @@ def get_student_by_id(student_id):
     return result
 
 
-# ============================================================
-# GET STUDENT BY TX REF
-# ============================================================
-
 def get_student_by_tx_ref(tx_ref):
 
     if not tx_ref:
@@ -875,10 +863,6 @@ def get_student_by_tx_ref(tx_ref):
 
     return result
 
-
-# ============================================================
-# GET STUDENT BY TELEGRAM ID
-# ============================================================
 
 def get_student_by_telegram_id(telegram_id):
 
@@ -903,10 +887,6 @@ def get_student_by_telegram_id(telegram_id):
     return result
 
 
-# ============================================================
-# GET ALL STUDENTS
-# ============================================================
-
 def get_all_students():
 
     conn = get_connection()
@@ -928,10 +908,6 @@ def get_all_students():
 
     return result
 
-
-# ============================================================
-# SEARCH STUDENTS
-# ============================================================
 
 def search_students(search=""):
 
@@ -1048,10 +1024,6 @@ def update_student(payment_token, data):
     return changed
 
 
-# ============================================================
-# UPDATE STUDENT FACULTY
-# ============================================================
-
 def update_student_faculty(tx_ref, faculty):
 
     if not tx_ref:
@@ -1080,7 +1052,7 @@ def update_student_faculty(tx_ref, faculty):
 
 
 # ============================================================
-# MARK REGISTRATION COMPLETED
+# REGISTRATION
 # ============================================================
 
 def mark_payment_registration_completed(tx_ref):
@@ -1170,7 +1142,6 @@ def save_payment(data):
 
     cursor.execute("""
     INSERT OR REPLACE INTO payments(
-
         tx_ref,
         transaction_id,
         amount,
@@ -1187,10 +1158,11 @@ def save_payment(data):
         registration_completed,
         created_at,
         updated_at
-
     )
     VALUES(
-        ?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
+        ?,?,?,?,?,?,?,?,?,?,?,?,?,?,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
     )
     """, (
         tx_ref,
@@ -1651,7 +1623,6 @@ def create_commission(
 
         cursor.execute("""
         INSERT INTO commissions(
-
             promoter_id,
             student_id,
             tx_ref,
@@ -1659,7 +1630,6 @@ def create_commission(
             commission_rate,
             commission_amount,
             status
-
         )
         VALUES(?,?,?,?,?,?,?)
         """, (
@@ -1834,7 +1804,6 @@ def create_withdrawal(
 
         cursor.execute("""
         INSERT INTO withdrawals(
-
             promoter_id,
             amount,
             bank_name,
@@ -1842,7 +1811,6 @@ def create_withdrawal(
             account_name,
             account_number,
             status
-
         )
         VALUES(?,?,?,?,?,?,?)
         """, (
@@ -1860,7 +1828,7 @@ def create_withdrawal(
         cursor.execute("""
         UPDATE promoters
         SET available_balance=
-            available_balance-?
+            COALESCE(available_balance,0)-?
         WHERE id=?
         """, (
             amount,
@@ -1883,15 +1851,6 @@ def create_withdrawal(
 
 # ============================================================
 # GET WITHDRAWAL BY ID
-#
-# Compatibility:
-# referral_dashboard.py may use:
-# transfer_status
-# transfer_message
-#
-# Database actually stores:
-# status
-# message
 # ============================================================
 
 def get_withdrawal_by_id(
@@ -1994,6 +1953,13 @@ def get_promoter_withdrawals(
 
 # ============================================================
 # UPDATE WITHDRAWAL TRANSFER
+#
+# IMPORTANT:
+# status=None means:
+# "Do not change accounting status."
+#
+# This is important because terminal accounting must be
+# handled by update_withdrawal_status().
 # ============================================================
 
 def update_withdrawal_transfer(
@@ -2050,6 +2016,19 @@ def update_withdrawal_transfer(
 
 # ============================================================
 # UPDATE WITHDRAWAL STATUS
+#
+# ACCOUNTING RULES:
+#
+# PROCESSING
+#     -> money remains reserved
+#
+# FAILED / CANCELLED
+#     -> amount is returned to available_balance
+#        exactly once
+#
+# SUCCESSFUL
+#     -> amount is added to withdrawn
+#        exactly once
 # ============================================================
 
 def update_withdrawal_status(
@@ -2088,7 +2067,7 @@ def update_withdrawal_status(
         old_status = str(
             withdrawal["status"]
             or ""
-        ).lower()
+        ).lower().strip()
 
         amount = float(
             withdrawal["amount"]
@@ -2101,6 +2080,11 @@ def update_withdrawal_status(
 
         # ====================================================
         # FAILED / CANCELLED
+        #
+        # Only refund when the withdrawal was still
+        # processing.
+        #
+        # This prevents double refund.
         # ====================================================
 
         if (
@@ -2109,12 +2093,7 @@ def update_withdrawal_status(
                 "cancelled",
                 "canceled"
             )
-            and old_status
-            not in (
-                "failed",
-                "cancelled",
-                "canceled"
-            )
+            and old_status == "processing"
         ):
 
             cursor.execute("""
@@ -2129,6 +2108,9 @@ def update_withdrawal_status(
 
         # ====================================================
         # SUCCESSFUL
+        #
+        # Only account successful withdrawal when previous
+        # status was processing.
         # ====================================================
 
         if (
@@ -2138,13 +2120,7 @@ def update_withdrawal_status(
                 "completed",
                 "complete"
             )
-            and old_status
-            not in (
-                "successful",
-                "success",
-                "completed",
-                "complete"
-            )
+            and old_status == "processing"
         ):
 
             cursor.execute("""
@@ -2156,6 +2132,10 @@ def update_withdrawal_status(
                 amount,
                 promoter_id
             ))
+
+        # ====================================================
+        # SAVE FINAL STATUS
+        # ====================================================
 
         cursor.execute("""
         UPDATE withdrawals
@@ -2189,27 +2169,30 @@ def update_withdrawal_status(
 # ============================================================
 # PROCESS TRANSFER RESULT
 #
-# IMPORTANT:
+# IMPORTANT FIX:
 #
-# This function now accepts BOTH:
+# We DO NOT write terminal status through
+# update_withdrawal_transfer() before accounting.
 #
-# 1. Direct values:
+# Otherwise:
 #
-# process_transfer_result(
-#     withdrawal_id=1,
-#     status="successful",
-#     transfer_id="123",
-#     transfer_reference="ALHIKAM-WD-1"
-# )
+# processing
+#     ↓
+# update status = failed
+#     ↓
+# old_status becomes failed
+#     ↓
+# refund condition fails
 #
-# 2. Flutterwave result dictionary:
+# The correct flow is:
 #
-# process_transfer_result(
-#     withdrawal_id=1,
-#     result=transfer_result
-# )
-#
-# A dictionary is NEVER sent directly into SQLite.
+# processing
+#     ↓
+# save transfer information only
+#     ↓
+# update_withdrawal_status("failed")
+#     ↓
+# refund promoter
 # ============================================================
 
 def process_transfer_result(
@@ -2222,14 +2205,10 @@ def process_transfer_result(
 ):
 
     # ========================================================
-    # EXTRACT RESULT DICTIONARY
+    # EXTRACT RESULT
     # ========================================================
 
     if result is not None:
-
-        # ----------------------------------------------------
-        # JSON STRING
-        # ----------------------------------------------------
 
         if isinstance(result, str):
 
@@ -2243,18 +2222,9 @@ def process_transfer_result(
 
                 result = None
 
-        # ----------------------------------------------------
-        # RESULT DICTIONARY
-        # ----------------------------------------------------
-
         if isinstance(result, dict):
 
             source = result
-
-            # ------------------------------------------------
-            # If this is a raw Flutterwave response with
-            # nested data, use nested data where possible.
-            # ------------------------------------------------
 
             nested_data = result.get("data")
 
@@ -2314,6 +2284,7 @@ def process_transfer_result(
 
             extracted_message = (
                 source.get("complete_message")
+                or source.get("response_message")
                 or source.get("message")
             )
 
@@ -2322,8 +2293,7 @@ def process_transfer_result(
                 message = extracted_message
 
             # ------------------------------------------------
-            # Some normalized internal responses may put
-            # these values at the root.
+            # ROOT FALLBACK
             # ------------------------------------------------
 
             if not transfer_id:
@@ -2343,8 +2313,16 @@ def process_transfer_result(
 
             if not message:
 
-                message = result.get(
-                    "message"
+                message = (
+                    result.get(
+                        "complete_message"
+                    )
+                    or result.get(
+                        "response_message"
+                    )
+                    or result.get(
+                        "message"
+                    )
                 )
 
             if not status:
@@ -2397,10 +2375,7 @@ def process_transfer_result(
 
     else:
 
-        # ----------------------------------------------------
-        # UNKNOWN STATUS MUST NEVER BE TREATED AS SUCCESS.
-        # ----------------------------------------------------
-
+        # Unknown status is NEVER treated as success.
         normalized_status = "processing"
 
     # ========================================================
@@ -2457,27 +2432,33 @@ def process_transfer_result(
         "withdrawal_id=%s "
         "status=%s "
         "transfer_id=%s "
-        "reference=%s",
+        "reference=%s "
+        "message=%s",
         withdrawal_id,
         normalized_status,
         safe_transfer_id,
-        safe_reference
+        safe_reference,
+        safe_message
     )
 
     # ========================================================
-    # SAVE TRANSFER INFORMATION
+    # SAVE TRANSFER DETAILS ONLY
+    #
+    # IMPORTANT:
+    # status=None means existing "processing" status
+    # remains untouched.
     # ========================================================
 
     update_withdrawal_transfer(
         withdrawal_id=withdrawal_id,
         transfer_id=safe_transfer_id,
         transfer_reference=safe_reference,
-        status=normalized_status,
+        status=None,
         message=safe_message
     )
 
     # ========================================================
-    # FINAL STATUS
+    # TERMINAL STATUS
     # ========================================================
 
     if normalized_status in (
@@ -2495,16 +2476,23 @@ def process_transfer_result(
     # ========================================================
     # PROCESSING / UNCERTAIN
     #
-    # IMPORTANT:
-    # Do NOT refund here.
-    # The transfer may still exist at Flutterwave.
+    # DO NOT REFUND.
     # ========================================================
 
-    return True
+    return update_withdrawal_transfer(
+        withdrawal_id=withdrawal_id,
+        transfer_id=safe_transfer_id,
+        transfer_reference=safe_reference,
+        status="processing",
+        message=safe_message
+    )
 
 
 # ============================================================
 # MARK WITHDRAWAL SUCCESSFUL
+#
+# IMPORTANT:
+# Do not set successful before accounting.
 # ============================================================
 
 def mark_withdrawal_successful(
@@ -2513,13 +2501,15 @@ def mark_withdrawal_successful(
     transfer_reference=None
 ):
 
+    # Save transfer details only.
     update_withdrawal_transfer(
         withdrawal_id=withdrawal_id,
         transfer_id=transfer_id,
         transfer_reference=transfer_reference,
-        status="successful"
+        status=None
     )
 
+    # Then perform successful accounting.
     return update_withdrawal_status(
         withdrawal_id=withdrawal_id,
         status="successful"
@@ -2529,9 +2519,10 @@ def mark_withdrawal_successful(
 # ============================================================
 # REFUND WITHDRAWAL
 #
-# NOTE:
-# This function is kept for explicit/manual recovery only.
-# It is NOT called automatically for uncertain transfers.
+# Manual recovery only.
+#
+# This is useful for old withdrawals that were already marked
+# failed before this fix was deployed.
 # ============================================================
 
 def refund_withdrawal(
@@ -2560,6 +2551,13 @@ def refund_withdrawal(
 
             conn.rollback()
             return False
+
+        # ----------------------------------------------------
+        # Already failed/cancelled means normal automatic
+        # refund has already been processed.
+        #
+        # Therefore do NOT refund automatically here.
+        # ----------------------------------------------------
 
         if str(
             withdrawal["status"] or ""
@@ -2593,7 +2591,9 @@ def refund_withdrawal(
             updated_at=CURRENT_TIMESTAMP
         WHERE id=?
         AND status='processing'
-        """, (withdrawal_id,))
+        """, (
+            withdrawal_id,
+        ))
 
         conn.commit()
 
