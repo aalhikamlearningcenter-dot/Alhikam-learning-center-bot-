@@ -84,18 +84,68 @@ PROMOTER_CSRF_KEY = "alhikam_promoter_csrf"
 # ============================================================
 
 def _row_get(row, key, default=None):
+
     if row is None:
         return default
 
     try:
         return row[key]
+
     except Exception:
         pass
 
     try:
-        return row.get(key, default)
+        return row.get(
+            key,
+            default
+        )
+
     except Exception:
         return default
+
+
+# ============================================================
+# WITHDRAWAL FIELD COMPATIBILITY
+# ============================================================
+
+def _withdrawal_value(
+    withdrawal,
+    key,
+    default=""
+):
+
+    if withdrawal is None:
+        return default
+
+    aliases = {
+        "transfer_status": (
+            "transfer_status",
+            "status",
+        ),
+
+        "transfer_message": (
+            "transfer_message",
+            "message",
+        ),
+    }
+
+    candidates = aliases.get(
+        key,
+        (key,)
+    )
+
+    for candidate in candidates:
+
+        value = _row_get(
+            withdrawal,
+            candidate,
+            None,
+        )
+
+        if value is not None:
+            return value
+
+    return default
 
 
 # ============================================================
@@ -103,8 +153,10 @@ def _row_get(row, key, default=None):
 # ============================================================
 
 def _safe_money(value):
+
     try:
         return float(value or 0)
+
     except Exception:
         return 0.0
 
@@ -114,7 +166,10 @@ def _safe_money(value):
 # ============================================================
 
 def _mask_account(account_number):
-    value = str(account_number or "")
+
+    value = str(
+        account_number or ""
+    )
 
     if len(value) <= 4:
         return "****"
@@ -130,16 +185,26 @@ def _mask_account(account_number):
 # ============================================================
 
 def _csrf_token():
-    token = session.get(PROMOTER_CSRF_KEY)
+
+    token = session.get(
+        PROMOTER_CSRF_KEY
+    )
 
     if not token:
-        token = secrets.token_urlsafe(32)
-        session[PROMOTER_CSRF_KEY] = token
+
+        token = secrets.token_urlsafe(
+            32
+        )
+
+        session[
+            PROMOTER_CSRF_KEY
+        ] = token
 
     return token
 
 
 def _check_csrf():
+
     submitted = request.form.get(
         "csrf_token",
         "",
@@ -154,10 +219,12 @@ def _check_csrf():
         return False
 
     try:
+
         return secrets.compare_digest(
             submitted,
             expected,
         )
+
     except Exception:
         return False
 
@@ -167,6 +234,7 @@ def _check_csrf():
 # ============================================================
 
 def _current_promoter():
+
     promoter_id = session.get(
         PROMOTER_SESSION_KEY
     )
@@ -175,18 +243,26 @@ def _current_promoter():
         return None
 
     try:
-        promoter_id = int(promoter_id)
+
+        promoter_id = int(
+            promoter_id
+        )
+
     except Exception:
         return None
 
     try:
+
         return get_promoter_by_id(
             promoter_id
         )
+
     except Exception:
+
         logger.exception(
             "Unable to load current promoter"
         )
+
         return None
 
 
@@ -202,6 +278,7 @@ def promoter_required(function):
         promoter = _current_promoter()
 
         if not promoter:
+
             return redirect(
                 url_for(
                     "promoter_login"
@@ -224,13 +301,16 @@ PROMOTER_LOGIN_HTML = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
+
     <meta charset="UTF-8">
+
     <meta name="viewport"
           content="width=device-width, initial-scale=1.0">
 
     <title>ALHIKAM Promoter Login</title>
 
     <style>
+
         * {
             box-sizing: border-box;
         }
@@ -306,7 +386,9 @@ PROMOTER_LOGIN_HTML = """
             color: #666;
             font-size: 14px;
         }
+
     </style>
+
 </head>
 
 <body>
@@ -322,9 +404,11 @@ PROMOTER_LOGIN_HTML = """
         </div>
 
         {% if error %}
+
             <div class="error">
                 {{ error }}
             </div>
+
         {% endif %}
 
         <p>
@@ -396,6 +480,7 @@ PROMOTER_LOGIN_HTML = """
 def promoter_login_page():
 
     if _current_promoter():
+
         return redirect(
             url_for(
                 "referral_dashboard"
@@ -449,13 +534,17 @@ def promoter_login_page():
         ), 400
 
     try:
+
         promoter = get_promoter_by_referral_code(
             referral_code
         )
+
     except Exception:
+
         logger.exception(
             "Unable to find promoter"
         )
+
         promoter = None
 
     if not promoter:
@@ -475,14 +564,18 @@ def promoter_login_page():
     )
 
     try:
+
         valid_password = verify_promoter_password(
             promoter_id,
             password,
         )
+
     except Exception:
+
         logger.exception(
             "Promoter password verification failed"
         )
+
         valid_password = False
 
     if not valid_password:
@@ -522,6 +615,21 @@ def promoter_login_page():
 # ============================================================
 
 def promoter_logout_page():
+
+    if request.method == "POST":
+
+        if not _check_csrf():
+
+            flash(
+                "Invalid security token.",
+                "error",
+            )
+
+            return redirect(
+                url_for(
+                    "referral_dashboard"
+                )
+            )
 
     session.pop(
         PROMOTER_SESSION_KEY,
@@ -842,7 +950,7 @@ REFERRAL_DASHBOARD_HTML = """
 
                 <div class="stat-value">
                     ₦{{ "{:,.2f}".format(
-                        promoter["withdrawn_amount"] or 0
+                        promoter["withdrawn"] or 0
                     ) }}
                 </div>
 
@@ -977,11 +1085,6 @@ REFERRAL_DASHBOARD_HTML = """
             </strong>
         </p>
 
-
-        <!-- IMPORTANT:
-             main.py registers the withdrawal endpoint
-             as referral_withdraw.
-        -->
 
         <form
             method="POST"
@@ -1136,7 +1239,10 @@ REFERRAL_DASHBOARD_HTML = """
                         </td>
 
                         <td>
-                            {{ withdrawal["transfer_status"] or "" }}
+                            {{ withdrawal_value(
+                                withdrawal,
+                                "transfer_status"
+                            ) or "" }}
                         </td>
 
                         <td>
@@ -1231,7 +1337,9 @@ function copyText(id, button) {
 # DASHBOARD
 # ============================================================
 
-def referral_dashboard_by_code(referral_code=None):
+def referral_dashboard_by_code(
+    referral_code=None
+):
 
     promoter = _current_promoter()
 
@@ -1252,9 +1360,19 @@ def referral_dashboard_by_code(referral_code=None):
             )
         )
 
-    withdrawals = get_promoter_withdrawals(
-        promoter["id"]
-    )
+    try:
+
+        withdrawals = get_promoter_withdrawals(
+            promoter["id"]
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Unable to load promoter withdrawals"
+        )
+
+        withdrawals = []
 
     try:
 
@@ -1280,6 +1398,7 @@ def referral_dashboard_by_code(referral_code=None):
         app_url=APP_URL,
         csrf_token=_csrf_token(),
         mask_account=_mask_account,
+        withdrawal_value=_withdrawal_value,
     )
 
 
@@ -1433,7 +1552,10 @@ WITHDRAWAL_STATUS_HTML = """
                 Transfer Status
             </div>
 
-            {{ withdrawal["transfer_status"] or "" }}
+            {{ withdrawal_value(
+                withdrawal,
+                "transfer_status"
+            ) or "" }}
 
         </div>
 
@@ -1449,7 +1571,10 @@ WITHDRAWAL_STATUS_HTML = """
         </div>
 
 
-        {% if withdrawal["transfer_message"] %}
+        {% if withdrawal_value(
+            withdrawal,
+            "transfer_message"
+        ) %}
 
         <div class="row">
 
@@ -1457,7 +1582,10 @@ WITHDRAWAL_STATUS_HTML = """
                 Message
             </div>
 
-            {{ withdrawal["transfer_message"] }}
+            {{ withdrawal_value(
+                withdrawal,
+                "transfer_message"
+            ) }}
 
         </div>
 
@@ -1665,10 +1793,6 @@ def withdrawal_page():
 
     # ========================================================
     # VERIFY WITHDRAWAL CODE
-    #
-    # BEFORE bank resolve
-    # BEFORE withdrawal creation
-    # BEFORE balance reservation
     # ========================================================
 
     try:
@@ -1805,35 +1929,6 @@ def withdrawal_page():
             bank_code=bank_code,
         )
 
-    except TypeError:
-
-        try:
-
-            resolved = resolve_bank_account(
-                bank_code,
-                account_number,
-            )
-
-        except Exception:
-
-            logger.exception(
-                "Bank account resolve failed"
-            )
-
-            flash(
-                (
-                    "Unable to verify bank account. "
-                    "Please check your bank and account number."
-                ),
-                "error",
-            )
-
-            return redirect(
-                url_for(
-                    "referral_dashboard"
-                )
-            )
-
     except Exception:
 
         logger.exception(
@@ -1875,7 +1970,6 @@ def withdrawal_page():
 
     account_name = ""
 
-
     if isinstance(
         resolved,
         dict,
@@ -1890,7 +1984,6 @@ def withdrawal_page():
             )
             or ""
         )
-
 
         if not account_name:
 
@@ -1990,29 +2083,18 @@ def withdrawal_page():
     )
 
 
+    # IMPORTANT:
+    # ONLY keyword arguments are used.
+    #
+    # This prevents the old bug where arguments could
+    # accidentally be written into the wrong database fields.
+
     try:
 
         update_withdrawal_transfer(
             withdrawal_id=withdrawal_id,
             transfer_reference=transfer_reference,
         )
-
-    except TypeError:
-
-        try:
-
-            update_withdrawal_transfer(
-                withdrawal_id,
-                transfer_reference,
-                None,
-                "PENDING",
-            )
-
-        except Exception:
-
-            logger.exception(
-                "Unable to save transfer reference"
-            )
 
     except Exception:
 
@@ -2035,38 +2117,34 @@ def withdrawal_page():
             reference=transfer_reference,
         )
 
-    except TypeError:
+    except Exception as exc:
 
-        try:
-
-            transfer_result = create_flutterwave_transfer(
-                amount,
-                bank_code,
-                account_number,
-                account_name,
-                transfer_reference,
-            )
-
-        except Exception as e:
-
-            logger.exception(
-                "Flutterwave transfer failed"
-            )
-
-            transfer_result = {
-                "status": "failed",
-                "message": str(e),
-            }
-
-    except Exception as e:
+        # ----------------------------------------------------
+        # IMPORTANT FINANCIAL SAFETY
+        #
+        # Do NOT immediately mark this withdrawal as FAILED.
+        #
+        # The HTTP request may fail even though Flutterwave
+        # may have received the transfer request.
+        #
+        # Keeping it PROCESSING prevents an accidental refund
+        # followed by a second transfer.
+        # ----------------------------------------------------
 
         logger.exception(
-            "Flutterwave transfer failed"
+            "Flutterwave transfer call failed"
         )
 
         transfer_result = {
-            "status": "failed",
-            "message": str(e),
+            "success": False,
+            "uncertain": True,
+            "status": "PROCESSING",
+            "transfer_id": None,
+            "reference": transfer_reference,
+            "message": (
+                "Transfer request could not be confirmed. "
+                f"{str(exc)}"
+            ),
         }
 
 
@@ -2074,27 +2152,27 @@ def withdrawal_page():
     # PROCESS TRANSFER RESULT
     # ========================================================
 
+    # IMPORTANT:
+    #
+    # ALWAYS use:
+    #
+    # result=transfer_result
+    #
+    # NEVER use:
+    #
+    # process_transfer_result(
+    #     withdrawal_id,
+    #     transfer_result
+    # )
+    #
+    # because the whole dictionary would become "status".
+
     try:
 
         process_transfer_result(
             withdrawal_id=withdrawal_id,
             result=transfer_result,
         )
-
-    except TypeError:
-
-        try:
-
-            process_transfer_result(
-                withdrawal_id,
-                transfer_result,
-            )
-
-        except Exception:
-
-            logger.exception(
-                "Processing transfer result failed"
-            )
 
     except Exception:
 
@@ -2120,7 +2198,9 @@ def withdrawal_page():
 # ============================================================
 
 @promoter_required
-def withdrawal_status_page(withdrawal_id):
+def withdrawal_status_page(
+    withdrawal_id
+):
 
     promoter = _current_promoter()
 
@@ -2197,7 +2277,7 @@ def withdrawal_status_page(withdrawal_id):
 
 
     transfer_status = str(
-        _row_get(
+        _withdrawal_value(
             withdrawal,
             "transfer_status",
             "",
@@ -2231,6 +2311,7 @@ def withdrawal_status_page(withdrawal_id):
         "PROCESSING",
         "NEW",
         "QUEUED",
+        "IN PROGRESS",
     }
 
 
@@ -2300,21 +2381,6 @@ def withdrawal_status_page(withdrawal_id):
                     result=result,
                 )
 
-            except TypeError:
-
-                try:
-
-                    process_transfer_result(
-                        withdrawal_id,
-                        result,
-                    )
-
-                except Exception:
-
-                    logger.exception(
-                        "Unable to process refreshed transfer result"
-                    )
-
             except Exception:
 
                 logger.exception(
@@ -2346,7 +2412,7 @@ def withdrawal_status_page(withdrawal_id):
 
 
     latest_transfer_status = str(
-        _row_get(
+        _withdrawal_value(
             withdrawal,
             "transfer_status",
             "",
@@ -2367,6 +2433,7 @@ def withdrawal_status_page(withdrawal_id):
         csrf_token=_csrf_token(),
         can_refresh=can_refresh,
         mask_account=_mask_account,
+        withdrawal_value=_withdrawal_value,
     )
 
 
