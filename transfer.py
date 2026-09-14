@@ -11,6 +11,8 @@
 # - Never refund automatically after timeout.
 # - Use one stable transfer reference per withdrawal.
 # - Never expose full bank account numbers in logs.
+# - If Flutterwave says a reference already exists,
+#   verify the existing transfer instead of creating a duplicate.
 # ==========================================================
 
 import os
@@ -162,8 +164,6 @@ def _safe_message(response=None, data=None):
 
         if isinstance(data, dict):
 
-            # Flutterwave may return the useful message
-            # under different fields.
             message = (
                 data.get("complete_message")
                 or data.get("response_message")
@@ -198,11 +198,8 @@ def _transfer_message(data=None, result=None):
     """
     Extract the most useful Flutterwave transfer message.
 
-    Flutterwave transfer responses may contain useful
-    information in complete_message, response_message,
-    or message.
-
     Priority:
+
         result.complete_message
         result.response_message
         result.message
@@ -254,7 +251,7 @@ def _json(response):
 
         return response.json()
 
-    except ValueError:
+    except (ValueError, requests.exceptions.JSONDecodeError):
 
         logger.error(
             "Flutterwave returned invalid JSON."
@@ -628,6 +625,7 @@ def create_flutterwave_transfer(
 
         # IMPORTANT:
         # Do not assume transfer failed.
+
         logger.exception(
             "Flutterwave transfer request error. "
             "Reference=%s",
@@ -653,6 +651,7 @@ def create_flutterwave_transfer(
     data = _json(response)
 
     # Log safe details BEFORE processing the response.
+
     _log_transfer_response(
         response=response,
         data=data,
@@ -690,13 +689,81 @@ def create_flutterwave_transfer(
         or reference
     ).strip()
 
-    # IMPORTANT:
-    # Get the real transfer message, including
-    # complete_message when Flutterwave provides it.
+    # ------------------------------------------------------
+    # REAL PROVIDER MESSAGE
+    # ------------------------------------------------------
+
     message = _transfer_message(
         data=data,
         result=result,
     )
+
+    # ------------------------------------------------------
+    # DUPLICATE REFERENCE
+    # ------------------------------------------------------
+
+    duplicate_reference = (
+        "already exists"
+        in message.lower()
+        or
+        "payout with this ref already exists"
+        in message.lower()
+    )
+
+    if (
+        response.status_code in (400, 409)
+        and duplicate_reference
+    ):
+
+        logger.warning(
+            "Flutterwave says transfer reference already "
+            "exists. Verifying existing transfer. "
+            "Reference=%s",
+            reference,
+        )
+
+        existing = (
+            get_flutterwave_transfer_status_by_reference(
+                reference
+            )
+        )
+
+        # Make sure the lookup still belongs to the
+        # exact reference we requested.
+
+        existing_reference = str(
+            existing.get("reference") or ""
+        ).strip()
+
+        if existing_reference == reference:
+
+            logger.info(
+                "Existing Flutterwave transfer found "
+                "for reference=%s status=%s "
+                "transfer_id=%s",
+                reference,
+                existing.get("status"),
+                existing.get("transfer_id"),
+            )
+
+            return existing
+
+        # If Flutterwave cannot confirm the exact
+        # existing transfer, DO NOT create another one.
+
+        return {
+            "success": False,
+            "uncertain": True,
+            "status": "PROCESSING",
+            "transfer_id": None,
+            "reference": reference,
+            "message": (
+                "A transfer with this reference already "
+                "exists, but its status could not be "
+                "confirmed. Please check again."
+            ),
+            "account_name": verified_account_name,
+        }
 
     # ------------------------------------------------------
     # REFERENCE SAFETY
@@ -735,8 +802,10 @@ def create_flutterwave_transfer(
             "status": transfer_status,
             "transfer_id": transfer_id,
             "reference": reference,
-            "message": message
-            or "Transfer successful.",
+            "message": (
+                message
+                or "Transfer successful."
+            ),
             "account_name": verified_account_name,
         }
 
@@ -752,8 +821,10 @@ def create_flutterwave_transfer(
             "status": transfer_status,
             "transfer_id": transfer_id,
             "reference": reference,
-            "message": message
-            or "Transfer failed.",
+            "message": (
+                message
+                or "Transfer failed."
+            ),
             "account_name": verified_account_name,
         }
 
@@ -769,8 +840,10 @@ def create_flutterwave_transfer(
             "status": transfer_status,
             "transfer_id": transfer_id,
             "reference": reference,
-            "message": message
-            or "Transfer is being processed.",
+            "message": (
+                message
+                or "Transfer is being processed."
+            ),
             "account_name": verified_account_name,
         }
 
@@ -783,12 +856,15 @@ def create_flutterwave_transfer(
         return {
             "success": False,
             "uncertain": True,
-            "status": transfer_status
-            or "PROCESSING",
+            "status": (
+                transfer_status
+                or "PROCESSING"
+            ),
             "transfer_id": transfer_id,
             "reference": reference,
-            "message": message
-            or (
+            "message": (
+                message
+                or
                 "Transfer request accepted. "
                 "Final status is being verified."
             ),
@@ -810,8 +886,10 @@ def create_flutterwave_transfer(
     return {
         "success": False,
         "uncertain": True,
-        "status": transfer_status
-        or "PROCESSING",
+        "status": (
+            transfer_status
+            or "PROCESSING"
+        ),
         "transfer_id": transfer_id,
         "reference": reference,
         "message": (
@@ -929,6 +1007,7 @@ def get_flutterwave_transfer_status(
     result = _extract_result(data)
 
     # Safe status logging.
+
     logger.info(
         "Flutterwave transfer status response: "
         "ID=%s provider_status=%s transfer_status=%s "
@@ -969,8 +1048,10 @@ def get_flutterwave_transfer_status(
             "status": transfer_status,
             "transfer_id": actual_transfer_id,
             "reference": reference,
-            "message": message
-            or "Transfer successful.",
+            "message": (
+                message
+                or "Transfer successful."
+            ),
         }
 
     if transfer_status in TRANSFER_FINAL_FAILED:
@@ -981,19 +1062,25 @@ def get_flutterwave_transfer_status(
             "status": transfer_status,
             "transfer_id": actual_transfer_id,
             "reference": reference,
-            "message": message
-            or "Transfer failed.",
+            "message": (
+                message
+                or "Transfer failed."
+            ),
         }
 
     return {
         "success": False,
         "uncertain": True,
-        "status": transfer_status
-        or "PROCESSING",
+        "status": (
+            transfer_status
+            or "PROCESSING"
+        ),
         "transfer_id": actual_transfer_id,
         "reference": reference,
-        "message": message
-        or "Transfer is still being processed.",
+        "message": (
+            message
+            or "Transfer is still being processed."
+        ),
     }
 
 
@@ -1186,8 +1273,10 @@ def get_flutterwave_transfer_status_by_reference(
             "status": transfer_status,
             "transfer_id": transfer_id,
             "reference": reference,
-            "message": message
-            or "Transfer successful.",
+            "message": (
+                message
+                or "Transfer successful."
+            ),
         }
 
     if transfer_status in TRANSFER_FINAL_FAILED:
@@ -1198,19 +1287,25 @@ def get_flutterwave_transfer_status_by_reference(
             "status": transfer_status,
             "transfer_id": transfer_id,
             "reference": reference,
-            "message": message
-            or "Transfer failed.",
+            "message": (
+                message
+                or "Transfer failed."
+            ),
         }
 
     return {
         "success": False,
         "uncertain": True,
-        "status": transfer_status
-        or "PROCESSING",
+        "status": (
+            transfer_status
+            or "PROCESSING"
+        ),
         "transfer_id": transfer_id,
         "reference": reference,
-        "message": message
-        or "Transfer is still being processed.",
+        "message": (
+            message
+            or "Transfer is still being processed."
+        ),
     }
 
 
