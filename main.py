@@ -33,6 +33,7 @@ from flask import (
     jsonify,
 )
 
+
 # ============================================================
 # PROJECT IMPORTS
 # ============================================================
@@ -59,6 +60,7 @@ from database import (
     save_payment,
     update_payment_status,
     get_promoter_by_referral_code,
+    get_student_by_tx_ref,
     create_commission,
     commission_exists,
 )
@@ -81,6 +83,7 @@ from admin_referral import (
     admin_student_details_page,
 )
 
+
 # ============================================================
 # LOGGING
 # ============================================================
@@ -91,6 +94,7 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
 
 # ============================================================
 # FLASK APP
@@ -105,6 +109,7 @@ web_app.secret_key = os.getenv(
         "ALHIKAM_LEARNING_CENTER_CHANGE_THIS_SECRET_KEY",
     ),
 )
+
 
 # ============================================================
 # DATABASE INITIALIZATION
@@ -125,11 +130,13 @@ except Exception as e:
         e,
     )
 
+
 # ============================================================
 # PAYMENT SESSIONS
 # ============================================================
 
 PAYMENT_SESSIONS = {}
+
 
 # ============================================================
 # COMMISSION MAP
@@ -143,6 +150,7 @@ COMMISSION_BY_AMOUNT = {
     16500: 1800,
     20000: 2500,
 }
+
 
 # ============================================================
 # HELPER FUNCTIONS
@@ -338,7 +346,6 @@ def payment_page():
         )
 
         if promoter is None:
-
             referral_code = ""
 
     return render_template_string(
@@ -452,9 +459,9 @@ def create_payment():
                 400,
             )
 
-        # ----------------------------------------------------
+        # ====================================================
         # FIND PROMOTER
-        # ----------------------------------------------------
+        # ====================================================
 
         promoter_id = None
 
@@ -486,9 +493,9 @@ def create_payment():
                 None,
             )
 
-        # ----------------------------------------------------
+        # ====================================================
         # CREATE FLUTTERWAVE PAYMENT
-        # ----------------------------------------------------
+        # ====================================================
 
         payment = create_flutterwave_payment(
             plan_id=payment_plan,
@@ -571,25 +578,31 @@ def create_payment():
                 400,
             )
 
-        # ----------------------------------------------------
+        # ====================================================
         # CALCULATE COMMISSION
-        # ----------------------------------------------------
+        # ====================================================
 
         commission_amount = calculate_commission(
             amount
         )
+
+        # ====================================================
+        # SAVE PAYMENT
+        # ====================================================
 
         payment_data = {
             "tx_ref": tx_ref,
             "transaction_id": None,
             "payment_plan": payment_plan,
             "amount": amount,
-            "status": "pending",
+            "currency": "NGN",
+            "payment_status": "pending",
             "referral_code": referral_code,
             "promoter_id": promoter_id,
             "commission": commission_amount,
             "telegram_username": telegram_username,
             "telegram_id": telegram_id,
+            "telegram_name": telegram_name,
             "registration_completed": 0,
         }
 
@@ -601,16 +614,17 @@ def create_payment():
             tx_ref
         ] = {
             **payment_data,
-            "payment_status": "pending",
+            "status": "pending",
             "plan": payment_plan_name,
         }
 
         logger.info(
             "Flutterwave payment created successfully: "
-            "tx_ref=%s amount=%s plan=%s",
+            "tx_ref=%s amount=%s plan=%s promoter=%s",
             tx_ref,
             amount,
             payment_plan,
+            promoter_id,
         )
 
         return redirect(
@@ -678,9 +692,9 @@ def payment_callback():
             or ""
         ).strip()
 
-        # ----------------------------------------------------
+        # ====================================================
         # TRANSACTION ID
-        # ----------------------------------------------------
+        # ====================================================
 
         if not transaction_id:
 
@@ -690,9 +704,9 @@ def payment_callback():
                 400,
             )
 
-        # ----------------------------------------------------
+        # ====================================================
         # VERIFY FLUTTERWAVE PAYMENT
-        # ----------------------------------------------------
+        # ====================================================
 
         verified = verify_flutterwave_payment(
             transaction_id
@@ -733,9 +747,9 @@ def payment_callback():
                 400,
             )
 
-        # ----------------------------------------------------
+        # ====================================================
         # VERIFIED TX REF
-        # ----------------------------------------------------
+        # ====================================================
 
         verified_tx_ref = str(
             get_value(
@@ -769,9 +783,9 @@ def payment_callback():
                 400,
             )
 
-        # ----------------------------------------------------
+        # ====================================================
         # CALLBACK TX REF CHECK
-        # ----------------------------------------------------
+        # ====================================================
 
         if callback_tx_ref:
 
@@ -792,9 +806,9 @@ def payment_callback():
 
         tx_ref = verified_tx_ref
 
-        # ----------------------------------------------------
+        # ====================================================
         # GET ORIGINAL PAYMENT
-        # ----------------------------------------------------
+        # ====================================================
 
         original_payment = (
             get_payment_by_tx_ref(
@@ -829,9 +843,9 @@ def payment_callback():
             )
         )
 
-        # ----------------------------------------------------
+        # ====================================================
         # CURRENCY VALIDATION
-        # ----------------------------------------------------
+        # ====================================================
 
         if verified_currency != "NGN":
 
@@ -845,9 +859,9 @@ def payment_callback():
                 400,
             )
 
-        # ----------------------------------------------------
+        # ====================================================
         # AMOUNT VALIDATION
-        # ----------------------------------------------------
+        # ====================================================
 
         if verified_amount != original_amount:
 
@@ -870,9 +884,9 @@ def payment_callback():
                 400,
             )
 
-        # ----------------------------------------------------
+        # ====================================================
         # PAYMENT PLAN VALIDATION
-        # ----------------------------------------------------
+        # ====================================================
 
         payment_plan = str(
             get_value(
@@ -913,9 +927,9 @@ def payment_callback():
                 400,
             )
 
-        # ----------------------------------------------------
+        # ====================================================
         # REFERRAL / PROMOTER
-        # ----------------------------------------------------
+        # ====================================================
 
         referral_code = str(
             get_value(
@@ -969,9 +983,9 @@ def payment_callback():
 
             promoter_id = None
 
-        # ----------------------------------------------------
+        # ====================================================
         # CALCULATE COMMISSION
-        # ----------------------------------------------------
+        # ====================================================
 
         commission_amount = 0
         commission_rate = 0
@@ -989,9 +1003,9 @@ def payment_callback():
                     / original_amount
                 ) * 100
 
-        # ----------------------------------------------------
+        # ====================================================
         # SAVE SUCCESSFUL PAYMENT
-        # ----------------------------------------------------
+        # ====================================================
 
         save_payment(
             {
@@ -999,7 +1013,8 @@ def payment_callback():
                 "transaction_id": transaction_id,
                 "payment_plan": payment_plan,
                 "amount": original_amount,
-                "status": "successful",
+                "currency": "NGN",
+                "payment_status": "successful",
                 "referral_code": referral_code,
                 "promoter_id": promoter_id,
                 "commission": commission_amount,
@@ -1013,6 +1028,11 @@ def payment_callback():
                     "telegram_id",
                     callback_telegram_id,
                 ),
+                "telegram_name": get_value(
+                    payment,
+                    "telegram_name",
+                    callback_telegram_name,
+                ),
                 "registration_completed": get_value(
                     payment,
                     "registration_completed",
@@ -1021,9 +1041,9 @@ def payment_callback():
             }
         )
 
-        # ----------------------------------------------------
+        # ====================================================
         # UPDATE PAYMENT STATUS
-        # ----------------------------------------------------
+        # ====================================================
 
         update_payment_status(
             tx_ref=tx_ref,
@@ -1031,9 +1051,9 @@ def payment_callback():
             transaction_id=transaction_id,
         )
 
-        # ----------------------------------------------------
+        # ====================================================
         # UPDATE PAYMENT SESSION
-        # ----------------------------------------------------
+        # ====================================================
 
         PAYMENT_SESSIONS[
             tx_ref
@@ -1058,7 +1078,11 @@ def payment_callback():
                 "telegram_username",
                 callback_telegram_username,
             ),
-            "telegram_name": callback_telegram_name,
+            "telegram_name": get_value(
+                payment,
+                "telegram_name",
+                callback_telegram_name,
+            ),
         }
 
         # ====================================================
@@ -1073,12 +1097,25 @@ def payment_callback():
             try:
 
                 # ------------------------------------------------
+                # GET STUDENT IF ALREADY REGISTERED
+                # ------------------------------------------------
+
+                student = get_student_by_tx_ref(
+                    tx_ref
+                )
+
+                student_id = (
+                    student["id"]
+                    if student
+                    else None
+                )
+
+                # ------------------------------------------------
                 # CHECK DUPLICATE COMMISSION
                 # ------------------------------------------------
 
                 already_exists = commission_exists(
-                    promoter_id,
-                    tx_ref,
+                    tx_ref
                 )
 
                 if not already_exists:
@@ -1087,13 +1124,15 @@ def payment_callback():
                     # CREATE COMMISSION
                     # ------------------------------------------------
 
-                    commission_id = create_commission(
+                    commission_result = create_commission(
                         promoter_id,
+                        student_id,
                         tx_ref,
+                        original_amount,
                         commission_amount,
                     )
 
-                    if commission_id:
+                    if commission_result:
 
                         logger.info(
                             "=================================================="
@@ -1114,6 +1153,11 @@ def payment_callback():
                         )
 
                         logger.info(
+                            "STUDENT ID: %s",
+                            student_id,
+                        )
+
+                        logger.info(
                             "PAYMENT AMOUNT: ₦%s",
                             original_amount,
                         )
@@ -1124,8 +1168,8 @@ def payment_callback():
                         )
 
                         logger.info(
-                            "COMMISSION ID: %s",
-                            commission_id,
+                            "COMMISSION RESULT: %s",
+                            commission_result,
                         )
 
                         logger.info(
@@ -1167,9 +1211,9 @@ def payment_callback():
                 commission_amount,
             )
 
-        # ----------------------------------------------------
+        # ====================================================
         # GO TO REGISTRATION
-        # ----------------------------------------------------
+        # ====================================================
 
         return redirect(
             url_for(
@@ -1492,15 +1536,6 @@ def admin_referral():
 # ============================================================
 # ADMIN STUDENT DETAILS
 # ============================================================
-#
-# Opens the full student details page from the
-# Admin Referral Dashboard.
-#
-# Example:
-#
-# /admin/referral/student/12
-#
-# ============================================================
 
 @web_app.route(
     "/admin/referral/student/<int:student_id>",
@@ -1565,15 +1600,6 @@ def admin_create_promoter():
 
 # ============================================================
 # ADMIN WITHDRAWAL STATUS
-# ============================================================
-#
-# IMPORTANT:
-# admin_referral.py sends withdrawal_id
-# inside POST form data.
-#
-# Therefore this route MUST NOT require
-# withdrawal_id in the URL.
-#
 # ============================================================
 
 @web_app.route(
