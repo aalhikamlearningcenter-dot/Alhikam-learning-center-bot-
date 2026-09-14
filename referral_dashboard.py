@@ -14,6 +14,7 @@
 # - Flutterwave Transfer
 # - Transfer Status Verification
 # - Withdrawal History
+# - Dashboard Diagnostic Logging
 # - MAIN.PY COMPATIBILITY ALIASES
 # ============================================================
 
@@ -300,6 +301,7 @@ def promoter_required(function):
 PROMOTER_LOGIN_HTML = """
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
 
     <meta charset="UTF-8">
@@ -904,9 +906,7 @@ REFERRAL_DASHBOARD_HTML = """
                 </div>
 
                 <div class="stat-value">
-                    ₦{{ "{:,.2f}".format(
-                        promoter["total_sales"] or 0
-                    ) }}
+                    {{ promoter["total_sales"] or 0 }}
                 </div>
 
             </div>
@@ -1342,6 +1342,44 @@ def referral_dashboard_by_code(
 ):
 
     promoter = _current_promoter()
+
+    # ========================================================
+    # DASHBOARD DIAGNOSTIC
+    #
+    # This is intentionally server-side only.
+    # It does NOT expose financial information to the browser.
+    # It helps us verify exactly what Promoter ID is being loaded.
+    # ========================================================
+
+    if promoter:
+
+        logger.info("==================================================")
+        logger.info("PROMOTER DASHBOARD DEBUG")
+        logger.info(
+            "PROMOTER ID: %s",
+            _row_get(promoter, "id")
+        )
+        logger.info(
+            "REFERRAL CODE: %s",
+            _row_get(promoter, "referral_code")
+        )
+        logger.info(
+            "TOTAL SALES: %s",
+            _row_get(promoter, "total_sales")
+        )
+        logger.info(
+            "TOTAL EARNED: %s",
+            _row_get(promoter, "total_earned")
+        )
+        logger.info(
+            "AVAILABLE BALANCE: %s",
+            _row_get(promoter, "available_balance")
+        )
+        logger.info(
+            "WITHDRAWN: %s",
+            _row_get(promoter, "withdrawn")
+        )
+        logger.info("==================================================")
 
     if not promoter:
 
@@ -2083,12 +2121,6 @@ def withdrawal_page():
     )
 
 
-    # IMPORTANT:
-    # ONLY keyword arguments are used.
-    #
-    # This prevents the old bug where arguments could
-    # accidentally be written into the wrong database fields.
-
     try:
 
         update_withdrawal_transfer(
@@ -2120,15 +2152,14 @@ def withdrawal_page():
     except Exception as exc:
 
         # ----------------------------------------------------
-        # IMPORTANT FINANCIAL SAFETY
+        # FINANCIAL SAFETY
         #
         # Do NOT immediately mark this withdrawal as FAILED.
         #
-        # The HTTP request may fail even though Flutterwave
-        # may have received the transfer request.
+        # The request may fail even though Flutterwave
+        # may have received the transfer.
         #
-        # Keeping it PROCESSING prevents an accidental refund
-        # followed by a second transfer.
+        # Keep it PROCESSING until it can be verified.
         # ----------------------------------------------------
 
         logger.exception(
@@ -2151,21 +2182,6 @@ def withdrawal_page():
     # ========================================================
     # PROCESS TRANSFER RESULT
     # ========================================================
-
-    # IMPORTANT:
-    #
-    # ALWAYS use:
-    #
-    # result=transfer_result
-    #
-    # NEVER use:
-    #
-    # process_transfer_result(
-    #     withdrawal_id,
-    #     transfer_result
-    # )
-    #
-    # because the whole dictionary would become "status".
 
     try:
 
