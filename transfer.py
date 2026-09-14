@@ -10,6 +10,7 @@
 # - Always verify status from Flutterwave API.
 # - Never refund automatically after timeout.
 # - Use one stable transfer reference per withdrawal.
+# - Never expose full bank account numbers in logs.
 # ==========================================================
 
 import os
@@ -118,11 +119,13 @@ def _validate_bank_code(bank_code):
     ).strip()
 
     if not bank_code:
+
         raise ValueError(
             "Bank code is required."
         )
 
     if len(bank_code) > 20:
+
         raise ValueError(
             "Invalid bank code."
         )
@@ -159,7 +162,13 @@ def _safe_message(response=None, data=None):
 
         if isinstance(data, dict):
 
-            message = data.get("message")
+            # Flutterwave may return the useful message
+            # under different fields.
+            message = (
+                data.get("complete_message")
+                or data.get("response_message")
+                or data.get("message")
+            )
 
             if message:
                 return str(message)[:300]
@@ -174,7 +183,65 @@ def _safe_message(response=None, data=None):
     except Exception:
         pass
 
-    return "Flutterwave transfer request could not be completed."
+    return (
+        "Flutterwave transfer request "
+        "could not be completed."
+    )
+
+
+# ==========================================================
+# TRANSFER MESSAGE EXTRACTOR
+# ==========================================================
+
+def _transfer_message(data=None, result=None):
+
+    """
+    Extract the most useful Flutterwave transfer message.
+
+    Flutterwave transfer responses may contain useful
+    information in complete_message, response_message,
+    or message.
+
+    Priority:
+        result.complete_message
+        result.response_message
+        result.message
+        data.complete_message
+        data.response_message
+        data.message
+    """
+
+    try:
+
+        if isinstance(result, dict):
+
+            message = (
+                result.get("complete_message")
+                or result.get("response_message")
+                or result.get("message")
+            )
+
+            if message:
+                return str(message)[:300]
+
+        if isinstance(data, dict):
+
+            message = (
+                data.get("complete_message")
+                or data.get("response_message")
+                or data.get("message")
+            )
+
+            if message:
+                return str(message)[:300]
+
+    except Exception:
+
+        logger.exception(
+            "Unable to extract Flutterwave transfer message."
+        )
+
+    return ""
 
 
 # ==========================================================
@@ -184,6 +251,7 @@ def _safe_message(response=None, data=None):
 def _json(response):
 
     try:
+
         return response.json()
 
     except ValueError:
@@ -210,6 +278,61 @@ def _extract_result(data):
         return result
 
     return {}
+
+
+# ==========================================================
+# SAFE TRANSFER RESPONSE LOG
+# ==========================================================
+
+def _log_transfer_response(
+    response,
+    data,
+    reference,
+):
+
+    """
+    Log useful transfer information without logging
+    account numbers, authorization headers, or full payloads.
+    """
+
+    try:
+
+        result = _extract_result(data)
+
+        logger.info(
+            "Flutterwave transfer response: "
+            "HTTP=%s reference=%s provider_status=%s "
+            "transfer_status=%s transfer_id=%s message=%s",
+            response.status_code
+            if response is not None
+            else None,
+            reference,
+            (
+                data.get("status")
+                if isinstance(data, dict)
+                else None
+            ),
+            (
+                result.get("status")
+                if isinstance(result, dict)
+                else None
+            ),
+            (
+                result.get("id")
+                if isinstance(result, dict)
+                else None
+            ),
+            _transfer_message(
+                data=data,
+                result=result,
+            ),
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Unable to log Flutterwave transfer response."
+        )
 
 
 # ==========================================================
@@ -275,7 +398,10 @@ def resolve_bank_account(
         )
 
         raise ValueError(
-            "Unable to verify the bank account."
+            _safe_message(
+                response=response,
+                data=data,
+            )
         )
 
     if not isinstance(data, dict):
@@ -479,6 +605,7 @@ def create_flutterwave_transfer(
         # our request timed out.
         #
         # NEVER REFUND HERE.
+
         logger.warning(
             "Flutterwave transfer timeout. "
             "Reference=%s",
@@ -499,8 +626,8 @@ def create_flutterwave_transfer(
 
     except requests.RequestException:
 
-        # Same principle:
-        # do not assume transfer failed.
+        # IMPORTANT:
+        # Do not assume transfer failed.
         logger.exception(
             "Flutterwave transfer request error. "
             "Reference=%s",
@@ -524,6 +651,13 @@ def create_flutterwave_transfer(
     # ------------------------------------------------------
 
     data = _json(response)
+
+    # Log safe details BEFORE processing the response.
+    _log_transfer_response(
+        response=response,
+        data=data,
+        reference=reference,
+    )
 
     if not isinstance(data, dict):
 
@@ -556,11 +690,13 @@ def create_flutterwave_transfer(
         or reference
     ).strip()
 
-    message = str(
-        result.get("message")
-        or data.get("message")
-        or ""
-    )[:300]
+    # IMPORTANT:
+    # Get the real transfer message, including
+    # complete_message when Flutterwave provides it.
+    message = _transfer_message(
+        data=data,
+        result=result,
+    )
 
     # ------------------------------------------------------
     # REFERENCE SAFETY
@@ -665,9 +801,10 @@ def create_flutterwave_transfer(
 
     logger.error(
         "Unknown Flutterwave transfer response: "
-        "reference=%s status=%s",
+        "reference=%s status=%s message=%s",
         reference,
         transfer_status,
+        message,
     )
 
     return {
@@ -678,6 +815,8 @@ def create_flutterwave_transfer(
         "transfer_id": transfer_id,
         "reference": reference,
         "message": (
+            message
+            or
             "Transfer result is uncertain. "
             "Status must be verified."
         ),
@@ -698,6 +837,7 @@ def get_flutterwave_transfer_status(
     ).strip()
 
     if not transfer_id:
+
         raise ValueError(
             "Transfer ID is required."
         )
@@ -788,6 +928,21 @@ def get_flutterwave_transfer_status(
 
     result = _extract_result(data)
 
+    # Safe status logging.
+    logger.info(
+        "Flutterwave transfer status response: "
+        "ID=%s provider_status=%s transfer_status=%s "
+        "reference=%s message=%s",
+        transfer_id,
+        data.get("status"),
+        result.get("status"),
+        result.get("reference"),
+        _transfer_message(
+            data=data,
+            result=result,
+        ),
+    )
+
     transfer_status = str(
         result.get("status") or ""
     ).upper()
@@ -801,11 +956,10 @@ def get_flutterwave_transfer_status(
         transfer_id
     )
 
-    message = str(
-        result.get("message")
-        or data.get("message")
-        or ""
-    )[:300]
+    message = _transfer_message(
+        data=data,
+        result=result,
+    )
 
     if transfer_status in TRANSFER_FINAL_SUCCESS:
 
@@ -856,6 +1010,7 @@ def get_flutterwave_transfer_status_by_reference(
     ).strip()
 
     if not reference:
+
         raise ValueError(
             "Transfer reference is required."
         )
@@ -988,6 +1143,7 @@ def get_flutterwave_transfer_status_by_reference(
         # IMPORTANT:
         # "Not found" does NOT mean failed.
         # Keep withdrawal processing.
+
         return {
             "success": False,
             "uncertain": True,
@@ -1006,10 +1162,21 @@ def get_flutterwave_transfer_status_by_reference(
 
     transfer_id = transfer.get("id")
 
-    message = str(
-        transfer.get("message")
-        or ""
-    )[:300]
+    message = _transfer_message(
+        data=data,
+        result=transfer,
+    )
+
+    logger.info(
+        "Flutterwave transfer reference response: "
+        "reference=%s provider_status=%s "
+        "transfer_status=%s transfer_id=%s message=%s",
+        reference,
+        data.get("status"),
+        transfer_status,
+        transfer_id,
+        message,
+    )
 
     if transfer_status in TRANSFER_FINAL_SUCCESS:
 
