@@ -15,6 +15,7 @@
 # - Transfer Status Verification
 # - Withdrawal History
 # - Dashboard Diagnostic Logging
+# - Promoter Session Isolation
 # - MAIN.PY COMPATIBILITY ALIASES
 # ============================================================
 
@@ -106,6 +107,17 @@ def _row_get(row, key, default=None):
 
 
 # ============================================================
+# NORMALIZE REFERRAL CODE
+# ============================================================
+
+def _normalize_referral_code(value):
+
+    return str(
+        value or ""
+    ).strip().upper()
+
+
+# ============================================================
 # WITHDRAWAL FIELD COMPATIBILITY
 # ============================================================
 
@@ -156,9 +168,13 @@ def _withdrawal_value(
 def _safe_money(value):
 
     try:
-        return float(value or 0)
+
+        return float(
+            value or 0
+        )
 
     except Exception:
+
         return 0.0
 
 
@@ -173,6 +189,7 @@ def _mask_account(account_number):
     )
 
     if len(value) <= 4:
+
         return "****"
 
     return (
@@ -217,6 +234,7 @@ def _check_csrf():
     )
 
     if not submitted or not expected:
+
         return False
 
     try:
@@ -227,7 +245,29 @@ def _check_csrf():
         )
 
     except Exception:
+
         return False
+
+
+# ============================================================
+# CLEAR PROMOTER SESSION
+#
+# Used when a user opens another promoter's referral link.
+# This prevents Promoter A's dashboard from being displayed
+# for Promoter B's referral URL.
+# ============================================================
+
+def _clear_promoter_session():
+
+    session.pop(
+        PROMOTER_SESSION_KEY,
+        None,
+    )
+
+    session.pop(
+        PROMOTER_CSRF_KEY,
+        None,
+    )
 
 
 # ============================================================
@@ -241,6 +281,7 @@ def _current_promoter():
     )
 
     if not promoter_id:
+
         return None
 
     try:
@@ -250,11 +291,12 @@ def _current_promoter():
         )
 
     except Exception:
+
         return None
 
     try:
 
-        return get_promoter_by_id(
+        promoter = get_promoter_by_id(
             promoter_id
         )
 
@@ -265,6 +307,12 @@ def _current_promoter():
         )
 
         return None
+
+    if not promoter:
+
+        return None
+
+    return promoter
 
 
 # ============================================================
@@ -481,15 +529,7 @@ PROMOTER_LOGIN_HTML = """
 
 def promoter_login_page():
 
-    if _current_promoter():
-
-        return redirect(
-            url_for(
-                "referral_dashboard"
-            )
-        )
-
-    referral_code = (
+    requested_referral_code = _normalize_referral_code(
         request.args.get(
             "ref",
             "",
@@ -498,7 +538,52 @@ def promoter_login_page():
             "referral_code",
             "",
         )
-    ).strip().upper()
+    )
+
+    current_promoter = _current_promoter()
+
+    # --------------------------------------------------------
+    # IMPORTANT SESSION ISOLATION
+    #
+    # If the user is already logged in as Promoter A but
+    # opens Promoter B's referral/login URL, do NOT silently
+    # redirect them back to Promoter A's dashboard.
+    #
+    # Clear the old promoter session and require login for B.
+    # --------------------------------------------------------
+
+    if current_promoter:
+
+        current_code = _normalize_referral_code(
+            _row_get(
+                current_promoter,
+                "referral_code",
+                "",
+            )
+        )
+
+        if (
+            requested_referral_code
+            and requested_referral_code != current_code
+        ):
+
+            logger.info(
+                "PROMOTER SESSION SWITCH: %s -> %s",
+                current_code,
+                requested_referral_code,
+            )
+
+            _clear_promoter_session()
+
+        else:
+
+            return redirect(
+                url_for(
+                    "referral_dashboard"
+                )
+            )
+
+    referral_code = requested_referral_code
 
     if request.method == "GET":
 
@@ -524,6 +609,10 @@ def promoter_login_page():
     password = request.form.get(
         "password",
         "",
+    )
+
+    password = str(
+        password or ""
     )
 
     if not referral_code:
@@ -565,6 +654,22 @@ def promoter_login_page():
         "id",
     )
 
+    if promoter_id is None:
+
+        logger.error(
+            "Promoter found without ID: referral_code=%s",
+            referral_code,
+        )
+
+        return render_template_string(
+            PROMOTER_LOGIN_HTML,
+            csrf_token=_csrf_token(),
+            referral_code=referral_code,
+            error=(
+                "❌ Invalid referral code or password."
+            ),
+        ), 401
+
     try:
 
         valid_password = verify_promoter_password(
@@ -593,17 +698,30 @@ def promoter_login_page():
 
     # --------------------------------------------------------
     # LOGIN SUCCESS
+    #
+    # Regenerate CSRF token and store ONLY the authenticated
+    # promoter ID in the session.
     # --------------------------------------------------------
 
     session[
         PROMOTER_SESSION_KEY
-    ] = promoter_id
+    ] = int(
+        promoter_id
+    )
 
     session[
         PROMOTER_CSRF_KEY
-    ] = secrets.token_urlsafe(32)
+    ] = secrets.token_urlsafe(
+        32
+    )
 
     session.permanent = True
+
+    logger.info(
+        "PROMOTER LOGIN SUCCESS: ID=%s REF=%s",
+        promoter_id,
+        referral_code,
+    )
 
     return redirect(
         url_for(
@@ -633,15 +751,7 @@ def promoter_logout_page():
                 )
             )
 
-    session.pop(
-        PROMOTER_SESSION_KEY,
-        None,
-    )
-
-    session.pop(
-        PROMOTER_CSRF_KEY,
-        None,
-    )
+    _clear_promoter_session()
 
     return redirect(
         url_for(
@@ -1341,54 +1451,66 @@ def referral_dashboard_by_code(
     referral_code=None
 ):
 
+    requested_code = _normalize_referral_code(
+        referral_code
+    )
+
     promoter = _current_promoter()
 
     # ========================================================
-    # DASHBOARD DIAGNOSTIC
+    # IMPORTANT:
+    # If a referral URL contains a promoter code and there is
+    # already a logged-in promoter, verify that both belong to
+    # the SAME promoter.
     #
-    # This is intentionally server-side only.
-    # It does NOT expose financial information to the browser.
-    # It helps us verify exactly what Promoter ID is being loaded.
+    # Example:
+    #
+    # Promoter A logged in
+    # User opens /referral/PROMOTER_B
+    #
+    # We MUST NOT display A's dashboard.
     # ========================================================
 
-    if promoter:
+    if promoter and requested_code:
 
-        logger.info("==================================================")
-        logger.info("PROMOTER DASHBOARD DEBUG")
-        logger.info(
-            "PROMOTER ID: %s",
-            _row_get(promoter, "id")
+        current_code = _normalize_referral_code(
+            _row_get(
+                promoter,
+                "referral_code",
+                "",
+            )
         )
-        logger.info(
-            "REFERRAL CODE: %s",
-            _row_get(promoter, "referral_code")
-        )
-        logger.info(
-            "TOTAL SALES: %s",
-            _row_get(promoter, "total_sales")
-        )
-        logger.info(
-            "TOTAL EARNED: %s",
-            _row_get(promoter, "total_earned")
-        )
-        logger.info(
-            "AVAILABLE BALANCE: %s",
-            _row_get(promoter, "available_balance")
-        )
-        logger.info(
-            "WITHDRAWN: %s",
-            _row_get(promoter, "withdrawn")
-        )
-        logger.info("==================================================")
 
-    if not promoter:
+        if requested_code != current_code:
 
-        if referral_code:
+            logger.info(
+                "REFERRAL SESSION MISMATCH: "
+                "logged_in=%s requested=%s",
+                current_code,
+                requested_code,
+            )
+
+            _clear_promoter_session()
 
             return redirect(
                 url_for(
                     "promoter_login",
-                    ref=referral_code,
+                    ref=requested_code,
+                )
+            )
+
+    # ========================================================
+    # NO ACTIVE PROMOTER
+    # ========================================================
+
+    if not promoter:
+
+        if requested_code:
+
+            return redirect(
+                url_for(
+                    "promoter_login",
+                    ref=requested_code,
                 )
             )
 
@@ -1397,6 +1519,79 @@ def referral_dashboard_by_code(
                 "promoter_login"
             )
         )
+
+    # ========================================================
+    # DASHBOARD DIAGNOSTIC
+    # ========================================================
+
+    logger.info(
+        "=================================================="
+    )
+
+    logger.info(
+        "PROMOTER DASHBOARD DEBUG"
+    )
+
+    logger.info(
+        "PROMOTER ID: %s",
+        _row_get(
+            promoter,
+            "id"
+        )
+    )
+
+    logger.info(
+        "REFERRAL CODE: %s",
+        _row_get(
+            promoter,
+            "referral_code"
+        )
+    )
+
+    logger.info(
+        "REQUESTED REFERRAL CODE: %s",
+        requested_code or "(none)"
+    )
+
+    logger.info(
+        "TOTAL SALES: %s",
+        _row_get(
+            promoter,
+            "total_sales"
+        )
+    )
+
+    logger.info(
+        "TOTAL EARNED: %s",
+        _row_get(
+            promoter,
+            "total_earned"
+        )
+    )
+
+    logger.info(
+        "AVAILABLE BALANCE: %s",
+        _row_get(
+            promoter,
+            "available_balance"
+        )
+    )
+
+    logger.info(
+        "WITHDRAWN: %s",
+        _row_get(
+            promoter,
+            "withdrawn"
+        )
+    )
+
+    logger.info(
+        "=================================================="
+    )
+
+    # ========================================================
+    # WITHDRAWALS
+    # ========================================================
 
     try:
 
@@ -1412,6 +1607,10 @@ def referral_dashboard_by_code(
 
         withdrawals = []
 
+    # ========================================================
+    # FLUTTERWAVE BANKS
+    # ========================================================
+
     try:
 
         banks = (
@@ -1426,6 +1625,10 @@ def referral_dashboard_by_code(
         )
 
         banks = []
+
+    # ========================================================
+    # RENDER DASHBOARD
+    # ========================================================
 
     return render_template_string(
         REFERRAL_DASHBOARD_HTML,
@@ -1695,7 +1898,6 @@ def withdrawal_page():
             )
         )
 
-
     # ========================================================
     # CSRF
     # ========================================================
@@ -1712,7 +1914,6 @@ def withdrawal_page():
                 "referral_dashboard"
             )
         )
-
 
     # ========================================================
     # AMOUNT
@@ -1742,7 +1943,6 @@ def withdrawal_page():
             )
         )
 
-
     if amount <= 0:
 
         flash(
@@ -1755,7 +1955,6 @@ def withdrawal_page():
                 "referral_dashboard"
             )
         )
-
 
     if amount < MINIMUM_WITHDRAWAL:
 
@@ -1773,7 +1972,6 @@ def withdrawal_page():
             )
         )
 
-
     # ========================================================
     # AVAILABLE BALANCE
     # ========================================================
@@ -1785,7 +1983,6 @@ def withdrawal_page():
             0,
         )
     )
-
 
     if amount > available_balance:
 
@@ -1804,7 +2001,6 @@ def withdrawal_page():
             )
         )
 
-
     # ========================================================
     # WITHDRAWAL CODE
     # ========================================================
@@ -1813,7 +2009,6 @@ def withdrawal_page():
         "withdrawal_code",
         "",
     ).strip()
-
 
     if not withdrawal_code:
 
@@ -1827,7 +2022,6 @@ def withdrawal_page():
                 "referral_dashboard"
             )
         )
-
 
     # ========================================================
     # VERIFY WITHDRAWAL CODE
@@ -1848,7 +2042,6 @@ def withdrawal_page():
 
         code_valid = False
 
-
     if not code_valid:
 
         flash(
@@ -1862,7 +2055,6 @@ def withdrawal_page():
             )
         )
 
-
     # ========================================================
     # BANK CODE
     # ========================================================
@@ -1871,7 +2063,6 @@ def withdrawal_page():
         "bank_code",
         "",
     ).strip()
-
 
     if not bank_code:
 
@@ -1886,7 +2077,6 @@ def withdrawal_page():
             )
         )
 
-
     # ========================================================
     # ACCOUNT NUMBER
     # ========================================================
@@ -1899,7 +2089,6 @@ def withdrawal_page():
         .strip()
         .replace(" ", "")
     )
-
 
     if (
         not account_number.isdigit()
@@ -1916,7 +2105,6 @@ def withdrawal_page():
                 "referral_dashboard"
             )
         )
-
 
     # ========================================================
     # GET BANK NAME
@@ -1955,7 +2143,6 @@ def withdrawal_page():
             "Unable to identify bank name"
         )
 
-
     # ========================================================
     # RESOLVE BANK ACCOUNT
     # ========================================================
@@ -1987,7 +2174,6 @@ def withdrawal_page():
             )
         )
 
-
     if not resolved:
 
         flash(
@@ -2000,7 +2186,6 @@ def withdrawal_page():
                 "referral_dashboard"
             )
         )
-
 
     # ========================================================
     # ACCOUNT NAME
@@ -2050,7 +2235,6 @@ def withdrawal_page():
             resolved
         )
 
-
     if not account_name:
 
         flash(
@@ -2063,7 +2247,6 @@ def withdrawal_page():
                 "referral_dashboard"
             )
         )
-
 
     # ========================================================
     # CREATE WITHDRAWAL
@@ -2097,7 +2280,6 @@ def withdrawal_page():
             )
         )
 
-
     if not withdrawal_id:
 
         flash(
@@ -2111,7 +2293,6 @@ def withdrawal_page():
             )
         )
 
-
     # ========================================================
     # STABLE TRANSFER REFERENCE
     # ========================================================
@@ -2119,7 +2300,6 @@ def withdrawal_page():
     transfer_reference = (
         f"ALHIKAM-WD-{withdrawal_id}"
     )
-
 
     try:
 
@@ -2133,7 +2313,6 @@ def withdrawal_page():
         logger.exception(
             "Unable to save transfer reference"
         )
-
 
     # ========================================================
     # CREATE FLUTTERWAVE TRANSFER
@@ -2178,7 +2357,6 @@ def withdrawal_page():
             ),
         }
 
-
     # ========================================================
     # PROCESS TRANSFER RESULT
     # ========================================================
@@ -2195,7 +2373,6 @@ def withdrawal_page():
         logger.exception(
             "Processing transfer result failed"
         )
-
 
     # ========================================================
     # REDIRECT TO STATUS
@@ -2228,6 +2405,9 @@ def withdrawal_status_page(
             )
         )
 
+    # ========================================================
+    # VALIDATE WITHDRAWAL ID
+    # ========================================================
 
     try:
 
@@ -2242,11 +2422,13 @@ def withdrawal_status_page(
             400,
         )
 
+    # ========================================================
+    # LOAD WITHDRAWAL
+    # ========================================================
 
     withdrawal = get_withdrawal_by_id(
         withdrawal_id
     )
-
 
     if not withdrawal:
 
@@ -2255,9 +2437,11 @@ def withdrawal_status_page(
             404,
         )
 
-
     # ========================================================
     # OWNERSHIP CHECK
+    #
+    # A promoter must NEVER be able to view another
+    # promoter's withdrawal.
     # ========================================================
 
     withdrawal_promoter_id = _row_get(
@@ -2265,18 +2449,24 @@ def withdrawal_status_page(
         "promoter_id",
     )
 
-
     if str(
         withdrawal_promoter_id
     ) != str(
         promoter["id"]
     ):
 
+        logger.warning(
+            "UNAUTHORIZED WITHDRAWAL ACCESS: "
+            "promoter=%s withdrawal=%s owner=%s",
+            promoter["id"],
+            withdrawal_id,
+            withdrawal_promoter_id,
+        )
+
         return (
             "Unauthorized.",
             403,
         )
-
 
     # ========================================================
     # AUTO REFRESH PROCESSING TRANSFER
@@ -2291,7 +2481,6 @@ def withdrawal_status_page(
         or ""
     ).upper()
 
-
     transfer_status = str(
         _withdrawal_value(
             withdrawal,
@@ -2300,7 +2489,6 @@ def withdrawal_status_page(
         )
         or ""
     ).upper()
-
 
     transfer_id = str(
         _row_get(
@@ -2311,7 +2499,6 @@ def withdrawal_status_page(
         or ""
     ).strip()
 
-
     transfer_reference = str(
         _row_get(
             withdrawal,
@@ -2321,7 +2508,6 @@ def withdrawal_status_page(
         or ""
     ).strip()
 
-
     processing_statuses = {
         "PENDING",
         "PROCESSING",
@@ -2330,14 +2516,12 @@ def withdrawal_status_page(
         "IN PROGRESS",
     }
 
-
     if (
         current_status in processing_statuses
         or transfer_status in processing_statuses
     ):
 
         result = None
-
 
         # ----------------------------------------------------
         # FIRST: TRANSFER ID
@@ -2358,7 +2542,6 @@ def withdrawal_status_page(
                 logger.exception(
                     "Transfer ID status refresh failed"
                 )
-
 
         # ----------------------------------------------------
         # SECOND: TRANSFER REFERENCE
@@ -2383,7 +2566,6 @@ def withdrawal_status_page(
                     "Transfer reference status refresh failed"
                 )
 
-
         # ----------------------------------------------------
         # PROCESS RESULT
         # ----------------------------------------------------
@@ -2403,7 +2585,6 @@ def withdrawal_status_page(
                     "Unable to process refreshed transfer result"
                 )
 
-
             # ------------------------------------------------
             # RELOAD LATEST WITHDRAWAL
             # ------------------------------------------------
@@ -2412,6 +2593,32 @@ def withdrawal_status_page(
                 withdrawal_id
             )
 
+            # ------------------------------------------------
+            # OWNERSHIP CHECK AGAIN AFTER RELOAD
+            # ------------------------------------------------
+
+            if not withdrawal:
+
+                return (
+                    "Withdrawal not found.",
+                    404,
+                )
+
+            latest_owner = _row_get(
+                withdrawal,
+                "promoter_id",
+            )
+
+            if str(
+                latest_owner
+            ) != str(
+                promoter["id"]
+            ):
+
+                return (
+                    "Unauthorized.",
+                    403,
+                )
 
     # ========================================================
     # CAN REFRESH?
@@ -2426,7 +2633,6 @@ def withdrawal_status_page(
         or ""
     ).upper()
 
-
     latest_transfer_status = str(
         _withdrawal_value(
             withdrawal,
@@ -2436,12 +2642,14 @@ def withdrawal_status_page(
         or ""
     ).upper()
 
-
     can_refresh = (
         latest_status in processing_statuses
         or latest_transfer_status in processing_statuses
     )
 
+    # ========================================================
+    # RENDER STATUS
+    # ========================================================
 
     return render_template_string(
         WITHDRAWAL_STATUS_HTML,
