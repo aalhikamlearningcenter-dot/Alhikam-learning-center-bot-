@@ -45,6 +45,11 @@ FLW_BANKS_URL = (
     "https://api.flutterwave.com/v3/banks"
 )
 
+# Wallet balance endpoint
+FLW_BALANCES_URL = (
+    "https://api.flutterwave.com/v3/balances"
+)
+
 FLW_TIMEOUT = (10, 60)
 
 
@@ -275,6 +280,161 @@ def _extract_result(data):
         return result
 
     return {}
+
+
+# ==========================================================
+# FLUTTERWAVE NGN WALLET DIAGNOSTIC
+# ==========================================================
+
+def get_flutterwave_ngn_balance():
+
+    """
+    Diagnostic function only.
+
+    Checks the NGN wallet balance visible to the
+    Flutterwave API key configured in the application.
+
+    This function DOES NOT create a transfer.
+
+    It also NEVER logs or returns the secret key.
+    """
+
+    try:
+
+        response = requests.get(
+            FLW_BALANCES_URL,
+            headers=_headers(),
+            timeout=FLW_TIMEOUT,
+        )
+
+    except requests.Timeout:
+
+        logger.warning(
+            "Flutterwave wallet balance request timed out."
+        )
+
+        return {
+            "success": False,
+            "message": (
+                "Flutterwave wallet balance "
+                "request timed out."
+            ),
+        }
+
+    except requests.RequestException:
+
+        logger.exception(
+            "Flutterwave wallet balance request failed."
+        )
+
+        return {
+            "success": False,
+            "message": (
+                "Unable to fetch Flutterwave "
+                "wallet balance."
+            ),
+        }
+
+    data = _json(response)
+
+    if response.status_code != 200:
+
+        logger.error(
+            "Flutterwave wallet balance failed. HTTP=%s",
+            response.status_code,
+        )
+
+        return {
+            "success": False,
+            "message": _safe_message(
+                response=response,
+                data=data,
+            ),
+        }
+
+    if not isinstance(data, dict):
+
+        return {
+            "success": False,
+            "message": (
+                "Invalid Flutterwave wallet response."
+            ),
+        }
+
+    provider_status = str(
+        data.get("status", "")
+    ).lower()
+
+    if provider_status != "success":
+
+        return {
+            "success": False,
+            "message": _safe_message(
+                response=response,
+                data=data,
+            ),
+        }
+
+    wallets = data.get("data")
+
+    if not isinstance(wallets, list):
+
+        return {
+            "success": False,
+            "message": (
+                "Flutterwave returned an invalid "
+                "wallet list."
+            ),
+        }
+
+    ngn_wallet = None
+
+    for wallet in wallets:
+
+        if not isinstance(wallet, dict):
+            continue
+
+        currency = str(
+            wallet.get("currency") or ""
+        ).strip().upper()
+
+        if currency == "NGN":
+
+            ngn_wallet = wallet
+            break
+
+    if not ngn_wallet:
+
+        logger.warning(
+            "Flutterwave API did not return an NGN wallet."
+        )
+
+        return {
+            "success": False,
+            "message": "NGN wallet was not found.",
+        }
+
+    available_balance = ngn_wallet.get(
+        "available_balance"
+    )
+
+    ledger_balance = ngn_wallet.get(
+        "ledger_balance"
+    )
+
+    logger.info(
+        "Flutterwave API NGN wallet: "
+        "available_balance=%s ledger_balance=%s",
+        available_balance,
+        ledger_balance,
+    )
+
+    return {
+        "success": True,
+        "currency": "NGN",
+        "available_balance": available_balance,
+        "ledger_balance": ledger_balance,
+    }
 
 
 # ==========================================================
